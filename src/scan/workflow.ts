@@ -22,7 +22,7 @@ import type { LLMBackbone } from '../llm/index.js';
 import type { Finding } from '../types/index.js';
 import { KillChainPhase } from '../types/index.js';
 import { createScanAbortController, ScanAbortedError } from './abort.js';
-import { applyAutonomousFullAuthorization } from './autonomous.js';
+import { applyAutonomousFullAuthorization, isAutonomous } from './autonomous.js';
 import { LaneRegistry } from './lane-registry.js';
 import type {
   LaneContext,
@@ -154,8 +154,9 @@ export class ScanWorkflow extends EventEmitter<ScanWorkflowEvents> {
     });
 
     try {
-      if (profile.autonomous) applyAutonomousFullAuthorization(profile);
-      if (profile.autonomous) arsenal.setAutonomous(true);
+      const autonomous = isAutonomous(profile);
+      if (autonomous) applyAutonomousFullAuthorization(profile);
+      if (autonomous) arsenal.setAutonomous(true);
       await mkdir(job.deliverablesDir, { recursive: true });
 
       const emit = (e: ScanProgressEvent): void => this.emitScan(e);

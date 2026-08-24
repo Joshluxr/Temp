@@ -12,8 +12,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { execFile, spawn } from 'child_process';
-import { appendFile, mkdir, readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { appendFile, mkdir, readFile, writeFile, stat as fsStat } from 'fs/promises';
+import { join, resolve, sep } from 'path';
 import { promisify } from 'util';
 import { createHash, randomUUID } from 'crypto';
 import { config, AVAILABLE_MODELS } from './config/index.js';
@@ -8505,6 +8505,8 @@ const scanWorkflow = new ScanWorkflow({
 
 scanWorkflow.on('event', (event: ScanProgressEvent) => {
   broadcastEvent(event.type, event as unknown as Record<string, unknown>);
+  // Generic envelope so clients can subscribe to a single channel for all scan updates.
+  broadcastEvent('scan:progress', event as unknown as Record<string, unknown>);
 });
 
 app.post('/api/scans', (req: Request, res: Response): void => {
@@ -8541,6 +8543,54 @@ app.get('/api/scans/:id', (req: Request, res: Response): void => {
     return;
   }
   res.json(job);
+});
+
+// Scan deliverables download — receipt-grade artifacts (SARIF report,
+// summary, findings, markdown report, intel exports). Whitelisted basenames
+// resolved inside the job's own deliverables dir; no path traversal, no
+// arbitrary file reads, 25 MB cap.
+const SCAN_DELIVERABLE_FILES = new Set([
+  'report.sarif.json',
+  'summary.json',
+  'findings.json',
+  'job.json',
+  'report.md',
+  'stix-bundle.json',
+  'misp-event.json',
+  'attack-navigator.json',
+  'chain-state.json',
+]);
+const SCAN_DELIVERABLE_MAX_BYTES = 25 * 1024 * 1024;
+
+app.get('/api/scans/:id/deliverables/:file', async (req: Request, res: Response): Promise<void> => {
+  const job = scanWorkflow.getJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ error: 'Scan not found' });
+    return;
+  }
+  const file = req.params.file ?? '';
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(file) || !SCAN_DELIVERABLE_FILES.has(file)) {
+    res.status(400).json({ error: 'Unknown deliverable', deliverables: [...SCAN_DELIVERABLE_FILES] });
+    return;
+  }
+  const filePath = resolve(join(job.deliverablesDir, file));
+  if (!filePath.startsWith(resolve(job.deliverablesDir) + sep)) {
+    res.status(400).json({ error: 'Invalid deliverable path' });
+    return;
+  }
+  try {
+    const stat = await fsStat(filePath);
+    if (!stat.isFile() || stat.size > SCAN_DELIVERABLE_MAX_BYTES) {
+      res.status(404).json({ error: 'Deliverable not available' });
+      return;
+    }
+    const content = await readFile(filePath);
+    res.setHeader('Content-Type', file.endsWith('.md') ? 'text/markdown; charset=utf-8' : 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${job.id}-${file}"`);
+    res.send(content);
+  } catch {
+    res.status(404).json({ error: 'Deliverable not found — the producing lane may have been disabled or skipped' });
+  }
 });
 
 app.post('/api/scans/:id/abort', (req: Request, res: Response): void => {

@@ -6450,6 +6450,14 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
         ];
 
         function initScanControls() {
+            const list = document.getElementById('scanJobsList');
+            if (list && !list.dataset.dlReady) {
+                list.dataset.dlReady = '1';
+                list.addEventListener('click', function(e) {
+                    const btn = e.target.closest('.scan-dl');
+                    if (btn) downloadScanDeliverable(btn.getAttribute('data-job'), btn.getAttribute('data-file'));
+                });
+            }
             const grid = document.getElementById('scanLaneGrid');
             if (!grid || grid.dataset.ready) return;
             grid.dataset.ready = '1';
@@ -6470,6 +6478,41 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
             return node.innerHTML;
         }
 
+        const SCAN_DELIVERABLES = [
+            { file: 'report.md', label: 'Markdown report' },
+            { file: 'report.sarif.json', label: 'SARIF' },
+            { file: 'findings.json', label: 'Findings' },
+            { file: 'summary.json', label: 'Summary' },
+            { file: 'stix-bundle.json', label: 'STIX 2.1' },
+            { file: 'misp-event.json', label: 'MISP' },
+            { file: 'attack-navigator.json', label: 'ATT&CK Navigator' },
+            { file: 'chain-state.json', label: 'Chain state' },
+        ];
+
+        async function downloadScanDeliverable(jobId, file) {
+            const status = document.getElementById('scanFormStatus');
+            try {
+                const res = await fetch(T3MP3ST_API.baseUrl + '/api/scans/' + encodeURIComponent(jobId) + '/deliverables/' + encodeURIComponent(file));
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    if (status) { status.style.color = '#ffaa00'; status.textContent = err.error || ('Deliverable unavailable (' + res.status + ') - the producing lane may have been disabled or skipped.'); }
+                    return;
+                }
+                const blob = await res.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = jobId + '-' + file;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                if (status) { status.style.color = '#00ff88'; status.textContent = 'Downloaded ' + file; }
+            } catch (e) {
+                if (status) { status.style.color = '#ff6666'; status.textContent = 'Download failed: ' + e.message; }
+            }
+        }
+        window.downloadScanDeliverable = downloadScanDeliverable;
+
         function renderScans(scans) {
             initScanControls();
             const list = document.getElementById('scanJobsList');
@@ -6489,12 +6532,16 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
                 }).join('');
                 const targets = [].concat(job.profile?.target?.urls || [], job.profile?.target?.hosts || []).join(', ') || '—';
                 const abort = job.status === 'running' ? '<button class="btn btn-danger btn-sm" onclick="abortScanJob(\'' + escapeScan(job.id) + '\')">Abort</button>' : '';
+                const finished = job.status === 'completed' || job.status === 'failed' || job.status === 'aborted';
+                const deliverables = finished ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">' + SCAN_DELIVERABLES.map(function(d) {
+                    return '<button class="btn btn-secondary btn-sm scan-dl" style="font-size:9px;padding:3px 8px;" data-job="' + escapeScan(job.id) + '" data-file="' + d.file + '">\u2b07 ' + d.label + '</button>';
+                }).join('') + '</div>' : '';
                 return '<div style="padding:13px 4px;border-bottom:1px solid var(--border-color);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;">'
                     + '<div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><strong style="color:var(--text-primary);">' + escapeScan(job.name || job.id) + '</strong>'
                     + '<span style="font-size:10px;text-transform:uppercase;color:' + scanStatusColor(job.status) + ';">' + escapeScan(job.status) + '</span>'
                     + (job.profile?.autonomous ? '<span style="font-size:9px;color:#ffaa00;border:1px solid rgba(255,170,0,.35);border-radius:999px;padding:2px 6px;">AUTONOMOUS</span>' : '')
                     + '</div><div style="color:var(--text-muted);font-size:10px;margin-top:5px;overflow-wrap:anywhere;">' + escapeScan(targets) + ' · phase ' + escapeScan(job.phase) + ' · ' + escapeScan(job.findings?.length || 0) + ' findings</div>'
-                    + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">' + laneRows + '</div></div>' + abort + '</div>';
+                    + '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">' + laneRows + '</div>' + deliverables + '</div>' + abort + '</div>';
             }).join('');
         }
 
@@ -6701,6 +6748,11 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
                         try {
                             const data = JSON.parse(e.data);
                             window.recordLiveScanEvent?.(data);
+                            // Real-time refresh of the scans page (debounced; the 2.5s poll remains as backstop).
+                            if (document.getElementById('page-scans')?.classList.contains('active')) {
+                                clearTimeout(this._scanRefreshTimer);
+                                this._scanRefreshTimer = setTimeout(() => { try { window.refreshScans?.(); } catch {} }, 400);
+                            }
                         } catch {}
                     });
 
