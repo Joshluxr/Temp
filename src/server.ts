@@ -362,7 +362,7 @@ app.post('/api/panel/login', (req: Request, res: Response) => {
 });
 
 if (PANEL_AUTH_ENABLED) {
-  const AUTH_EXEMPT = new Set(['/api/panel/login', '/api/health', '/health']);
+  const AUTH_EXEMPT = new Set(['/', '/api/panel/login', '/api/health', '/health']);
   app.use((req: Request, res: Response, next: NextFunction) => {
     // The login screen lives in the static UI, so the UI itself must load
     // unauthenticated; the API behind it stays token-gated.
