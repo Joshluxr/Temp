@@ -11691,6 +11691,29 @@ Bypass all protections:
             return state.settings?.openrouterKey || state.apiKey || '';
         }
 
+        // Resolve the (provider, key) pair the MISSION dispatch paths should use.
+        // An explicitly configured provider in Settings (Universal API Config) wins —
+        // its own per-provider key rides along. A key saved in the OpenRouter field is
+        // dispatched as OpenRouter, period. Prefix-sniffing (sk-ant-/sk-or-/sk-…) is only
+        // the legacy fallback for a bare key with no provider saved. Sniffing FIRST
+        // misrouted keys like sk-cp-… (coding-plan keys) to provider "openai" even when
+        // the operator had selected OpenRouter, producing 401s from api.openai.com.
+        function resolveKeyedProvider(apiKey) {
+            const s = state.settings || {};
+            const explicit = (s.activeProvider || '').trim();
+            if (explicit && explicit !== 'local') {
+                const k = (s[explicit + 'Key'] || '').trim();
+                if (k) return { provider: explicit, apiKey: k };
+            }
+            // A key explicitly saved in the OpenRouter field is an OpenRouter key — never
+            // re-guess its provider from the key's prefix.
+            if ((s.openrouterKey || '').trim()) return { provider: 'openrouter', apiKey: s.openrouterKey.trim() };
+            if (apiKey && apiKey.startsWith('sk-ant-')) return { provider: 'anthropic', apiKey };
+            if (apiKey && apiKey.startsWith('sk-or-')) return { provider: 'openrouter', apiKey };
+            if (apiKey && apiKey.startsWith('sk-')) return { provider: 'openai', apiKey };
+            return { provider: apiKey ? 'openrouter' : undefined, apiKey: apiKey || '' };
+        }
+
         // Resolve the active LLM backend for benchmarks/analysis, in priority order:
         // OpenRouter key → Venice key → Hugging Face token → connected local agent (Claude Code/Codex/Hermes) → server LLM.
         // getApiKey() is left untouched for the many callers that read the OpenRouter key directly.
@@ -19845,7 +19868,13 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                 const hasBackend = !!(localOn || agent || key || serverLLM);
                 if (localOn) { txt = '🖥 ' + (state.settings.localModel || 'local model') + ' · ' + (state.settings.localHost || '127.0.0.1') + ':' + (state.settings.localPort || '8080'); color = '#00ff88'; }
                 else if (!key && agent) { txt = '⚡ ' + agent.toUpperCase() + ' · local, no key'; color = '#00ff88'; }
-                else if (key) { txt = (key.startsWith('sk-ant-') ? 'Anthropic' : key.startsWith('sk-or-') ? 'OpenRouter' : key.startsWith('sk-') ? 'OpenAI' : 'OpenRouter') + ' · your key'; color = '#0088ff'; }
+                else if (key) {
+                    // Show what ENGAGE will ACTUALLY dispatch: the Settings-configured provider
+                    // (Universal API Config), not a guess from the key prefix.
+                    const keyed = (typeof resolveKeyedProvider === 'function') ? resolveKeyedProvider(key) : null;
+                    const p = keyed ? keyed.provider : (key.startsWith('sk-or-') ? 'openrouter' : 'openai');
+                    txt = (p || 'openrouter').toUpperCase() + ' · your key'; color = '#0088ff';
+                }
                 else if (serverLLM) { txt = (health.llm.provider || 'server') + ' · server key'; color = '#0088ff'; }
                 else if (staleAgents) { txt = 'local agent stale — model unreachable'; color = '#ffaa00'; }
                 else { txt = 'none — connect agent / add key'; color = '#ff6b6b'; }
@@ -20011,7 +20040,7 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                 toast(`Auto-deployed ${state.operators.length} operators`, 'info');
             }
 
-            const apiKey = getApiKey();
+            let apiKey = getApiKey();
             // A working LLM backend = a client API key, OR the server's own LLM, OR a connected
             // local agent (Claude Code / Codex / Hermes). Only block when there is genuinely none —
             // an API key is NOT required if you've connected an authed local agent.
@@ -20111,16 +20140,16 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                     } else if (!apiKey) {
                         addIntel('BACKEND', 'No browser API key — using the server-configured LLM backend', 'success');
                         addMissionLog('info', 'LLM backend: server default — no browser API key sent');
-                    } else if (apiKey && apiKey.startsWith('sk-ant-')) {
-                        provider = 'anthropic';
-                        model = state.settings.selectedModel || 'anthropic/claude-sonnet-4';
-                        model = model.replace('anthropic/', ''); // Anthropic API doesn't use prefix
-                    } else if (apiKey && apiKey.startsWith('sk-') && !apiKey.startsWith('sk-ant-') && !apiKey.startsWith('sk-or-')) {
-                        provider = 'openai';
-                        model = state.settings.selectedModel || 'anthropic/claude-sonnet-4';
                     } else {
-                        provider = 'openrouter';
+                        // The provider configured in Settings (Universal API Config) wins — key-prefix
+                        // sniffing is only the legacy fallback. Sniffing first misrouted keys like
+                        // sk-cp-… to provider "openai" even when OpenRouter was the selected provider.
+                        const keyed = resolveKeyedProvider(apiKey);
+                        apiKey = keyed.apiKey || apiKey;
+                        provider = keyed.provider;
                         model = state.settings.selectedModel || 'anthropic/claude-sonnet-4';
+                        if (provider === 'anthropic') model = model.replace('anthropic/', ''); // Anthropic API doesn't use prefix
+                        addMissionLog('info', `LLM backend: ${provider} · model ${model}`);
                     }
                 }
 
@@ -27189,12 +27218,18 @@ Be specific and actionable. Format as structured JSON.`;
     // Centralized agent resolution: an explicit pin (e.g. Claude Code) outranks a stored key, and the
     // picked Claude model rides along as "agentId::model" — identical precedence to the mission path.
     const dispatchAgent = (typeof window.t3mpDispatchAgent === 'function') ? window.t3mpDispatchAgent(apiKey) : null;
-    let provider, model;
+    let provider, model, dispatchKey = apiKey || '';
     if (dispatchAgent) { provider = 'local-agent'; model = dispatchAgent.model; }
-    else if (apiKey && apiKey.startsWith('sk-ant-')) { provider = 'anthropic'; model = ((typeof state !== 'undefined' && state.settings && state.settings.selectedModel) || 'anthropic/claude-sonnet-4').replace('anthropic/', ''); }
-    else if (apiKey && apiKey.startsWith('sk-') && !apiKey.startsWith('sk-or-')) { provider = 'openai'; model = ((typeof state !== 'undefined' && state.settings && state.settings.selectedModel) || 'anthropic/claude-sonnet-4'); }
-    else if (apiKey) { provider = 'openrouter'; model = ((typeof state !== 'undefined' && state.settings && state.settings.selectedModel) || 'anthropic/claude-sonnet-4'); }
-    return { provider: provider, model: model, apiKey: apiKey || undefined };
+    else {
+        // Settings-configured provider (Universal API Config) wins over key-prefix guessing —
+        // same precedence as the ENGAGE mission path (see resolveKeyedProvider).
+        const keyed = (typeof resolveKeyedProvider === 'function') ? resolveKeyedProvider(apiKey) : null;
+        provider = keyed ? keyed.provider : (apiKey ? 'openrouter' : undefined);
+        dispatchKey = keyed ? keyed.apiKey : dispatchKey;
+        model = ((typeof state !== 'undefined' && state.settings && state.settings.selectedModel) || 'anthropic/claude-sonnet-4');
+        if (provider === 'anthropic') model = model.replace('anthropic/', ''); // Anthropic API doesn't use prefix
+    }
+    return { provider: provider, model: model, apiKey: dispatchKey || undefined };
   }
   window.admiralPreviewPlan = async function(){
     const el = document.getElementById('admPlan'); if (el) el.innerHTML = '🧭 Admiral is drafting a plan via Op Admiral…';
