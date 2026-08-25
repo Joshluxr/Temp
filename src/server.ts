@@ -8517,7 +8517,7 @@ app.post('/api/scans', (req: Request, res: Response): void => {
   }
   try {
     const profile = validation.profile;
-    const scopeHosts = [...profile.target.urls, ...profile.target.hosts]
+    const scopeHosts = [...(profile.target.urls ?? []), ...(profile.target.hosts ?? [])]
       .map((target) => hostFromTargetValue(target))
       .filter((host): host is string => Boolean(host));
     scanArsenal.setScope({

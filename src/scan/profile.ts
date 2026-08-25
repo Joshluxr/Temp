@@ -19,8 +19,8 @@ export const SCAN_PROFILE_SCHEMA = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        urls: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 500 },
-        hosts: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 500 },
+        urls: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 500, default: [] },
+        hosts: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 500, default: [] },
       },
     },
     roe: {
@@ -94,7 +94,7 @@ export const SCAN_PROFILE_SCHEMA = {
 let validator: ValidateFunction | null = null;
 function getValidator(): ValidateFunction {
   if (!validator) {
-    validator = new Ajv({ allErrors: true, strict: false }).compile(SCAN_PROFILE_SCHEMA);
+    validator = new Ajv({ allErrors: true, strict: false, useDefaults: true }).compile(SCAN_PROFILE_SCHEMA);
   }
   return validator;
 }

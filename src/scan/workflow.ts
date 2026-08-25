@@ -162,7 +162,7 @@ export class ScanWorkflow extends EventEmitter<ScanWorkflowEvents> {
       const emit = (e: ScanProgressEvent): void => this.emitScan(e);
       const recordFindings = (result: LaneResult): void => {
         for (const partial of result.findings ?? []) {
-          const target = partial.target || profile.target.urls[0] || profile.target.hosts[0] || 'scan';
+          const target = partial.target || profile.target.urls?.[0] || profile.target.hosts?.[0] || 'scan';
           const finding: Finding = {
             id: randomUUID(),
             title: partial.title || 'Untitled finding',

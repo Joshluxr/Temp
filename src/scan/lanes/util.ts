@@ -51,7 +51,7 @@ export function toUrl(value: string): string {
 
 /** Deduped, normalized target URLs for this scan. */
 export function targetUrls(ctx: LaneContext): string[] {
-  const all = [...ctx.profile.target.urls, ...ctx.profile.target.hosts];
+  const all = [...(ctx.profile.target.urls ?? []), ...(ctx.profile.target.hosts ?? [])];
   return [...new Set(all.map((v) => {
     try { return new URL(toUrl(v)).toString(); } catch { return toUrl(v); }
   }))];
@@ -59,7 +59,7 @@ export function targetUrls(ctx: LaneContext): string[] {
 
 /** Deduped bare hosts for this scan. */
 export function targetHosts(ctx: LaneContext): string[] {
-  const all = [...ctx.profile.target.urls, ...ctx.profile.target.hosts];
+  const all = [...(ctx.profile.target.urls ?? []), ...(ctx.profile.target.hosts ?? [])];
   return [...new Set(all
     .map((v) => hostFromTargetValue(v))
     .filter((h): h is string => Boolean(h)))];

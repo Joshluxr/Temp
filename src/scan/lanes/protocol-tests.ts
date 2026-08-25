@@ -24,7 +24,7 @@ export const protocolTestsLane: ScanLane = {
     const urls = targetUrls(ctx);
     // CIDR-shaped targets never survive URL/host normalization, so look at the
     // raw profile targets — otherwise a CIDR-only engagement dead-ends here.
-    const rawTargets = [...ctx.profile.target.urls, ...ctx.profile.target.hosts];
+    const rawTargets = [...(ctx.profile.target.urls ?? []), ...(ctx.profile.target.hosts ?? [])];
     const cidrTarget = rawTargets.find((h) => CIDR_RE.test(h));
     if (hosts.length === 0 && urls.length === 0 && !cidrTarget) {
       return { lane: 'protocol_tests', status: 'skipped', reason: 'no targets', summary: 'no targets', findings: [], artifacts: [] };

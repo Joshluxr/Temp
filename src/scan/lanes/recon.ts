@@ -11,7 +11,7 @@ export const reconLane: ScanLane = {
   phase: 'A',
   async run(ctx: LaneContext): Promise<LaneResult> {
     const targets = Array.from(new Map(
-      [...ctx.profile.target.urls, ...ctx.profile.target.hosts].map((value) => {
+      [...(ctx.profile.target.urls ?? []), ...(ctx.profile.target.hosts ?? [])].map((value) => {
         const url = /^https?:\/\//i.test(value) ? value : `https://${value}`;
         try { return [new URL(url).toString(), url] as const; }
         catch { return [url.toLowerCase(), url] as const; }
