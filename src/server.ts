@@ -320,11 +320,12 @@ app.use(express.json({ limit: '10mb' }));
 // of the password, so the plaintext is never stored server-side) are set, every
 // request except /api/health and /api/panel/login must carry a valid
 // Authorization: Bearer <session-token> header. Tokens are random 32-byte hex,
-// kept in memory with a 12h TTL, and are invalidated on restart. This is the
+// kept in memory with a 7-day sliding TTL (renewed on every authenticated
+// request), and are invalidated on restart. This is the
 // "real auth" the exposure warning above asks for before a non-loopback bind.
 // (PANEL_USER / PANEL_PASSWORD_SHA256 / PANEL_AUTH_ENABLED are declared above,
 // next to `const app`, because the CORS/CSRF middleware consults them.)
-const PANEL_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const PANEL_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const panelTokens = new Map<string, number>(); // token -> expiry epoch ms
 
 function sha256hex(s: string): string {
@@ -342,6 +343,10 @@ function isValidPanelToken(token: string | undefined): boolean {
   const exp = panelTokens.get(token);
   if (!exp) return false;
   if (exp < Date.now()) { panelTokens.delete(token); return false; }
+  // Sliding session: every authenticated request pushes expiry out again, so an
+  // operator actively using the panel is never mid-mission logged out by a
+  // fixed TTL. Only 7 days of inactivity (or a restart) retires a token.
+  panelTokens.set(token, Date.now() + PANEL_TOKEN_TTL_MS);
   return true;
 }
 
@@ -361,6 +366,15 @@ app.post('/api/panel/login', (req: Request, res: Response) => {
   res.json({ success: true, token: issuePanelToken(), expiresIn: PANEL_TOKEN_TTL_MS / 1000 });
 });
 
+// Request logging — deliberately registered BEFORE the panel-auth gate so that
+// 401 rejections (and every other early-exit response) are visible in the log.
+// When this ran after the gate, rejected requests vanished from the log, which
+// made token-expiry logout storms look like a silent backend.
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
+
 if (PANEL_AUTH_ENABLED) {
   const AUTH_EXEMPT = new Set(['/', '/api/panel/login', '/api/health', '/health']);
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -372,17 +386,10 @@ if (PANEL_AUTH_ENABLED) {
     const queryToken = req.path === '/api/events' && typeof req.query.token === 'string' ? req.query.token : undefined;
     const token = bearer || req.get('x-panel-token') || queryToken;
     if (isValidPanelToken(token)) return next();
+    console.warn(`[${new Date().toISOString()}] 401 ${req.method} ${req.path} (invalid/expired panel token)`);
     res.status(401).json({ error: 'Authentication required', detail: 'POST /api/panel/login with {"username","password"} to obtain a Bearer token.' });
   });
 }
-
-
-
-// Request logging
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
-});
 
 // =============================================================================
 // LLM BACKBONE INITIALIZATION

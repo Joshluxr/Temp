@@ -155,4 +155,29 @@ describe('local API authorization hardening invariants', () => {
     expect(route).not.toMatch(/allowedActions/);
     expect(route).not.toMatch(/command_execution['"],\s*['"]autonomous_execution/);
   });
+
+  it('panel tokens use a sliding 7-day TTL so active operators are not logged out mid-session', () => {
+    const tokenBlock = sourceBlock('const PANEL_TOKEN_TTL_MS', 'app.post(\'/api/panel/login\'');
+
+    expect(tokenBlock).toMatch(/PANEL_TOKEN_TTL_MS = 7 \* 24 \* 60 \* 60 \* 1000/);
+    // Sliding renewal: a successful validation must push the expiry forward.
+    expect(tokenBlock).toMatch(/panelTokens\.set\(token, Date\.now\(\) \+ PANEL_TOKEN_TTL_MS\);\s*\n\s*return true;/);
+    // Only expiry > now may retire a token before the TTL.
+    expect(tokenBlock).not.toMatch(/12 \* 60 \* 60/);
+  });
+
+  it('request logging runs before the panel-auth gate so 401s are visible in server logs', () => {
+    const gateStart = serverSource.indexOf('if (PANEL_AUTH_ENABLED) {');
+    const loggerStart = serverSource.indexOf('Request logging — deliberately registered BEFORE');
+    expect(gateStart).toBeGreaterThan(0);
+    expect(loggerStart).toBeGreaterThan(0);
+    expect(loggerStart).toBeLessThan(gateStart);
+    // The gate itself must log rejections.
+    expect(serverSource).toMatch(/401 \$\{req\.method\} \$\{req\.path\} \(invalid\/expired panel token\)/);
+  });
+
+  it('panel clears a dead token on 401 and reconnects SSE after re-login', () => {
+    expect(uiSource).toMatch(/PANEL_AUTH\.token = '';/);
+    expect(uiSource).toMatch(/BackendDispatch\.disconnectSSE\(\); BackendDispatch\.connectSSE\(\);/);
+  });
 });

@@ -6220,6 +6220,9 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
             }
             const res = await _rawFetch(url, opts);
             if (res.status === 401 && isApi && !/\/api\/panel\/login/.test(u)) {
+                // The token is dead (expired or server restarted). Drop it so no
+                // further request re-sends it, and so re-login starts clean.
+                PANEL_AUTH.token = '';
                 showLoginScreen();
             }
             return res;
@@ -6261,6 +6264,12 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
                     );
                     hideLoginScreen();
                     if (typeof T3MP3ST_API !== 'undefined') T3MP3ST_API.checkHealth();
+                    // A 401 storm usually left the SSE stream dead; reconnect it
+                    // with the fresh token so live updates resume without a reload.
+                    if (typeof BackendDispatch !== 'undefined') {
+                        try { BackendDispatch.disconnectSSE(); BackendDispatch.connectSSE(); } catch {}
+                    }
+                    try { window.refreshScans?.(); } catch {}
                 } catch (ex) {
                     err.textContent = ex.message || 'Login failed';
                 } finally {
