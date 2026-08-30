@@ -6940,7 +6940,10 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
             /**
              * Start a mission via the backend
              */
-            async startMission(missionName, targets, operators, apiKey, provider, model, approvalId) {
+            async startMission(missionName, targets, operators, apiKey, provider, model, approvalIds) {
+                // The scope gate mints ONE receipt per external target, so accept a single id or an
+                // accumulated array and always send the plural form the backend merges per-target.
+                const receiptIds = [...new Set([].concat(approvalIds || []).filter(Boolean))];
                 // For a local provider, carry the operator's llama.cpp / Ollama base URL and
                 // (optional) key from Settings so the server dispatches the mission to it.
                 const localExtras = (provider === 'local' && typeof buildLocalBaseUrl === 'function')
@@ -6954,7 +6957,7 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
                     provider,
                     model,
                     ...localExtras, // local: overrides apiKey with the Settings key + adds baseUrl
-                    ...(approvalId ? { approvalId } : {}),
+                    ...(receiptIds.length ? { approvalIds: receiptIds } : {}),
                 });
                 if (result.success) {
                     this._operatorMap = {};
@@ -20154,6 +20157,12 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                 }
 
                 try {
+                    // Multi-target receipts: the scope gate mints ONE approval per external target
+                    // and returns the next pending receipt on every 403 round-trip. Accumulate all
+                    // granted receipts and re-fire with the full set until the gate clears — a
+                    // single retry only ever cleared target #1 and dead-ended on a raw 403 for #2+.
+                    const grantedReceipts = [];
+                    const maxGateTrips = Math.min(12, Math.max(2, (state.targets?.length || 1) + 1));
                     let result = await BackendDispatch.startMission(
                         missionName,
                         state.targets,
@@ -20166,37 +20175,37 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
 
                     // The backend gates active execution behind an approval receipt. Auto-grant it
                     // when safe — a loopback/lab target you own, or AUTONOMOUS mode ("no per-step
-                    // approval; receipts still logged") — then re-fire with the receipt. External
-                    // targets in non-autonomous mode still require an explicit decision.
-                    if (!result.success && result.approval && result.approval.id) {
+                    // approval; receipts still logged") — then re-fire with the accumulated
+                    // receipts. External targets in non-autonomous mode still require an explicit
+                    // decision, one dialog per target.
+                    while (!result.success && result.approval?.id && grantedReceipts.length < maxGateTrips) {
+                        const receipt = result.approval;
+                        const gateTarget = receipt.target || target;
+                        if (grantedReceipts.includes(receipt.id)) break; // same receipt re-minted — stop, never spin
                         const autonomous = (mode === 'autonomous') || !!document.getElementById('cmdAutonomous')?.checked;
-                        const safeToAutoApprove = isLoopbackOrLabHost(target) || autonomous;
+                        const safeToAutoApprove = isLoopbackOrLabHost(gateTarget) || autonomous;
                         if (safeToAutoApprove) {
-                            addMissionLog('info', `Approval receipt ${result.approval.id} auto-granted (${isLoopbackOrLabHost(target) ? 'loopback/lab target' : 'autonomous mode'}) — logged server-side`);
-                            addIntel('RECEIPT', `Auto-approved: ${result.approval.id}`, 'success');
-                            await T3MP3ST_API.post(`/api/approvals/${result.approval.id}/approve`, {});
-                            state.approvalId = result.approval.id;
-                            result = await BackendDispatch.startMission(
-                                missionName, state.targets, state.operators, apiKey, provider, model, result.approval.id
-                            );
+                            addMissionLog('info', `Approval receipt ${receipt.id} auto-granted (${isLoopbackOrLabHost(gateTarget) ? 'loopback/lab target' : 'autonomous mode'}) — logged server-side`);
+                            addIntel('RECEIPT', `Auto-approved: ${receipt.id}`, 'success');
                         } else {
                             // Don't dead-end on a prose error — offer a one-click, explicit approval,
                             // then re-fire with the receipt (same path as the auto-approve case above).
-                            const approved = await confirmApproveTarget(target);
+                            const approved = await confirmApproveTarget(gateTarget);
                             if (!approved) {
-                                addIntel('RECEIPT', `Approval declined for ${target} — hunt not started`, 'warning');
-                                addMissionLog('warning', `Operator declined approval for external target ${target}`);
+                                addIntel('RECEIPT', `Approval declined for ${gateTarget} — hunt not started`, 'warning');
+                                addMissionLog('warning', `Operator declined approval for external target ${gateTarget}`);
                                 completeMission('approval declined');
                                 return;
                             }
-                            addIntel('RECEIPT', `Approved: ${result.approval.id}`, 'success');
-                            addMissionLog('info', `Approval receipt ${result.approval.id} granted by operator for ${target}`);
-                            await T3MP3ST_API.post(`/api/approvals/${result.approval.id}/approve`, {});
-                            state.approvalId = result.approval.id;
-                            result = await BackendDispatch.startMission(
-                                missionName, state.targets, state.operators, apiKey, provider, model, result.approval.id
-                            );
+                            addIntel('RECEIPT', `Approved: ${receipt.id}`, 'success');
+                            addMissionLog('info', `Approval receipt ${receipt.id} granted by operator for ${gateTarget}`);
                         }
+                        await T3MP3ST_API.post(`/api/approvals/${receipt.id}/approve`, {});
+                        grantedReceipts.push(receipt.id);
+                        state.approvalId = receipt.id;
+                        result = await BackendDispatch.startMission(
+                            missionName, state.targets, state.operators, apiKey, provider, model, grantedReceipts
+                        );
                     }
 
                     if (!result.success) {
