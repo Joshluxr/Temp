@@ -6205,21 +6205,56 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
         // ═══════════════════════════════════════════════════════════════
         // ═══ Panel auth (server-side login) ═══
         const PANEL_AUTH = {
-            get token() { return sessionStorage.getItem('t3mp3st_panel_token') || ''; },
-            set token(v) { if (v) sessionStorage.setItem('t3mp3st_panel_token', v); else sessionStorage.removeItem('t3mp3st_panel_token'); },
+            // localStorage (not sessionStorage): a per-tab store logged the operator
+            // out on every new tab and every browser restart. Sessions are bearer
+            // tokens with server-side 7-day sliding expiry — same trust level the
+            // API URL and Settings already get in localStorage.
+            get token() { return localStorage.getItem('t3mp3st_panel_token') || sessionStorage.getItem('t3mp3st_panel_token') || ''; },
+            set token(v) {
+                sessionStorage.removeItem('t3mp3st_panel_token'); // migrate away from the old per-tab store
+                if (v) localStorage.setItem('t3mp3st_panel_token', v); else localStorage.removeItem('t3mp3st_panel_token');
+            },
             headers() { return this.token ? { 'Authorization': 'Bearer ' + this.token } : {}; },
         };
 
-        // Wrap fetch: attach the panel token; on 401 show the login screen and re-throw.
+        // Is this URL the panel's own API? (Same-origin paths, the configured API
+        // base, or the local dev fallback.) Everything else — openrouter.ai,
+        // Venice, Hugging Face, arbitrary webhooks — is THIRD-PARTY: the panel
+        // token must never leak there, and their 401s are not panel logouts.
+        function isPanelApi(u) {
+            try {
+                if (u.startsWith('/') && !u.startsWith('//')) return true; // same-origin path
+                if (!/^https?:/i.test(u)) return false;
+                const o = new URL(u).origin;
+                if (o === window.location.origin) return true;
+                const custom = (localStorage.getItem('t3mp3st_api_url') || '').replace(/\/$/, '');
+                if (custom && o === new URL(custom).origin) return true;
+                if (window.location.protocol === 'file:' && /^http:\/\/localhost:3333/.test(u)) return true;
+                return false;
+            } catch (e) { return false; }
+        }
+
+        // Wrap fetch: attach the panel token — but ONLY to the panel's own API.
+        // Attaching it to third-party hosts (openrouter.ai et al.) REPLACED the
+        // caller's 'Authorization: Bearer sk-or-...' with the panel session token,
+        // so OpenRouter saw a hex session token instead of the key and answered
+        // 401 "Missing Authentication header" — and that 401 then surfaced as a
+        // phantom panel logout. Two rules fix it: panel token only on panel URLs,
+        // never over an explicit Authorization header; and only panel-API 401s
+        // are treated as 'session dead, re-login'.
         const _rawFetch = window.fetch.bind(window);
         window.fetch = async (url, opts = {}) => {
             const u = typeof url === 'string' ? url : url.url;
-            const isApi = /^https?:/.test(u) || u.startsWith('/');
-            if (isApi && PANEL_AUTH.token && !/\/api\/(health|panel\/login)/.test(u)) {
-                opts.headers = Object.assign({}, opts.headers, PANEL_AUTH.headers());
+            const panelApi = isPanelApi(u);
+            if (panelApi && PANEL_AUTH.token && !/\/api\/(health|panel\/login)/.test(u)) {
+                const hdrs = Object.assign({}, opts.headers);
+                // Never clobber an Authorization the caller deliberately set.
+                const hasAuth = Object.keys(hdrs).some(h => h.toLowerCase() === 'authorization');
+                if (!hasAuth) Object.assign(hdrs, PANEL_AUTH.headers());
+                opts.headers = hdrs;
             }
             const res = await _rawFetch(url, opts);
-            if (res.status === 401 && isApi && !/\/api\/panel\/login/.test(u)) {
+            if (res.status === 401 && panelApi && !/\/api\/panel\/login/.test(u)) {
                 // The token is dead (expired or server restarted). Drop it so no
                 // further request re-sends it, and so re-login starts clean.
                 PANEL_AUTH.token = '';
@@ -11797,6 +11832,12 @@ Bypass all protections:
                 models = options._noFallback ? [primaryModel]
                     : (primaryModel === fallbackModel ? [primaryModel] : [primaryModel, fallbackModel]);
             }
+            // Circuit breaker: skip models that hard-rejected earlier this session.
+            // Without this, one dead primary model (401/403/404 from the provider)
+            // costs a failed request + latency on EVERY task before falling back.
+            const dead = (window.__t3mpDeadModels || (window.__t3mpDeadModels = new Set()));
+            const live = models.filter(m => !dead.has(m));
+            if (live.length) models = live;
 
             let lastError = null;
             for (const model of models) {
@@ -11820,6 +11861,12 @@ Bypass all protections:
                     console.warn(`[T3MP3ST] Model ${model} failed: ${err.message}`);
                     addIntel('FALLBACK', `${model} error: ${err.message.substring(0, 80)}`, 'error');
                     lastError = err;
+                    // Auth/availability-class rejections will never succeed on retry —
+                    // trip the breaker so later tasks go straight to a working model.
+                    if (/\b(401|403|404)\b/.test(err.message)) {
+                        dead.add(model);
+                        addIntel('API', `${model} rejected by provider — skipping it for this session (pick another in Settings)`, 'warning');
+                    }
                     // Continue to fallback model
                 }
             }

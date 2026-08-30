@@ -13,6 +13,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { execFile, spawn } from 'child_process';
 import { appendFile, mkdir, readFile, writeFile, stat as fsStat } from 'fs/promises';
+import { readFileSync, writeFileSync } from 'fs';
 import { join, resolve, sep } from 'path';
 import { promisify } from 'util';
 import { createHash, randomUUID } from 'crypto';
@@ -328,6 +329,33 @@ app.use(express.json({ limit: '10mb' }));
 const PANEL_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const panelTokens = new Map<string, number>(); // token -> expiry epoch ms
 
+// Sessions survive restarts/deploys by persisting the token map to disk.
+// (In-memory-only tokens meant every service restart logged the operator out.)
+const PANEL_TOKEN_STORE = join(process.cwd(), '.panel-tokens.json');
+let lastTokenSave = 0;
+function loadPanelTokens(): void {
+  try {
+    const entries = JSON.parse(readFileSync(PANEL_TOKEN_STORE, 'utf8')) as [string, number][];
+    for (const [t, exp] of entries) if (typeof t === 'string' && typeof exp === 'number' && exp > Date.now()) panelTokens.set(t, exp);
+    if (panelTokens.size) console.log(`[T3MP3ST] restored ${panelTokens.size} panel session(s) from disk`);
+  } catch {
+    // no store yet (first boot) or unreadable — start clean
+  }
+}
+function persistPanelTokens(force = false): void {
+  // Throttled: sliding renewal fires on EVERY authenticated request; a disk
+  // write per request is pointless (a <=60s-old snapshot is indistinguishable
+  // from the live map after a crash, given the 7-day TTL).
+  if (!force && Date.now() - lastTokenSave < 60_000) return;
+  lastTokenSave = Date.now();
+  try {
+    writeFileSync(PANEL_TOKEN_STORE, JSON.stringify([...panelTokens]), { mode: 0o600 });
+  } catch (e) {
+    console.warn('[T3MP3ST] panel token persist failed:', e instanceof Error ? e.message : e);
+  }
+}
+loadPanelTokens();
+
 function sha256hex(s: string): string {
   return createHash('sha256').update(s, 'utf8').digest('hex');
 }
@@ -336,17 +364,19 @@ function issuePanelToken(): string {
   panelTokens.set(token, Date.now() + PANEL_TOKEN_TTL_MS);
   // opportunistic sweep of expired tokens
   for (const [t, exp] of panelTokens) if (exp < Date.now()) panelTokens.delete(t);
+  persistPanelTokens(true);
   return token;
 }
 function isValidPanelToken(token: string | undefined): boolean {
   if (!token) return false;
   const exp = panelTokens.get(token);
   if (!exp) return false;
-  if (exp < Date.now()) { panelTokens.delete(token); return false; }
+  if (exp < Date.now()) { panelTokens.delete(token); persistPanelTokens(true); return false; }
   // Sliding session: every authenticated request pushes expiry out again, so an
   // operator actively using the panel is never mid-mission logged out by a
   // fixed TTL. Only 7 days of inactivity (or a restart) retires a token.
   panelTokens.set(token, Date.now() + PANEL_TOKEN_TTL_MS);
+  persistPanelTokens(); // throttled — see persistPanelTokens
   return true;
 }
 
