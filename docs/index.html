@@ -11753,7 +11753,8 @@ Bypass all protections:
         }
 
         // Resolve the active LLM backend for benchmarks/analysis, in priority order:
-        // OpenRouter key → Venice key → Hugging Face token → connected local agent (Claude Code/Codex/Hermes) → server LLM.
+        // pinned local agent → EXPLICIT provider from Universal API Config → OpenRouter key → Venice key →
+        // Hugging Face token → connected local agent (Claude Code/Codex/Hermes) → server LLM.
         // getApiKey() is left untouched for the many callers that read the OpenRouter key directly.
         function resolveLLMBackend() {
             // An EXPLICITLY pinned local agent (e.g. Claude Code) is a deliberate operator choice —
@@ -11764,6 +11765,17 @@ Bypass all protections:
             if (pin) {
                 const pref = (typeof window.t3mpPreferredAgent === 'function') ? window.t3mpPreferredAgent() : null;
                 if (pref === pin) return { kind: 'agent', agentId: pin, agentModel: agentModelOf(pin) };
+            }
+            // The operator's EXPLICIT provider choice (Universal API Config) wins over key
+            // presence — without this, a saved OpenRouter key always shadowed a selected
+            // Venice provider and shipped Venice-only model ids to OpenRouter (400 "not a
+            // valid model"), then "fell back" to an OpenRouter model. Mirrors
+            // resolveKeyedProvider()'s explicit-choice-first rule.
+            const UAC_KIND = { openrouter: 'openrouter', venice: 'venice', huggingface: 'huggingface' };
+            const uacProvider = (state.settings?.activeProvider || '').trim();
+            if (uacProvider && UAC_KIND[uacProvider]) {
+                const k = (state.settings[uacProvider + 'Key'] || '').trim();
+                if (k.length >= 10) return { kind: UAC_KIND[uacProvider], key: k };
             }
             const orKey = (state.settings?.openrouterKey || state.apiKey || '').trim();
             if (orKey.length >= 10) return { kind: 'openrouter', key: orKey };
