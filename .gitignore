@@ -80,3 +80,6 @@ coverage/
 
 # scan job deliverables + persisted job state (may contain live engagement data)
 reports/scans/
+
+# persisted panel session tokens (secrets — never commit)
+.panel-tokens.json
