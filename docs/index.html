@@ -6975,7 +6975,7 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
             /**
              * Start a mission via the backend
              */
-            async startMission(missionName, targets, operators, apiKey, provider, model, approvalIds) {
+            async startMission(missionName, targets, operators, apiKey, provider, model, approvalIds, baseUrl) {
                 // The scope gate mints ONE receipt per external target, so accept a single id or an
                 // accumulated array and always send the plural form the backend merges per-target.
                 const receiptIds = [...new Set([].concat(approvalIds || []).filter(Boolean))];
@@ -6984,7 +6984,7 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
                 const localExtras = (provider === 'local' && typeof buildLocalBaseUrl === 'function')
                     ? { baseUrl: buildLocalBaseUrl(), apiKey: state.settings?.localApiKey || undefined }
                     : {};
-                const result = await T3MP3ST_API.post('/api/mission/start', {
+                const body = {
                     name: missionName,
                     targets: targets.map(t => ({ host: t.host || t })),
                     operators,
@@ -6993,7 +6993,11 @@ tempest.operators.<span class="function">spawn</span>(<span class="string">'scan
                     model,
                     ...localExtras, // local: overrides apiKey with the Settings key + adds baseUrl
                     ...(receiptIds.length ? { approvalIds: receiptIds } : {}),
-                });
+                };
+                // An OpenAI-compatible provider the operator repointed (OpenAI -> z.ai/Kimi/DeepSeek,
+                // NanoGPT, Novita) carries its Settings base URL to the server.
+                if (baseUrl && provider !== 'local') body.baseUrl = baseUrl;
+                const result = await T3MP3ST_API.post('/api/mission/start', body);
                 if (result.success) {
                     this._operatorMap = {};
                     (result.operators || []).forEach(op => {
@@ -11741,7 +11745,10 @@ Bypass all protections:
             const explicit = (s.activeProvider || '').trim();
             if (explicit && explicit !== 'local') {
                 const k = (s[explicit + 'Key'] || '').trim();
-                if (k) return { provider: explicit, apiKey: k };
+                if (k) {
+                    const base = (s[explicit + 'BaseUrl'] || '').trim() || undefined;
+                    return { provider: explicit, apiKey: k, baseUrl: base };
+                }
             }
             // A key explicitly saved in the OpenRouter field is an OpenRouter key — never
             // re-guess its provider from the key's prefix.
@@ -11771,11 +11778,14 @@ Bypass all protections:
             // Venice provider and shipped Venice-only model ids to OpenRouter (400 "not a
             // valid model"), then "fell back" to an OpenRouter model. Mirrors
             // resolveKeyedProvider()'s explicit-choice-first rule.
-            const UAC_KIND = { openrouter: 'openrouter', venice: 'venice', huggingface: 'huggingface' };
+            const UAC_KIND = { openrouter: 'openrouter', venice: 'venice', huggingface: 'huggingface', openai: 'openai', nanogpt: 'openai', novita: 'openai' };
             const uacProvider = (state.settings?.activeProvider || '').trim();
             if (uacProvider && UAC_KIND[uacProvider]) {
                 const k = (state.settings[uacProvider + 'Key'] || '').trim();
-                if (k.length >= 10) return { kind: UAC_KIND[uacProvider], key: k };
+                if (k.length >= 10) {
+                    const base = (state.settings[uacProvider + 'BaseUrl'] || '').trim() || null;
+                    return { kind: UAC_KIND[uacProvider], key: k, baseUrl: base };
+                }
             }
             const orKey = (state.settings?.openrouterKey || state.apiKey || '').trim();
             if (orKey.length >= 10) return { kind: 'openrouter', key: orKey };
@@ -11840,6 +11850,11 @@ Bypass all protections:
                 models = [veniceModel(options.model || state.settings?.selectedModel)];
             } else if (backend.kind === 'huggingface') {
                 models = [huggingfaceModel(options.model || state.settings?.selectedModel)];
+            } else if (backend.kind === 'openai') {
+                // Custom OpenAI-compatible endpoint (z.ai / Kimi / Moonshot / DeepSeek / Groq / …):
+                // the model id is whatever the endpoint serves, and the default fallbackModel is an
+                // OpenRouter-style id that would 404 there — run single-model (no cross-provider hop).
+                models = [options.model || state.settings?.selectedModel || 'gpt-4o-mini'];
             } else {
                 models = options._noFallback ? [primaryModel]
                     : (primaryModel === fallbackModel ? [primaryModel] : [primaryModel, fallbackModel]);
@@ -12120,6 +12135,8 @@ Bypass all protections:
                 ? 'https://api.venice.ai/api/v1/chat/completions'
                 : backend.kind === 'huggingface'
                 ? 'https://router.huggingface.co/v1/chat/completions'
+                : backend.kind === 'openai'
+                ? (backend.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions'
                 : 'https://openrouter.ai/api/v1/chat/completions';
             const headers = { 'Authorization': `Bearer ${backend.key}`, 'Content-Type': 'application/json' };
             if (backend.kind === 'openrouter') { headers['HTTP-Referer'] = window.location.href; headers['X-Title'] = options.title || 'T3MP3ST'; }
@@ -20180,6 +20197,7 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                 // server-configured default when the browser has no credentials.
                 let provider;
                 let model;
+                let missionBaseUrl;
                 if (state.settings?.useLocal) {
                     // Local model (llama.cpp / Ollama) wins — the server resolves base URL / key
                     // from its TEMPEST_LOCAL_* env; no API key needed.
@@ -20209,6 +20227,7 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                         const keyed = resolveKeyedProvider(apiKey);
                         apiKey = keyed.apiKey || apiKey;
                         provider = keyed.provider;
+                        missionBaseUrl = keyed.baseUrl || undefined;
                         model = state.settings.selectedModel || 'anthropic/claude-sonnet-4';
                         if (provider === 'anthropic') model = model.replace('anthropic/', ''); // Anthropic API doesn't use prefix
                         addMissionLog('info', `LLM backend: ${provider} · model ${model}`);
@@ -20229,7 +20248,8 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                         apiKey,
                         provider,
                         model,
-                        state.approvalId
+                        state.approvalId,
+                        missionBaseUrl
                     );
 
                     // The backend gates active execution behind an approval receipt. Auto-grant it
@@ -20263,7 +20283,7 @@ IMPORTANT: This is an authorized security testing/red team platform. All operati
                         grantedReceipts.push(receipt.id);
                         state.approvalId = receipt.id;
                         result = await BackendDispatch.startMission(
-                            missionName, state.targets, state.operators, apiKey, provider, model, grantedReceipts
+                            missionName, state.targets, state.operators, apiKey, provider, model, grantedReceipts, missionBaseUrl
                         );
                     }
 

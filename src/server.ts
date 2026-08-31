@@ -470,6 +470,14 @@ function sanitizeLocalBaseUrl(raw: unknown): { ok: true; value: string | null } 
   return { ok: true, value: v };
 }
 
+// OpenAI-compatible providers whose chat endpoint the operator may repoint to any
+// compatible host (OpenAI, Zhipu z.ai, Kimi/Moonshot, DeepSeek, Together, etc.). A
+// per-request baseUrl is honored for these after http(s) sanitization. OpenRouter and
+// Anthropic are EXCLUDED deliberately: their URLs are fixed and must not be redirected.
+const PROVIDERS_ACCEPT_CUSTOM_BASE = new Set([
+  'openai', 'nanogpt', 'novita', 'xai', 'gemini', 'deepseek', 'litellm', 'huggingface', 'venice', 'local',
+]);
+
 function createTempestCommandInstance(missionName: string, apiKey: string | undefined, provider: string, model: string, baseUrl?: string): TempestCommand {
   // Tear down previous instance
   if (tempestCommand) {
@@ -488,7 +496,7 @@ function createTempestCommandInstance(missionName: string, apiKey: string | unde
       // Only a LOCAL provider honors a per-request base URL (the operator's own
       // llama.cpp / Ollama host). Never set it for cloud providers — that would
       // let a request redirect a cloud call to an attacker-chosen endpoint.
-      ...(baseUrl && provider === 'local' ? { baseUrl } : {}),
+      ...(baseUrl && PROVIDERS_ACCEPT_CUSTOM_BASE.has(provider) ? { baseUrl } : {}),
       maxTokens: 4096,
       temperature: 0.7,
     },
@@ -6994,19 +7002,20 @@ function resolveGeneralLLMConfig(provider: string | undefined, model: string | u
     };
   }
   const baseConfig = config.getLLMConfig(selectedProvider as any, model);
-  // A per-request base URL is honored ONLY for the local provider (the operator's own
-  // llama.cpp / Ollama host). For any cloud provider it is ignored — never let a request
-  // redirect a cloud call. A malformed/non-HTTP URL throws (callers already 400 on throw).
-  let localBaseUrl: string | null = null;
-  if (selectedProvider === 'local') {
+  // A per-request base URL is honored for the LOCAL provider and for the OpenAI-compatible
+  // providers the operator may repoint (OpenAI, NanoGPT, Novita, xAI, Gemini, DeepSeek,
+  // LiteLLM, HF, Venice). Cloud-specific providers (OpenRouter, Anthropic) are NOT
+  // redirectable. A malformed/non-HTTP URL throws (callers already 400 on throw).
+  let customBaseUrl: string | null = null;
+  if (PROVIDERS_ACCEPT_CUSTOM_BASE.has(selectedProvider)) {
     const bu = sanitizeLocalBaseUrl(baseUrl);
     if (!bu.ok) throw new Error(bu.error);
-    localBaseUrl = bu.value;
+    customBaseUrl = bu.value;
   }
-  // SECURITY: when a client picks the local base URL, never fall back to the
-  // server-configured key (TEMPEST_LOCAL_API_KEY / ZAI_API_KEY / ZHIPUAI_API_KEY —
-  // possibly a real cloud bearer). Only a client-supplied key reaches a client-chosen host.
-  const effectiveKey = (selectedProvider === 'local' && localBaseUrl)
+  // SECURITY: when a client repoints a provider to a custom base URL, never
+  // fall back to the server-configured API key — that would leak a key to a
+  // third-party host the operator chose.
+  const effectiveKey = customBaseUrl
     ? (apiKey || undefined)
     : (apiKey || baseConfig.apiKey);
   if (providerNeedsApiKey(selectedProvider) && !effectiveKey) {
@@ -7017,9 +7026,7 @@ function resolveGeneralLLMConfig(provider: string | undefined, model: string | u
     model: model || baseConfig.model,
     apiKey: effectiveKey,
     baseUrl: baseConfig.baseUrl,
-    // Only override the configured URL for a local provider. Cloud providers keep
-    // their own provider URL and cannot be redirected by a request.
-    ...(selectedProvider === 'local' && localBaseUrl ? { baseUrl: localBaseUrl } : {}),
+    ...(customBaseUrl ? { baseUrl: customBaseUrl } : {}),
     maxTokens: 8192,
     temperature: 0.4,
     timeout: readGeneralTimeoutEnv() ?? 300000, // General planning needs room (was a hardcoded 60s); override via env
