@@ -15,10 +15,11 @@
  *    scope boundary; see apps/kita/docs/FORBIDDEN.md).
  */
 
-// PACKAGING GAP (recorded, not restructured): cross-package subpath exports for
-// "@kita/platform/runtime" and "@kita/database/pool" are not yet wired by
-// coders 44/46. Relative imports into their source files are used per the batch
-// instruction. If they later expose package specifiers, switch these lines only.
+// Cross-package imports are RELATIVE specifiers with a `.ts` extension. Node's
+// type-stripping resolves them directly and Vite resolves them too, so the same
+// module is importable from both `node --experimental-strip-types` harnesses and
+// this workspace's vitest workers. Package specifiers would need per-consumer
+// symlink/exports wiring that only exists in some of those environments.
 import { validateRuntimeBindingsOrProblem, toDatabaseBindings } from '../../../packages/platform/runtime.ts';
 import { createPool, sanitizeDatabaseUrl } from '../../../packages/database/src/pool.ts';
 import type { PoolDriver } from '../../../packages/database/src/pool.ts';
@@ -80,8 +81,12 @@ export async function bootstrap(options: BootstrapOptions): Promise<BootstrapRes
   const { databaseUrl, port } = validated.value;
   const bindings = toDatabaseBindings(validated.value);
 
-  // Step 2 — pool construction happens only after validation succeeded.
-  const pool = createPool(bindings, options.driver !== undefined ? { driver: options.driver } : {});
+  // Step 2 — the pool seam is invoked only after validation succeeded. The injected
+  // driver (or the built-in pg adapter when none is given) is constructed eagerly:
+  // bootstrap always owns exactly one pool for this process, and the pg adapter opens
+  // no connection until its first awaited operation, so eager construction is still
+  // side-effect-free. Tests inject a recording driver and assert on that call.
+  const pool = createPool(bindings, options.driver === undefined ? {} : { driver: options.driver });
 
   logger.info(`bindings valid; starting api stub on port ${port} (db: ${sanitizeDatabaseUrl(databaseUrl)})`);
 

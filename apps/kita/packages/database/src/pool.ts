@@ -47,12 +47,12 @@ export interface PoolDriver {
   createPool(config: PoolConfigInput): PoolLike;
 }
 
-/** Minimal structural driver shape accepted by createPool. Deliberately looser than
- * PoolDriver (config parameter may be typed `unknown`, return may be a promise) so test
- * recording doubles satisfy it without importing this module's types. */
-export interface AcceptablePoolDriver {
+/** The driver surface createPool consumes: a duck-typed `createPool` member (extra
+ * members allowed, config parameter may be typed `unknown`, return may be a promise) so
+ * test recording doubles satisfy it without importing this module's types. */
+export type AcceptablePoolDriver = {
   createPool(config: any): unknown | PromiseLike<unknown>;
-}
+};
 
 export interface ManagedPool extends PoolLike {
   readonly config: Readonly<PoolConfigInput>;
@@ -70,24 +70,49 @@ const LIMIT_KEYS = [
   ["idleTimeoutMs", "idleTimeoutMs"],
 ] as const;
 
+type ConfigLimitKey = (typeof LIMIT_KEYS)[number][1];
+
 function resolveConfig(bindings: DatabaseBindings): PoolConfigInput {
   if (typeof bindings.databaseUrl !== "string" || bindings.databaseUrl.trim().length === 0) {
     // Never echo the URL itself: it may carry credentials. Names the field, not the value.
     throw new PoolError("pool config: databaseUrl must be a non-empty string");
   }
-  const numeric: Partial<Record<(typeof LIMIT_KEYS)[number][1], number>> = {};
+  // Fail closed on every limit BEFORE any driver is consulted.
+  let max: number | undefined;
+  let statementTimeoutMs: number | undefined;
+  let connectionTimeoutMs: number | undefined;
+  let idleTimeoutMs: number | undefined;
   for (const [bindingKey, configKey] of LIMIT_KEYS) {
     const value = bindings[bindingKey];
     if (value === undefined) continue;
     if (!Number.isInteger(value) || value <= 0) {
       throw new PoolError(`pool config: ${bindingKey} must be a positive finite integer`);
     }
-    numeric[configKey] = value;
+    switch (configKey satisfies ConfigLimitKey) {
+      case "max":
+        max = value;
+        break;
+      case "statementTimeoutMs":
+        statementTimeoutMs = value;
+        break;
+      case "connectionTimeoutMs":
+        connectionTimeoutMs = value;
+        break;
+      case "idleTimeoutMs":
+        idleTimeoutMs = value;
+        break;
+    }
   }
-  return Object.freeze({ connectionString: bindings.databaseUrl, ...numeric }) as PoolConfigInput;
+  // Built explicitly rather than spread-cast: under exactOptionalPropertyTypes an absent
+  // limit must stay truly absent (not present-and-undefined) in the frozen config.
+  return Object.freeze({
+    connectionString: bindings.databaseUrl,
+    ...(max !== undefined ? { max } : {}),
+    ...(statementTimeoutMs !== undefined ? { statementTimeoutMs } : {}),
+    ...(connectionTimeoutMs !== undefined ? { connectionTimeoutMs } : {}),
+    ...(idleTimeoutMs !== undefined ? { idleTimeoutMs } : {}),
+  });
 }
-
-let defaultDriver: PoolDriver | undefined;
 
 interface PgPoolLike {
   connect(): Promise<PoolClientLike>;
@@ -110,18 +135,25 @@ async function loadPgPoolCtor(): Promise<PgPoolCtor> {
   return ctor;
 }
 
+// Module-level memo of the stateless pg *driver factory* — not a pool, binding, or config
+// cache. Every createPool() call still gets its own lazily-built Pool below, so instances
+// share nothing but this immutable lookup closure; nothing here mutates per-instance state.
+let defaultDriverMemo: PoolDriver | undefined;
+
 function pgDriver(): PoolDriver {
-  if (defaultDriver === undefined) {
-    defaultDriver = {
+  if (defaultDriverMemo === undefined) {
+    defaultDriverMemo = Object.freeze<PoolDriver>({
       createPool(config: PoolConfigInput): PoolLike {
+        // Per-pool state, captured by these closures only: two pools built by the same
+        // factory never observe or end each other's underlying pg.Pool.
         let inner: PgPoolLike | undefined;
-        let pending: Promise<PgPoolLike> | undefined;
+        let pending: Promise<PgPoolCtor> | undefined;
         const ensure = (): Promise<PgPoolLike> => {
           if (inner !== undefined) return Promise.resolve(inner);
           if (pending === undefined) {
-            pending = loadPgPoolCtor().then((Pool) => (inner = new Pool(config)));
+            pending = loadPgPoolCtor();
           }
-          return pending;
+          return pending.then((Pool) => (inner ??= new Pool(config)));
         };
         return {
           connect: () => ensure().then((p) => p.connect()),
@@ -129,22 +161,50 @@ function pgDriver(): PoolDriver {
           end: () => ensure().then((p) => p.end()),
         };
       },
-    };
+    });
   }
-  return defaultDriver;
+  return defaultDriverMemo;
+}
+
+/** Query-parameter names whose values are secret material rather than behaviour switches. */
+const SECRET_QUERY_KEY = /(?:^|[^a-z])(?:pass|secret|token|key|credential|password|authorization)(?:$|[^a-z])/iu;
+const MASK = "***";
+
+function maskQueryParams(search: string): string {
+  // Deterministic, order-preserving re-emission: split on raw `&` pairs so a value
+  // containing `=` survives untouched.
+  return search
+    .replace(/^\?/, "")
+    .split("&")
+    .map((pair) => {
+      if (pair.length === 0) return pair;
+      const eq = pair.indexOf("=");
+      const name = (eq === -1 ? pair : pair.slice(0, eq)).toLowerCase();
+      return SECRET_QUERY_KEY.test(name) ? `${name}=${MASK}` : pair;
+    })
+    .join("&");
 }
 
 /** Redact credentials from a database URL so diagnostics, logs, and error messages
- * never leak userinfo or secret-looking query parameters. */
+ * never leak userinfo or secret-looking query parameters. Total: never throws. */
 export function sanitizeDatabaseUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    if (parsed.password !== "") parsed.password = "***";
-    // Username is host-identifying rather than secret material; only the password is masked.
+    // Both halves of userinfo are credential-bearing in DATABASE_URL-style strings,
+    // so neither survives into a diagnostic.
+    if (parsed.username !== "") parsed.username = MASK;
+    if (parsed.password !== "") parsed.password = MASK;
+    if (parsed.search.length > 0) parsed.search = maskQueryParams(parsed.search);
     return parsed.toString();
   } catch {
-    // Unparseable: assume it may still embed secrets and redact aggressively.
-    return url.replace(/([?&](?:password|secret|token|apikey|api_key)=)[^&]*/gi, "$1***");
+    // Unparseable: assume it may still embed secrets and redact aggressively, covering
+    // both the userinfo run and secret-bearing query values without touching host/path.
+    return url
+      .replace(/\/\/[^/@:?#]*:[^/@?#]*@/u, "//[invalid-url]")
+      .replace(
+        /([?&](?:[^=&]*(?:pass|secret|token|key|credential|authoriz)[^=&]*)=)[^&]*/giu,
+        `$1${MASK}`,
+      );
   }
 }
 
@@ -152,8 +212,15 @@ export function createPool(
   bindings: DatabaseBindings,
   options?: { driver?: PoolDriver | AcceptablePoolDriver },
 ): ManagedPool {
+  // Validation happens first, so a bad binding fails closed before any driver call.
   const config = resolveConfig(bindings);
-  const driver = options?.driver ?? pgDriver();
+  // Structural view of the injected driver: only the createPool member is consumed, so
+  // mock handles carrying extra recording surface stay assignable.
+  const driver: AcceptablePoolDriver | PoolDriver = options?.driver ?? pgDriver();
+  if (typeof driver.createPool !== "function") {
+    throw new PoolError("pool driver: injected driver must expose createPool(config)");
+  }
+
   // Per-instance state only: nothing is registered in any module-level table, so
   // instances cannot observe or mutate each other's pools or configs.
   let poolPromise: Promise<PoolLike> | undefined;
@@ -163,6 +230,10 @@ export function createPool(
     }
     return poolPromise;
   };
+  // Build this instance's driver pool now, from this instance's own frozen config. The pg
+  // adapter stays lazy here: createPool() only closes over the specifier, and `pg` itself
+  // loads on first awaited operation, so construction still opens no connection.
+  void getPool();
   let closed = false;
 
   const assertOpen = (what: string): void => {
@@ -171,22 +242,24 @@ export function createPool(
     }
   };
 
+  const guarded = <T>(what: string, run: (p: PoolLike) => Promise<T>): Promise<T> => {
+    assertOpen(what);
+    return getPool().then(run);
+  };
+
   return {
     config,
     get isClosed(): boolean {
       return closed;
     },
     acquire(): Promise<PoolClientLike> {
-      assertOpen("acquire");
-      return getPool().then((p) => p.connect());
+      return guarded("acquire", (p) => p.connect());
     },
     connect(): Promise<PoolClientLike> {
-      assertOpen("connect");
-      return getPool().then((p) => p.connect());
+      return guarded("connect", (p) => p.connect());
     },
     query(sql: string, params?: readonly unknown[]): Promise<unknown> {
-      assertOpen("query");
-      return getPool().then((p) => p.query(sql, params));
+      return guarded("query", (p) => p.query(sql, params));
     },
     async close(): Promise<void> {
       if (closed) return; // idempotent shutdown

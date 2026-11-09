@@ -46,6 +46,22 @@ export interface FakePoolHandle {
   readonly connectCount: () => number;
   readonly endCount: () => number;
   readonly clients: () => FakeClientHandle[];
+  /** Queues behaviour for the NEXT client created by this driver. */
+  readonly queueClient: (options?: FakeClientOptions) => void;
+}
+
+/** The structural pool surface `withSerializable` consumes (see src/pool.ts PoolLike). */
+export interface PoolLike {
+  connect(): Promise<PoolClientLike>;
+  query(sql: string, params?: readonly unknown[]): Promise<unknown>;
+  end(): Promise<void>;
+}
+
+/** pg-style checked-out client surface. */
+export interface PoolClientLike {
+  query(sql: string, params?: readonly unknown[]): Promise<{ rows: unknown[]; rowCount?: number }>;
+  release(err?: unknown): void;
+  [key: string]: unknown;
 }
 
 export interface FakeDriverHandle {
@@ -56,11 +72,23 @@ export interface FakeDriverHandle {
   readonly pools: () => FakePoolHandle[];
   readonly lastClient: () => FakeClientHandle;
   readonly clientAt: (index: number) => FakeClientHandle;
-  /** Queues behaviour for the NEXT client created by this driver. */
-  readonly queueClient: (options?: FakeClientOptions) => void;
   /** Client-side SQL that has already been issued outside a released client (leak detector). */
   readonly openClients: () => FakeClientHandle[];
 }
+
+/**
+ * Driver extended with per-Pool checkout counters. `connectCount` lives on the POOL the
+ * helper checked out from, not on the driver, so specs must reach it through `poolAt(i)`
+ * (or `txHarness()`), never through the driver handle.
+ */
+export interface FakeDriverWithPools extends FakeDriverHandle {
+  readonly poolAt: (index: number) => FakePoolHandle & PoolLike;
+  readonly lastPool: () => FakePoolHandle & PoolLike;
+  readonly totalConnects: () => number;
+}
+
+/** A fake `pg.Pool` widened to the structural `PoolLike` surface transaction code consumes. */
+export type FakePool = FakePoolHandle & PoolLike;
 
 const SQL_PREFIXES = ["BEGIN", "COMMIT", "ROLLBACK", "START TRANSACTION"];
 const isControlSql = (sql: string): boolean => {
@@ -183,11 +211,19 @@ export function createFakeDriver(bindingId: string, options: FakeDriverFactoryOp
     return record;
   };
 
-  const pool: FakePoolHandle & { connect(): Promise<unknown>; query(sql: string, params?: readonly unknown[]): Promise<unknown>; end(): Promise<void> } = {
+  const pool: FakePoolHandle & PoolLike = {
     bindingId,
     connectCount: () => connectCount,
     endCount: () => events.filter((e) => e.kind === "end" && e.bindingId === bindingId).length,
     clients: () => records.map((r) => r.handle),
+    queueClient(clientOptions?: FakeClientOptions) {
+      if (records.length !== 0) {
+        throw new Error(
+          `pool.queueClient: refused to arm client #${String(records.length + 1)} — this pool has already handed out ${String(records.length)} checkout(s), so the queued failure would never fire`,
+        );
+      }
+      pending.push(clientOptions ?? {});
+    },
     async connect() {
       connectCount += 1;
       const queued = pending.shift();
@@ -207,7 +243,7 @@ export function createFakeDriver(bindingId: string, options: FakeDriverFactoryOp
     },
   };
 
-  return {
+  const driver: FakeDriverWithPools = {
     bindingId,
     configs,
     get createPoolCalls() {
@@ -215,10 +251,14 @@ export function createFakeDriver(bindingId: string, options: FakeDriverFactoryOp
     },
     events,
     pools: () => [pool],
+    poolAt: () => pool,
+    lastPool: () => pool,
+    totalConnects: () => connectCount,
     lastClient: () => records[records.length - 1]!.handle,
     clientAt: (index: number) => records[index]!.handle,
+    // Driver-level arming is only meaningful while the driver owns a single Pool instance.
     queueClient(clientOptions?: FakeClientOptions) {
-      pending.push(clientOptions ?? {});
+      pool.queueClient(clientOptions);
     },
     openClients: () => records.filter((r) => r.state === "open").map((r) => r.handle),
     createPool(config: unknown) {
@@ -227,6 +267,46 @@ export function createFakeDriver(bindingId: string, options: FakeDriverFactoryOp
       events.push({ kind: "createPool", bindingId, config });
       return pool;
     },
+  };
+  return driver;
+}
+
+/* ------------------------------------------------------- transaction harness */
+
+/**
+ * One-stop harness for `withSerializable`: a bound fake driver, the Pool it exposes, and a
+ * `queueAttempt` that provably targets THAT pool (an unbounded `connect()` helper would
+ * otherwise silently fall back to the lazy pg adapter and try to reach a real server).
+ */
+export interface TxHarness {
+  readonly driver: FakeDriverWithPools;
+  readonly pool: FakePool;
+  readonly bindingId: string;
+  /** Checkout count on the injected pool — the value under test's `pool.connect()` calls. */
+  readonly connects: () => number;
+  /** Queues behaviour for the next client this pool hands out. Always hits the fake. */
+  readonly queueAttempt: (options?: FakeClientOptions) => void;
+  readonly eventKinds: () => string[];
+  readonly clientAt: (index: number) => FakeClientHandle;
+  readonly openClients: () => FakeClientHandle[];
+}
+
+export function txHarness(bindingId = "TX"): TxHarness {
+  const driver = createFakeDriver(bindingId);
+  // Explicit injected pool: nothing here can construct a real pg.Pool.
+  const pool = driver.createPool({ connectionString: `postgres://db.internal:5432/${bindingId.toLowerCase()}_lane` });
+  return {
+    driver,
+    pool,
+    bindingId,
+    connects: () => pool.connectCount(),
+    queueAttempt: (options?: FakeClientOptions) => {
+      if (driver.createPoolCalls !== 1) throw new Error("txHarness: pool was not built through the fake driver");
+      driver.queueClient(options);
+    },
+    eventKinds: () => driver.events.map((e) => e.kind),
+    clientAt: (index: number) => driver.clientAt(index),
+    openClients: () => driver.openClients(),
   };
 }
 

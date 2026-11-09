@@ -7,6 +7,7 @@
  * sanitized diagnostic naming the binding; here we only set the exit code so
  * the process terminates unsuccessfully and nothing listens or connects.
  */
+import { pathToFileURL } from 'node:url';
 import { bootstrap } from './bootstrap.ts';
 
 async function main(): Promise<void> {
@@ -20,7 +21,14 @@ async function main(): Promise<void> {
   // bootstrap(); T-CORE-01 deliberately publishes no routes or health here.
 }
 
-const executedDirectly = process.argv[1] !== undefined && import.meta.url === `file://${process.argv[1]}`;
+// Direct-execution check: build the current script's file URL canonically
+// (pathToFileURL handles Windows drive letters and percent-encoded characters
+// like spaces identically to how import.meta.url is produced) instead of a raw
+// `file://${argv[1]}` string concat, which mismarks any encoded path. We do NOT
+// realpath argv[1]: that would silently skip startup when invoked through a
+// symlink or wrapper path — an operator-visible failure instead is preferable.
+const executedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (executedDirectly) {
   void main();
