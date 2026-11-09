@@ -85,17 +85,17 @@ describe.skipIf(SKIP)("TEST-PLAT-02 — PostgreSQL core migration (T-PLAT-02)", 
     ];
     for (const [role, object, priv, expected] of checks) {
       const fn = object.includes("(") ? hasFunctionPrivilege : hasTablePrivilege;
-      const { rows } = await client.query<{ p: boolean }>(fn, [role, object, priv]);
+      const { rows } = await client.query<{ p: boolean }>(fn, [role, object.replace("kita.", ""), priv]);
       expect(rows[0]!.p, `${role} ${priv} on ${object}`).toBe(expected);
     }
     // PUBLIC holds nothing at all inside the schema.
     const { rows } = await client.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM (
-         SELECT (aclexplode(datacl)).grantee AS grantee
+         SELECT (aclexplode(datacl)).grantee::regrole::text AS grantee
            FROM pg_class c
            JOIN pg_namespace ns ON ns.oid=c.relnamespace
           WHERE ns.nspname='kita' AND c.relkind IN ('r','p','v','m','f')
-       ) x WHERE x.grantee='public'::regrole`,
+       ) x WHERE x.grantee='public'`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
   });

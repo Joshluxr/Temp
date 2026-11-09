@@ -1,0 +1,11 @@
+{
+  "name": "@kita/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita monorepo shared strict TypeScript compiler options (T-PLAT-01 contract freeze). Byte-identical to apps/kita/tsconfig.base.json — do not weaken strictness.",
+  "files": [
+    "base.json",
+    "tsconfig.json"
+  ],
+  "license": "UNLICENSED"
+}

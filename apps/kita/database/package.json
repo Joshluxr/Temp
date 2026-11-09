@@ -6,7 +6,7 @@
   "description": "Kita core PostgreSQL migration tooling (T-PLAT-02). ISOLATED TEST ONLY — targets kita_core_test on a dedicated cluster; never production, never sandbox money.",
   "scripts": {
     "migrate": "node src/migrate.mjs",
-    "test": "node src/test-runner.mjs",
+    "test": "node test-runner.mjs",
     "smoke": "node src/smoke.mjs"
   },
   "devDependencies": {

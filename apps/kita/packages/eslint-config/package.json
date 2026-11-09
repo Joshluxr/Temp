@@ -1,0 +1,15 @@
+{
+  "name": "@kita/eslint-config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita monorepo frozen baseline ESLint shareable config (T-PLAT-01 contract freeze). Plugin-free core rules only — installable offline with zero dependencies.",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./base": "./index.js"
+  },
+  "files": [
+    "index.js"
+  ],
+  "license": "UNLICENSED"
+}

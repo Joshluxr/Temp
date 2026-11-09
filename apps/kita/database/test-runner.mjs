@@ -45,7 +45,7 @@ const TESTS_DIR = join(HERE, 'tests');
 // A test file that hangs longer than this is killed and counted as a failure.
 // Offline tests are pure filesystem + string work; two minutes means something
 // is blocking on a socket, which is exactly what this suite must never do.
-const PER_FILE_TIMEOUT_MS = Number(process.env.KITA_TEST_TIMEOUT_MS ?? 120_000);
+const PER_FILE_TIMEOUT_MS = Number(process.env?.KITA_TEST_TIMEOUT_MS ?? 120_000);
 
 const args = process.argv.slice(2);
 const LIST_ONLY = args.includes('--list') || args.includes('-l');
@@ -268,19 +268,6 @@ async function main() {
 
   console.log('RESULT: PASS — offline TEST-PLAT-02 guards verified without pg or a live DB.');
   return 0;
-}
-
-function processShim() {
-  // Kept as a helper so the header stays readable; process.version is fine.
-  return process;
-}
-function process$1() {
-  return processShim();
-}
-// Re-export-free alias used above.
-var processAlias = process$1;
-function process() {
-  return processAlias;
 }
 
 function pgInstalled() {
