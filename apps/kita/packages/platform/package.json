@@ -33,6 +33,10 @@
       "types": "./replay-dlq.ts",
       "default": "./replay-dlq.ts"
     },
+    "./observe-financial-health": {
+      "types": "./observe-financial-health.ts",
+      "default": "./observe-financial-health.ts"
+    },
     "./workers/validate-build-baseline.worker": {
       "types": "./workers/validate-build-baseline.worker.ts",
       "default": "./workers/validate-build-baseline.worker.ts"

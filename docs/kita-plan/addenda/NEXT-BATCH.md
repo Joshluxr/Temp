@@ -1,15 +1,12 @@
 BATCH-OK
 
-Review: T-PLAT-04 stub landed. receiveWebhook always returns 503 dependency_unavailable. TEST-PLAT-04: 8 passed. No inbox writes. No journals.
+Review: T-PLAT-05 stub landed. scheduleTimer and replayDlq always 503 dependency_unavailable. TEST-PLAT-05 4 passed. No timer/queue/journal writes.
 
-Next limited batch: T-PLAT-05 only.
-- scheduleTimer and replayDlq always return 503 dependency_unavailable.
-- No queue writes. No timer table writes. No journals.
-- Permitted files only:
-  - packages/platform/schedule-timer.ts
-  - packages/platform/replay-dlq.ts
-  - tests/features/test-plat-05.spec.ts
-  - packages/contracts/src/platform.ts — additive Plat05 types only.
+Next limited T-PLAT-06: observeFinancialHealth always 503 dependency_unavailable. No audit_events writes, no alert dispatch, no PII in traces, no journals, no money.
 
-T-CORE-02 HOLD. No money. No executeCommand.
-Do not authorize T-LEDGER-02 or refunds.
+Files only:
+- packages/platform/observe-financial-health.ts
+- tests/features/test-plat-06.spec.ts
+- packages/contracts/src/platform.ts additive Plat06 types only
+
+T-CORE-02 HOLD. No executeCommand. No T-LEDGER-02. No refunds.
