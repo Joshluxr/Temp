@@ -70,3 +70,16 @@ export interface Auth05Output {
   readonly customerId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Auth06Input {
+  readonly outstandingRefundOrObligation: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Auth06Output {
+  readonly accountClosed: true;
+  readonly outstandingRecordsDropped: true;
+  readonly customerId: UUID;
+  readonly traceEvents: readonly string[];
+}
