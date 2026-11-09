@@ -1,0 +1,252 @@
+/*
+ * Kita design tokens — verbatim port of docs/kita-sources/kimi-archive/app/src/index.css
+ * (plus the color aliases from its tailwind.config.js) on 2026-11-09.
+ *
+ * STRIPPED vs source:
+ *  - @fontsource imports        -> replaced with plain font-family fallback stacks
+ *  - @tailwind base/components/utilities and all @apply/@layer directives
+ *                               -> rewritten as plain CSS so this file works without Tailwind
+ * Token VALUES are unchanged (HSL channel triplets, consumed via hsl(var(--token))).
+ */
+
+:root {
+  /* primitives */
+  --primitive-ink: 0 0% 4%;
+  --primitive-cream: 60 9% 95%;
+  --primitive-paper: 0 0% 100%;
+  --primitive-lime: 76 100% 50%;
+  --primitive-sage: 151 20% 35%;
+
+  /* semantic aliases */
+  --background: var(--primitive-cream);
+  --foreground: var(--primitive-ink);
+  --card: var(--primitive-paper);
+  --card-foreground: var(--primitive-ink);
+  --popover: var(--primitive-paper);
+  --popover-foreground: var(--primitive-ink);
+  --primary: var(--primitive-ink);
+  --primary-foreground: var(--primitive-lime);
+  --secondary: 60 7% 90%;
+  --secondary-foreground: var(--primitive-ink);
+  --muted: 60 7% 91%;
+  --muted-foreground: 45 4% 38%;
+  --accent: var(--primitive-lime);
+  --accent-foreground: var(--primitive-ink);
+  --destructive: 4 66% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 45 6% 82%;
+  --input: 45 6% 76%;
+  --ring: 76 90% 34%;
+  --radius: 0.875rem;
+  --sidebar-background: var(--primitive-paper);
+  --sidebar-foreground: var(--primitive-ink);
+  --sidebar-primary: var(--primitive-ink);
+  --sidebar-primary-foreground: var(--primitive-lime);
+  --sidebar-accent: 60 8% 93%;
+  --sidebar-accent-foreground: var(--primitive-ink);
+  --sidebar-border: 45 6% 85%;
+  --sidebar-ring: 76 90% 34%;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* was @fontsource "Hanken Grotesk"; kept as a preferred family with plain-CSS fallback */
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  min-height: 100dvh;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  outline: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+button,
+[role="button"],
+a {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+::selection {
+  background: hsl(var(--primitive-lime));
+  color: hsl(var(--primitive-ink));
+}
+
+/* ---- component/utility classes (values verbatim from kimi index.css) ---- */
+
+.font-display {
+  font-family: "Newsreader", Georgia, serif;
+}
+
+.display-hero {
+  font-family: "Newsreader", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
+  font-size: clamp(3.4rem, 7vw, 7.2rem);
+}
+
+.display-section {
+  font-family: "Newsreader", Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-size: clamp(2.5rem, 4.6vw, 4.8rem);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.ink-panel {
+  background: hsl(var(--primitive-ink));
+  color: hsl(var(--primitive-cream));
+}
+
+.lime-highlight {
+  position: relative;
+  display: inline-block;
+  font-style: italic;
+  z-index: 0;
+}
+
+.lime-highlight::before {
+  content: "";
+  position: absolute;
+  inset: 62% -0.06em 0.02em -0.04em;
+  background: hsl(var(--primitive-lime));
+  transform: rotate(-1.5deg);
+  z-index: -1;
+}
+
+.hero-vessel {
+  border-radius: 0 0 clamp(2.5rem, 5vw, 4.5rem) clamp(2.5rem, 5vw, 4.5rem);
+}
+
+.dot-field {
+  background-image: radial-gradient(rgba(200, 255, 0, 0.25) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to bottom, black, transparent 88%);
+}
+
+.fine-grid {
+  background-image:
+    linear-gradient(to right, rgba(10, 10, 10, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(10, 10, 10, 0.055) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* The following were @apply-composed Tailwind utilities in the source; reproduced
+   here as plain CSS with the same token values so the package renders standalone.
+   When used inside a Tailwind app the original utility classes remain available. */
+
+.control {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: background-color 200ms, color 200ms;
+}
+
+.control-primary {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.control-primary:hover { background-color: #b8eb00; }
+.control-primary:active { background-color: #a9d800; }
+.control-primary:disabled { opacity: 0.5; }
+
+.control-dark {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+.control-dark:hover { background-color: #242424; }
+.control-dark:active { background-color: #333; }
+.control-dark:disabled { opacity: 0.5; }
+
+.control-outline {
+  border: 1px solid hsl(var(--foreground) / 0.2);
+  background-color: transparent;
+}
+.control-outline:hover { background-color: rgb(0 0 0 / 0.05); }
+.control-outline:active { background-color: rgb(0 0 0 / 0.1); }
+.control-outline:disabled { opacity: 0.5; }
+
+.field {
+  min-height: 3rem;
+  width: 100%;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid hsl(var(--input));
+  background-color: hsl(var(--card));
+  padding: 0.75rem 1rem;
+  color: hsl(var(--foreground));
+  transition: border-color 150ms;
+}
+.field::placeholder { color: hsl(var(--muted-foreground)); }
+.field:focus { border-color: hsl(var(--foreground)); }
+
+.data-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: hsl(var(--muted-foreground));
+}
+
+.surface {
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.table-row {
+  border-bottom: 1px solid hsl(var(--border) / 0.7);
+  transition: background-color 150ms;
+}
+.table-row:hover { background-color: hsl(var(--muted) / 0.45); }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
