@@ -17,6 +17,10 @@
       "types": "./migrate-core.ts",
       "default": "./migrate-core.ts"
     },
+    "./apply-event": {
+      "types": "./apply-event.ts",
+      "default": "./apply-event.ts"
+    },
     "./workers/validate-build-baseline.worker": {
       "types": "./workers/validate-build-baseline.worker.ts",
       "default": "./workers/validate-build-baseline.worker.ts"

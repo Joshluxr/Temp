@@ -1,5 +1,5 @@
 /**
- * @kita/contracts — internal platform contracts for T-PLAT-01 / T-PLAT-02.
+ * @kita/contracts — internal platform contracts for T-PLAT-01 / T-PLAT-02 / T-PLAT-03.
  *
  * Field semantics follow docs/kita-plan/13-backlog.md:
  * - Plat01Input  = reviewed manifests, exact patched versions, integrity/native
@@ -9,11 +9,16 @@
  * - Plat02Input  = reviewed core DDL, checksum, target database and runtime
  *   roles; Plat02Output = fresh/upgrade migration proof with NO sandbox money
  *   import.
+ * - Plat03Input  = durable event/consumer identity and raw inbox/outbox
+ *   envelope; Plat03Output = atomic consume/apply and recoverable publication
+ *   (objective: crash at every commit/send/ack boundary preserves one economic
+ *   effect).
  *
  * These describe money-adjacent metadata only. Nothing here executes a money
  * effect; addSandboxFunds is banned and never appears in any Kita code path.
  */
 
+import type { DomainEventType } from './events.ts';
 import type { UUID } from './context.ts';
 
 /* ------------------------------------------------------------------ *
@@ -314,3 +319,132 @@ export interface Plat02Output {
   readonly sandboxMoney: SandboxMoneyImportDenial;
   readonly targetSchemaDigest: string;
 }
+
+/* ------------------------------------------------------------------ *
+ * T-PLAT-03 — outbox/inbox idempotent durable workers
+ *
+ * Backlog I/O row (13-backlog.md ~L1362): input = durable event/consumer
+ * identity and raw inbox/outbox envelope; output = atomic consume/apply and
+ * recoverable publication. Additional errors: IDEMPOTENCY_MISMATCH; shared M2
+ * errors apply. DB surface named by the same entry: `outbox`, `inbox`,
+ * `consumer_inbox` — dedup on business AND delivery IDs, transactionally
+ * apply before ack, stable IDs survive DLQ/restart (07-algorithms.md §G7).
+ *
+ * These types describe an economic fact without effecting one (§F5). No field
+ * here carries a balance, amount or journal figure, and financial consumers
+ * re-read authority from the ledger rather than trusting envelope payloads.
+ * ------------------------------------------------------------------ */
+
+/** Delivery states mirroring the inbox.state CHECK in sql/001_core.sql. */
+export type InboxDeliveryState = 'received' | 'processing' | 'applied' | 'quarantined';
+
+/** Publication states for one outbox row (derived from published_at/lease_until/attempts in DDL). */
+export type OutboxPublicationState = 'pending' | 'leased' | 'published';
+
+/**
+ * Raw provider ingress envelope as persisted BEFORE a 2xx (§G7 ingress rule):
+ * exact bytes are stored encrypted at `rawObjectRef` and only their hash
+ * travels here. Dedup key is (providerAccountId, deliveryId); replay of the
+ * same ID with a different hash is quarantined, never applied.
+ */
+export interface InboxEnvelopeRaw {
+  readonly providerAccountId: UUID;
+  /** Provider delivery ID, kept as the exact vendor string (never normalized). */
+  readonly deliveryId: string;
+  /** sha256 hex over the exact raw bytes; mismatch on same deliveryId => quarantine + security case. */
+  readonly payloadHash: string;
+  /** Secret-store/object-store reference to the encrypted raw evidence; never inline material. */
+  readonly rawObjectRef: string;
+  readonly receivedAt: string;
+  readonly state: InboxDeliveryState;
+  /** Bounded, non-PII reason locator when state is 'quarantined'. */
+  readonly lastError?: string;
+}
+
+/**
+ * Internal domain-event envelope staged for publication, mirroring the outbox
+ * table columns. The stable eventId IS the dedup identity consumers record in
+ * consumer_inbox; DLQ replay must preserve it and may not change the payload.
+ */
+export interface OutboxEventEnvelope {
+  readonly eventId: UUID;
+  readonly aggregateId: UUID;
+  /** Decimal string, monotonic per aggregate (§F5); bigint(minor) column in DDL. */
+  readonly aggregateVersion: string;
+  readonly eventType: DomainEventType;
+  readonly schemaVersion: number;
+  /** sha256 hex over canonical payload JSON; recorded so replayed publications are byte-identical. */
+  readonly payloadDigest: string;
+  readonly createdAt: string;
+  readonly availableAt: string;
+  readonly publishedAt?: string;
+  readonly leaseUntil?: string;
+  readonly attempts: number;
+}
+
+/** Consumer-side dedup identity: PRIMARY KEY (consumer, event_id) in consumer_inbox. */
+export interface ConsumerInboxIdentity {
+  readonly consumer: string;
+  readonly eventId: UUID;
+}
+
+export interface Plat03Input {
+  readonly worker: WorkerIdentity;
+  readonly inbox?: InboxEnvelopeRaw;
+  readonly outbox?: OutboxEventEnvelope;
+  readonly consumer: ConsumerInboxIdentity;
+  /**
+   * Structural ban, same shape as Plat02Input.sandboxMoneyImport: this worker
+   * consumes and publishes envelopes; it does not post journals, mint balances
+   * or accept money effects. Any attempt is a compile error, and T-CORE-02
+   * (the durable command/ledger substrate this worker depends on) is not yet
+   * implemented, so applyEvent fails closed regardless of input.
+   */
+  readonly journalPosting?: never;
+}
+
+/** Durable work identity carried by the scheduler; mirrors WorkerContext fields. */
+export interface WorkerIdentity {
+  readonly workId: UUID;
+  readonly attemptGeneration: number;
+  readonly correlationId: UUID;
+  readonly causationId?: UUID;
+}
+
+/** Proof that consume+apply committed atomically before the queue ack (§G7). */
+export interface ConsumeApplyProof {
+  readonly consumer: string;
+  readonly eventId: UUID;
+  /** True only when the consumer_inbox insert and domain changes committed in ONE transaction. */
+  readonly appliedTransactionallyBeforeAck: true;
+  readonly duplicateDeliverySuppressed: boolean;
+  readonly inboxState: InboxDeliveryState;
+}
+
+/** Publication outcome; `republishedStableId` proves crash-after-send replays the SAME eventId. */
+export interface RecoverablePublicationProof {
+  readonly eventId: UUID;
+  readonly publishedAt: string;
+  readonly state: OutboxPublicationState;
+  readonly republishedStableId: boolean;
+}
+
+export interface Plat03Output {
+  readonly consume: ConsumeApplyProof;
+  readonly publication: RecoverablePublicationProof;
+  /** Locator-only trace summary; never raw payloads, credentials or PII (§H2). */
+  readonly traceEvents: readonly string[];
+}
+
+/** Structured detail for IDEMPOTENCY_MISMATCH: same identity, changed body (§G7 / §F2). */
+export interface Plat03IdempotencyMismatchDetail {
+  readonly code: 'IDEMPOTENCY_MISMATCH';
+  readonly consumer: string;
+  readonly eventId: UUID;
+  /** Which identity axis collided: delivery-hash change or payload-digest change. */
+  readonly axis: 'delivery_id' | 'payload_digest';
+  readonly reason: string;
+}
+
+/** Plat03 typed-error union; carried inside Problem.detail-boundary results per §F2. */
+export type Plat03FailureDetail = Plat03IdempotencyMismatchDetail;
