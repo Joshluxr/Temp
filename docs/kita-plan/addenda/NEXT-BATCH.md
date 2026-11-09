@@ -1,26 +1,25 @@
 BATCH-OK
 
-Authorized next batch: T-GROW-08 `applyCommunicationConsent` PURE checker, limited to the contract below.
+Authorize only T-GROW-05: evaluateAlerts as a pure checker.
 
-Landed: T-GROW-07 — `duplicateEventPerChannel === true` returns `CAPABILITY_UNAVAILABLE` / HTTP 409; otherwise HTTP 503, with no vendor send. TEST-GROW-07: 2 passed.
+Allowed files only:
+- packages/domain/rate-alerts/evaluate-alerts.ts
+- tests/features/test-grow-05.spec.ts
+- packages/contracts/src/rate-alerts.ts — additive Grow05 types only.
 
-Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04.
+Required behavior:
+- Never return ok:true under any input.
+- oscillatingOrStaleRate === true: return RATE_STALE with HTTP 409 and message "Oscillating or stale rate does not spam or execute money."
+- Otherwise: return dependency_unavailable with HTTP 503 because the rate-alert store is not implemented; T-QUOTE-04 remains HOLD.
+- No DB access, money movement, executeCommand, spend authority, or external side effects, including alert delivery. Oscillating or stale rates must never cause spam or execute money.
+- Use a context named Grow05CommandContext, reusing Grow07CommandContext or a minimal WorkerContext pick.
+- TEST-GROW-05 must cover both branches and verify neither returns ok:true.
 
-## Allowed files only
+This authorization covers exactly this checker and these three files. Any broader implementation or required scope expansion is HOLD.
 
-- `packages/domain/notifications/apply-communication-consent.ts`
-- `tests/features/test-grow-08.spec.ts`
-- `packages/contracts/src/notifications.ts` — additive Grow08 types only.
+Landed:
+- T-GROW-08: marketingCampaignDespiteOptOut returns CAPABILITY_UNAVAILABLE with HTTP 409; otherwise HTTP 503.
+- TEST-GROW-08: 2 passed.
 
-## Exact authorized behavior
-
-- Pure checker only: no DB, no money, no `executeCommand`, no campaign send, and no consent/notification store implementation.
-- Never return `ok: true` or send a marketing campaign after opt-out. This checker never sends any campaign or claims delivery.
-- When `marketingCampaignDespiteOptOut === true`, return `CAPABILITY_UNAVAILABLE` / HTTP 409. This branch takes precedence.
-- Marketing opt-out suppresses campaigns; it must never suppress a necessary lawful service notice.
-- Otherwise return `dependency_unavailable` / HTTP 503 because the consent/notification store is not implemented. Service notices are not claimed delivered.
-- Reuse `Grow07CommandContext`.
-
-## Required verification
-
-In `tests/features/test-grow-08.spec.ts`, cover the strict-true conflict branch (409), the otherwise branch (503), marketing campaign suppression after opt-out, preservation of necessary lawful service notices, and the absence of success, delivery claims, and side effects. Keep every change within the three allowed files and the exact pure-checker scope above. Any broader work is HOLD.
+Holds remain:
+T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06.
