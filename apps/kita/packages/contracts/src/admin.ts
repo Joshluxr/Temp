@@ -138,3 +138,18 @@ export interface Adm11Output {
   readonly independentArchiveOk: true;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Emergency route pause (T-ADM-12). Never persist a live pause; never claim production stop.
+ */
+export interface Adm12Input {
+  readonly reenableWithoutApproval: boolean;
+  readonly journalPosting?: never;
+  readonly persistPause?: never;
+}
+
+export interface Adm12Output {
+  readonly pausePersisted: true;
+  readonly newCommandsStoppedInProduction: true;
+  readonly traceEvents: readonly string[];
+}
