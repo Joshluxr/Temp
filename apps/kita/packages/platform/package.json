@@ -21,6 +21,10 @@
       "types": "./apply-event.ts",
       "default": "./apply-event.ts"
     },
+    "./receive-webhook": {
+      "types": "./receive-webhook.ts",
+      "default": "./receive-webhook.ts"
+    },
     "./workers/validate-build-baseline.worker": {
       "types": "./workers/validate-build-baseline.worker.ts",
       "default": "./workers/validate-build-baseline.worker.ts"
