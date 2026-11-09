@@ -42,3 +42,15 @@ export interface Tx03Output {
   readonly transferIds: readonly UUID[];
   readonly traceEvents: readonly string[];
 }
+
+export interface Tx04Input {
+  readonly rewriteIssuedReceiptAfterPricingUpdate: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx04Output {
+  readonly issuedReceiptRewritten: true;
+  readonly receiptId: UUID;
+  readonly traceEvents: readonly string[];
+}
