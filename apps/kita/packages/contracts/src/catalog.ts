@@ -54,3 +54,14 @@ export interface Pub04Output {
   readonly mismatchedDisclosurePublished: true;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pub05Input {
+  readonly rewriteIssuedReceiptLocale: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pub05Output {
+  readonly issuedReceiptLocaleRewritten: true;
+  readonly traceEvents: readonly string[];
+}
