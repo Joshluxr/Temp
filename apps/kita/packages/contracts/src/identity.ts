@@ -57,3 +57,16 @@ export interface Auth04Output {
   readonly customerId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Auth05Input {
+  readonly deviceRevoked: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Auth05Output {
+  readonly tokenRefreshed: true;
+  readonly sseKeptAlive: true;
+  readonly customerId: UUID;
+  readonly traceEvents: readonly string[];
+}
