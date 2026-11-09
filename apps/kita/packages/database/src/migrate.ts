@@ -3,7 +3,12 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PoolClient } from "pg";
-import { MONEY_COLUMNS, MONEY_TABLES, SEED_ALLOWED_TABLES, sha256Hex } from "./invariant.js";
+import { MONEY_TABLES, sha256Hex } from "./invariant.js";
+// The no-money-import guard is defined once in invariant.ts; re-exported here so the
+// runner's public surface carries it without a duplicate implementation to drift.
+import { findMoneyImport } from "./invariant.js";
+
+export { findMoneyImport };
 
 /**
  * T-PLAT-02 migration runner. Applies numbered migrations in order to a target that is
@@ -26,35 +31,6 @@ export interface Migration {
 export class MigrationError extends Error {}
 
 const fileNameRe = /^(\d{3,})_[a-z0-9_]+\.sql$/;
-
-/**
- * Install-time guard (INVARIANT): sandbox balances never become live cash, so no migration
- * may INSERT economic rows. Money-bearing column names inside DDL (column definitions,
- * CHECK constraints, trigger bodies) are fine; a top-level INSERT whose VALUES/SELECT
- * supplies one of them — or targets any money table at all — is rejected before execution.
- */
-export function findMoneyImport(sql: string): string | null {
-  const lines = sql.split("\n");
-  let insideBody = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    insideBody = (insideBody + (line.match(/\$\$/g)?.length ?? 0)) % 2 === 1;
-    if (insideBody) continue; // dollar-quoted function bodies are runtime paths, not install imports
-    const m = /^\s*INSERT\s+INTO\s+([a-z_][a-z0-9_]*)\b/i.exec(line);
-    if (m === null) continue;
-    const table = m[1]!.toLowerCase();
-    if (!SEED_ALLOWED_TABLES.has(table)) {
-      return `line ${i + 1}: INSERT into "${table}" is not an allowed non-monetary seed table`;
-    }
-    const stmtEnd = lines.slice(i).findIndex((l) => l.includes(";"));
-    const stmt = lines.slice(i, i + (stmtEnd < 0 ? 1 : stmtEnd + 1)).join(" ");
-    const moneyColumn = MONEY_COLUMNS.find((c) => new RegExp(`\\b${c}\\b`).test(stmt));
-    if (moneyColumn !== undefined) {
-      return `line ${i + 1}: seed INSERT references money column "${moneyColumn}"`;
-    }
-  }
-  return null;
-}
 
 export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migration[]> {
   const entries = await readdir(dir);

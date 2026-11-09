@@ -9,13 +9,13 @@ services:
     image: postgres:18
     container_name: kita-plat02-pg
     ports:
-      - "55432:5432"
+      - "54339:5432"
     environment:
       POSTGRES_USER: kita_owner
       POSTGRES_PASSWORD: kita_owner
-      POSTGRES_DB: kita_plan_test
+      POSTGRES_DB: kita_core_test
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kita_owner -d kita_plan_test"]
+      test: ["CMD-SHELL", "pg_isready -U kita_owner -d kita_core_test"]
       interval: 2s
       timeout: 3s
       retries: 30
