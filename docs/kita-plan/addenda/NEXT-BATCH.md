@@ -1,22 +1,22 @@
 BATCH-OK
 
-Authorize only the exact T-FUND-01 createInstrumentSession pure checker below. No other implementation is authorized by this batch.
+Authorize only T-FUND-05: `recoverFunding`, a PURE checker reusing `Fund01CommandContext`.
 
-T-TX-02 landed: lateReturnErasesPaidHistory returns POLICY_UNAVAILABLE 409; otherwise 503, with no money from projection. Reported validation: TEST-TX-02, 2 passed.
+Allowed implementation files only:
+- `packages/domain/funding/recover-funding.ts`
+- `tests/features/test-fund-05.spec.ts`
+- `packages/contracts/src/funding.ts` — additive Fund05 types only.
 
-Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10.
+Required behavior:
+- Never return `ok: true`.
+- `timeoutAfterDebitWouldRecharge === true` => `PROVIDER_OUTCOME_UNKNOWN`, HTTP 409.
+- Otherwise => `dependency_unavailable`, HTTP 503, because the `provider_attempts`/inquiry store is not implemented.
+- No DB access, money movement, provider calls, or `executeCommand`.
+- Never create a second charge after timeout or unknown debit. Timeout after debit never creates a second charge.
+- Tests must cover the 409 guard and the 503 fallback; no execution path may succeed or charge.
 
-Allowed files only:
-- packages/domain/funding/create-instrument-session.ts
-- tests/features/test-fund-01.spec.ts
-- packages/contracts/src/funding.ts — additive Fund01 types only
+Landed: T-FUND-01 — `rawPanOrCvvPresent` => `CAPABILITY_UNAVAILABLE` 409; otherwise 503, no funds. TEST-FUND-01: 2 passed.
 
-Required behavior and constraints:
-- Pure checker only: no DB access, no money movement, no fund collection, no executeCommand, and no persistence.
-- Never return ok:true. Never persist or log raw PAN/CVV; none may enter app server logs or the DB.
-- rawPanOrCvvPresent === true returns CAPABILITY_UNAVAILABLE with HTTP 409.
-- Otherwise return dependency_unavailable with HTTP 503 because the hosted instrument session store is not implemented.
-- Reuse Tx08CommandContext, or a WorkerContext pick named Fund01CommandContext.
-- Tests must cover both failure branches and verify that neither returns ok:true.
+HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03.
 
-Route implementation through the prescribed GPU Qoder Efficient coding swarm, then Sol max review. Any expansion beyond this checker or the allowed files requires HOLD.
+No other implementation scope is authorized.
