@@ -61,34 +61,26 @@ jobs:
       # ---------------------------------------------------------------
       # Fail-closed guard 1 — prohibited_runtime_reference_count
       # (observability metric named by T-MIG-01, docs/kita-plan/13-backlog.md).
-      # Outcome-manufacturing identifiers may appear ONLY in comments/docs
-      # (they are cited there deliberately by apps/kita/docs/FORBIDDEN.md and
-      # apps/kita/apps/admin/app/page.tsx); a match on any executable line is
-      # a ported forbidden call and fails the job. Excludes node_modules,
-      # __tests__ and .md files.
+      # A literal on an executable line is legitimate ONLY as a quoted string
+      # inside a denylist/register declaration that names the ban (e.g.
+      # apps/admin/app/page.tsx, apps/admin/lib/secret-scan.ts,
+      # database/tests/isolation-docs.test.mjs) or inside a comment. Any other
+      # occurrence — call, route/procedure definition, import, unquoted token —
+      # fails the job. The detector below is self-exempt so the list stays
+      # nameable; root docs/FORBIDDEN-PRODUCTION-ENDPOINTS.md owns additions.
       # ---------------------------------------------------------------
       - name: "Guard: no outcome-manufacturing calls (FORBIDDEN-PATHS F-01..F-05)"
         run: |
           set -euo pipefail
-          pattern='addSandboxFunds|simulatePartnerCompletion|mark_paid_out'
-          if matches=$(grep -RInE "$pattern" \
-              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
-              --exclude-dir=node_modules --exclude=__tests__ \
-              apps packages tests database sql 2>/dev/null \
-              | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(\*|//|/\*)'); then
-            echo "::error::Forbidden outcome-manufacturing identifier found on an executable line."
-            echo "Register: apps/kita/docs/FORBIDDEN-PATHS.md and docs/FORBIDDEN-PRODUCTION-ENDPOINTS.md."
-            printf '%s\n' "$matches"
-            exit 1
-          fi
-          echo "OK: no addSandboxFunds / simulatePartnerCompletion / admin complete-fail-mint calls."
+          node scripts/guard-no-outcome-manufacturing.mjs
 
       # ---------------------------------------------------------------
       # Fail-closed guard 2 — no production database host/DSN in kita code.
       # The only permitted PostgreSQL coordinates are the isolated test
-      # cluster (127.0.0.1:54339/kita_core_test). Any cloud/managed-DB
+      # cluster (loopback, port 54339, kita_core_test). Any cloud/managed-DB
       # hostname, or a postgres:// / postgresql:// DSN whose host is not the
-      # loopback test host on port 54339, fails the build.
+      # loopback test host on port 54339, fails the build. Credentials inside
+      # matched DSNs are stripped before printing.
       # ---------------------------------------------------------------
       - name: "Guard: no production database host or DSN referenced"
         run: |
@@ -106,12 +98,12 @@ jobs:
             echo "OK: no cloud/managed DB hostnames."
           fi
           echo "== postgres DSNs pointing outside the isolated test cluster =="
-          # Strip userinfo (user:pass@) so credentials never print, then flag any
-          # DSN whose host is not loopback-with-port-54339.
-          if grep -RIhoE 'postgres(ql)?://[A-Za-z0-9._%+@!$&*()=;/?#-]+' \
+          dsn_offenders=$(grep -RIhoE 'postgres(ql)?://[A-Za-z0-9._%+@!$&*()=;/?#-]+' \
               "${include_args[@]}" --exclude-dir=node_modules . \
               | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#' \
-              | grep -vE '^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal):54339(/|$)'; then
+              | grep -vE '^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal):54339(/|$)' || true)
+          if [ -n "$dsn_offenders" ]; then
+            printf '%s\n' "$dsn_offenders"
             echo "::error::A postgres DSN targets something other than the isolated test cluster (loopback:54339). Kita batch 1 has NO production database (TEST-PLAT-02)."
             status=1
           else

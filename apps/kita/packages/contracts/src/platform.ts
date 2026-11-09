@@ -29,6 +29,13 @@ export interface ReviewedManifest {
   readonly hash: string;
   readonly reviewedBy: string;
   readonly reviewCommit: string;
+  /**
+   * TEST-PLAT-01 gate: the manifest must have been read from a workspace the
+   * lock actually covers. Uncovered manifests (root, or any directory outside
+   * `package.json` workspaces) are recorded here so the freeze refuses them
+   * instead of silently skipping their pins. Optional => treated as covered.
+   */
+  readonly coveredByLockfile?: boolean;
 }
 
 /** Exact patched version pin that the lock must resolve to. */
@@ -46,6 +53,12 @@ export interface NativePeerEvidence {
   readonly environment: 'web' | 'native';
   readonly reactVersion: string;
   readonly nativeModules: readonly { readonly name: string; readonly prebuiltHash: string }[];
+  /**
+   * TEST-PLAT-01(c): the peer sets must be *separate*, not just present. Two
+   * environments declaring the same `react` requirement are one merged set and
+   * fail as COMPATIBILITY_FAILURE. Optional => not compared (backwards compatible).
+   */
+  readonly peerRequirement?: string;
 }
 
 export interface Plat01Input {
@@ -90,6 +103,138 @@ export interface Plat01Output {
   readonly generatedClients: GeneratedClientProof;
   readonly frozenAt: string;
 }
+
+/* ------------------------------------------------------------------ *
+ * T-PLAT-01 — TEST-PLAT-01 evidence envelope (additive, frozen shape)
+ *
+ * The types above carry the DECISION (Plat01Input -> Result<Plat01Output>).
+ * These carry the EVIDENCE that produced it, so EV(T-PLAT-01) can be filed
+ * and re-checked without re-running a build. Verification only: nothing here
+ * performs an install, a write, or a money effect.
+ * ------------------------------------------------------------------ */
+
+/** Which pin list a manifest block was read from. Workspace-internal cross-links are excluded. */
+export type ManifestSection = 'dependencies' | 'devDependencies' | 'peerDependencies';
+
+/** One requirement string as written in a reviewed manifest, plus its exactness verdict. */
+export interface ManifestPinEvidence {
+  readonly workspacePath: string;
+  readonly section: ManifestSection;
+  readonly packageName: string;
+  /** Verbatim requirement from package.json, e.g. "^18.3.0" or "8.16.3". */
+  readonly requirement: string;
+  /** True only when the requirement is an exact version (no ^, ~, x, *, latest, range, workspace:*). */
+  readonly exact: boolean;
+  /** Reason token for exact=false, e.g. "caret-range" | "workspace-link". Empty when exact. */
+  readonly reason: string;
+}
+
+/** Integrity evidence for one resolved node in a lockfile. */
+export interface LockNodeIntegrityEvidence {
+  /** Lockfile package key, e.g. "apps/mobile/node_modules/react". */
+  readonly key: string;
+  readonly name: string;
+  readonly version: string;
+  /** Verbatim `integrity` value; absent entries are recorded as "" and count as a finding. */
+  readonly integrity: string;
+  readonly hasResolved: boolean;
+  /** True for link/workspace members, which legitimately carry no integrity. */
+  readonly isWorkspaceLink: boolean;
+}
+
+/** The two React peer sets the T-PLAT-01 DB note requires to stay separate. */
+export interface ReactPeerSetEvidence {
+  readonly environment: 'web' | 'native';
+  /** Every non-empty `react` requirement seen in that environment's manifests. */
+  readonly reactRequirements: readonly string[];
+  readonly reactNativeRequirement?: string;
+}
+
+/** One scanned client-bundle source unit (built artifact when present, source otherwise). */
+export interface ClientBundleScanEvidence {
+  readonly workspacePath: string;
+  /** "built-artifact" | "source-substitute" — never report a substitute as the artifact. */
+  readonly scanBasis: string;
+  readonly filesScanned: number;
+  /** Findings are locators only (`file:line:pattern-id`); raw material is never echoed (§F2 no-leak). */
+  readonly findings: readonly string[];
+}
+
+/** Full evidence record for one TEST-PLAT-01 run; input to the validator's audit side. */
+export interface Plat01Evidence {
+  readonly evidenceVersion: string;
+  readonly generatedAt: string;
+  readonly gitCommit: string;
+  readonly pins: readonly ManifestPinEvidence[];
+  readonly lockNodes: readonly LockNodeIntegrityEvidence[];
+  readonly reactPeerSets: readonly ReactPeerSetEvidence[];
+  readonly bundleScans: readonly ClientBundleScanEvidence[];
+  /** Forbidden outcome-manufacturing identifiers found in production-reachable paths. Must be []. */
+  readonly forbiddenIdentifierFindings: readonly string[];
+}
+
+/** Digest of one evidence block, so a review can cite exactly what was approved. */
+export interface Plat01EvidenceDigests {
+  readonly pinsDigest: string;
+  readonly lockDigestEvidence: string;
+  readonly peerSetDigest: string;
+  readonly bundleScanDigest: string;
+}
+
+/**
+ * Accumulated TEST-PLAT-01 receipt: the validator output plus the evidence it
+ * was derived from. A freeze is only promotable with both halves present.
+ */
+export interface Plat01VerificationReceipt {
+  readonly output: Plat01Output;
+  readonly evidence: Plat01EvidenceDigests;
+  /** Freeze stays refused until Sol signs the evidence bundle (EV(T-PLAT-01)). */
+  readonly approvedBy: string;
+}
+
+/**
+ * Additional error cases named by 13-backlog.md T-PLAT-01 I/O line ("unresolved
+ * version; compatibility/security failure"). Narrow unions over the existing F2
+ * ProblemCode values — additive, and they keep the shared M2 errors untouched.
+ */
+export type Plat01UnresolvedVersionErrorCode = 'UNRESOLVED_VERSION';
+export type Plat01CompatibilityErrorCode = 'COMPATIBILITY_FAILURE';
+export type Plat01SecurityErrorCode = 'SECURITY_FAILURE' | 'OUTCOME_MANUFACTURING_FORBIDDEN';
+export type Plat01ErrorCode =
+  | Plat01UnresolvedVersionErrorCode
+  | Plat01CompatibilityErrorCode
+  | Plat01SecurityErrorCode;
+
+/** Structured detail for UNRESOLVED_VERSION: a requirement that pinned nothing. */
+export interface UnresolvedVersionDetail {
+  readonly code: Plat01UnresolvedVersionErrorCode;
+  readonly packageName: string;
+  readonly workspacePath: string;
+  readonly requirement: string;
+  readonly reason: string;
+}
+
+/** Structured detail for COMPATIBILITY_FAILURE: web/native peer sets collided or a native hash was missing. */
+export interface CompatibilityFailureDetail {
+  readonly code: Plat01CompatibilityErrorCode;
+  readonly environment: 'web' | 'native' | 'mixed';
+  readonly conflictingRequirements: readonly string[];
+  readonly reason: string;
+}
+
+/** Structured detail for SECURITY_FAILURE: locator-only, never the matched material. */
+export interface SecurityFailureDetail {
+  readonly code: Plat01SecurityErrorCode;
+  readonly patternId: string;
+  readonly artifactId: string;
+  readonly offset: number;
+}
+
+/** Plat01 typed-error union; still carried inside Problem.detail-boundary results per §F2. */
+export type Plat01FailureDetail =
+  | UnresolvedVersionDetail
+  | CompatibilityFailureDetail
+  | SecurityFailureDetail;
 
 /* ------------------------------------------------------------------ *
  * T-PLAT-02 — PostgreSQL migration from MySQL sandbox
