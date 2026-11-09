@@ -83,3 +83,17 @@ export interface Auth06Output {
   readonly customerId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Auth07Input {
+  readonly expiredKeyOrHostileDeepLink: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+  readonly biometricAsKycEvidence?: never;
+}
+
+export interface Auth07Output {
+  readonly mobileSessionIssued: true;
+  readonly biometricAcceptedAsKyc: true;
+  readonly customerId: UUID;
+  readonly traceEvents: readonly string[];
+}
