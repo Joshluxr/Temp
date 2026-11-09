@@ -44,3 +44,16 @@ export interface Auth03Output {
   readonly customerId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Auth04Input {
+  readonly bypassNewDestinationHold: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Auth04Output {
+  readonly recoveredSessionIssued: true;
+  readonly newDestinationHoldLifted: true;
+  readonly customerId: UUID;
+  readonly traceEvents: readonly string[];
+}
