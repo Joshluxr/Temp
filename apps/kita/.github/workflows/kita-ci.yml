@@ -11,16 +11,31 @@
 #
 # Batch-1 hard constraints (docs/kita-plan/SOL-REVIEW.md): no real money, no
 # fake KYC, no outcome-manufacturing paths in any production-reachable source.
+#
+# Branch policy (apps/kita/docs/CI-BRANCH-POLICY.md): `main` is the reviewed
+# trunk; `kita/<task>` feature branches plus the current swarm branch run this
+# identical validation lane on push, and every pull_request runs it regardless
+# of base branch. Triggers are filtered by path, not by branch, so no Kita
+# change escapes these checks.
 name: Kita CI (apps/kita only — never production)
 
 on:
+  # Manual run of the same validation lane (no deploy path exists to reach).
+  workflow_dispatch:
   pull_request:
-    branches: [main]
+    # No branch filter: every PR into any base runs the same checks, so a PR
+    # from kita/<task> into main is validated identically to one targeting a
+    # feature branch. Path filter below still scopes this lane to apps/kita/**.
     paths:
       - "apps/kita/**"
   push:
     branches:
       - main
+      # Feature branches carry the identical validation jobs as PRs (see
+      # apps/kita/docs/CI-BRANCH-POLICY.md). Glob covers kita/T-PLAT-01 style
+      # names; `dong` is the current swarm integration branch.
+      - 'kita/**'
+      - dong
     tags:
       - "kita-v*"
     paths:
@@ -77,37 +92,94 @@ jobs:
       # ---------------------------------------------------------------
       # Fail-closed guard 2 — no production database host/DSN in kita code.
       # The only permitted PostgreSQL coordinates are the isolated test
-      # cluster (loopback, port 54339, kita_core_test). Any cloud/managed-DB
-      # hostname, or a postgres:// / postgresql:// DSN whose host is not the
-      # loopback test host on port 54339, fails the build. Credentials inside
-      # matched DSNs are stripped before printing.
+      # clusters declared in WORKSPACE.md / apps/kita/database/config/
+      # isolation.json: loopback hosts on the designated test ports
+      # (54339 kita_core_test, 55432 kita_plan_test). Any cloud/managed-DB
+      # hostname or any DSN pointing elsewhere fails the build. Two scopes:
+      #   (a) executable scope (*.ts/*.tsx/*.js/*.mjs/*.cjs): a bare
+      #       cloud-host marker is legal ONLY as a quoted denylist entry
+      #       (database/src/migrate.mjs PRODUCTION_MARKERS) or a quoted
+      #       negative-test fixture; unquoted markers and ANY DSN fail;
+      #   (b) config scope (*.json/*.yml/*.yaml/*.sql): any match at all
+      #       fails — configuration must never name a production host.
+      # Reported matches have userinfo stripped so credentials never print.
       # ---------------------------------------------------------------
       - name: "Guard: no production database host or DSN referenced"
         run: |
           set -euo pipefail
           status=0
-          include_args=(--include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
-                        --include='*.cjs' --include='*.json' --include='*.yml' --include='*.yaml' \
-                        --include='*.sql')
-          echo "== Cloud/managed database hostnames =="
-          if grep -RInE '(rds\.amazonaws\.com|\.neon\.tech|supabase\.(co|in)|render\.com|flysql|database\.azure\.com)' \
-              "${include_args[@]}" --exclude-dir=node_modules .; then
-            echo "::error::Kita source references a non-test database host; only kita_core_test@127.0.0.1:54339 is permitted."
+          CLOUD_RE='(rds\.amazonaws\.com|aurora|neon\.tech|supabase\.(co|in)|\.render\.com|herokuapp|aliyuncs|cloudsql|redshift)'
+          # Quoted-occurrence filter: drops lines where every match sits inside a
+          # single- or double-quoted string (denylist entries, negative fixtures).
+          QUOTED_FILTER="'[^']*(rds\.amazonaws\.com|aurora|neon\.tech|supabase|render|herokuapp|aliyuncs|cloudsql|redshift)[^']*'|\"[^\"]*(rds\.amazonaws\.com|aurora|neon\.tech|supabase|render|herokuapp|aliyuncs|cloudsql|redshift)[^\"]*\""
+          DSN_RE='postgres(ql)?://[^"'"'"' `)\]}]+'
+          LOOPBACK_TEST_DSN_RE='^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal|\[::1\]):(54339|55432)(/|$)'
+
+          echo "== (a) Executable scope: cloud/managed DB hosts =="
+          if hits=$(grep -RInE "$CLOUD_RE" \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules . | grep -vE "$QUOTED_FILTER"); then
+            printf '%s\n' "$hits"
+            echo "::error::Unquoted cloud/managed DB host in executable scope — Kita may never wire a production database."
             status=1
           else
-            echo "OK: no cloud/managed DB hostnames."
+            echo "OK: cloud-host names appear only as quoted denylist entries / negative-test fixtures."
           fi
-          echo "== postgres DSNs pointing outside the isolated test cluster =="
-          dsn_offenders=$(grep -RIhoE 'postgres(ql)?://[A-Za-z0-9._%+@!$&*()=;/?#-]+' \
-              "${include_args[@]}" --exclude-dir=node_modules . \
-              | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#' \
-              | grep -vE '^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal):54339(/|$)' || true)
-          if [ -n "$dsn_offenders" ]; then
-            printf '%s\n' "$dsn_offenders"
-            echo "::error::A postgres DSN targets something other than the isolated test cluster (loopback:54339). Kita batch 1 has NO production database (TEST-PLAT-02)."
+
+          echo "== (a2) Executable scope: postgres DSNs =="
+          dsns=$(grep -RIoHE "$DSN_RE" \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules . || true)
+          offenders=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            file=${line%%:[0-9]*}
+            dsn=$(printf '%s' "$line" | grep -oE "$DSN_RE" | head -1 | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#')
+            if ! printf '%s' "$dsn" | grep -qE "$LOOPBACK_TEST_DSN_RE"; then
+              offenders="${offenders}${file} -> ${dsn}
+          "
+            fi
+          done <<< "$dsns"
+          if [ -n "$offenders" ]; then
+            printf 'Offending DSNs (file -> shape, userinfo stripped):\n%s' "$offenders"
+            echo "::error::A postgres DSN in executable scope targets something other than the loopback test clusters (:54339/:55432). Kita batch 1 has NO production database (TEST-PLAT-02)."
             status=1
           else
-            echo "OK: every postgres DSN in-tree points at kita_core_test on the loopback test port."
+            echo "OK: every executable-scope postgres DSN points at a loopback isolated test cluster."
+          fi
+
+          echo "== (b) Config scope (json/yml/sql): zero tolerance for DB hosts =="
+          # Exclude this workflow file itself (it embeds the detection regexes).
+          if hits=$(grep -RInE "$CLOUD_RE" \
+              --include='*.json' --include='*.yml' --include='*.yaml' --include='*.sql' \
+              --exclude-dir=node_modules --exclude='kita-ci.yml' .); then
+            printf '%s\n' "$hits"
+            echo "::error::Committed config names a production/could-be-production DB host. Use env indirection only (database/config/isolation.json structuralChecks)."
+            status=1
+          else
+            echo "OK: no cloud/managed DB hosts in committed config."
+          fi
+          # Any DSN literal in config must be a loopback test coordinates form.
+          # Exclude this workflow file itself (it embeds the detection regexes).
+          cfg_dsns=$(grep -RIoHE "$DSN_RE" \
+              --include='*.json' --include='*.yml' --include='*.yaml' --include='*.sql' \
+              --exclude-dir=node_modules --exclude='kita-ci.yml' . || true)
+          cfg_offenders=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            file=${line%%:[0-9]*}
+            dsn=$(printf '%s' "$line" | grep -oE "$DSN_RE" | head -1 | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#')
+            if ! printf '%s' "$dsn" | grep -qE "$LOOPBACK_TEST_DSN_RE"; then
+              cfg_offenders="${cfg_offenders}${file} -> ${dsn}
+          "
+            fi
+          done <<< "$cfg_dsns"
+          if [ -n "$cfg_offenders" ]; then
+            printf 'Offending config DSNs:\n%s' "$cfg_offenders"
+            echo "::error::Committed config carries a non-test DSN."
+            status=1
+          else
+            echo "OK: any config DSN is loopback-test-only."
           fi
           exit $status
 

@@ -24,12 +24,13 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test __tests__/test-plat-01.spec.ts __tests__/test-plat-02.spec.ts"
+    "test": "node --experimental-strip-types --test __tests__/test-plat-01.spec.ts __tests__/test-plat-02.spec.ts && vitest run --root ../.. tests/features/test-plat-01.spec.ts"
   },
   "dependencies": {
     "@kita/contracts": "*"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "3.2.4"
   }
 }
