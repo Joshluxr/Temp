@@ -1,0 +1,16 @@
+{
+  "name": "@kita/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kita core PostgreSQL migration tooling (T-PLAT-02). ISOLATED TEST ONLY — targets kita_core_test on a dedicated cluster; never production, never sandbox money.",
+  "scripts": {
+    "migrate": "node src/migrate.mjs",
+    "test": "node src/test-runner.mjs",
+    "smoke": "node src/smoke.mjs"
+  },
+  "devDependencies": {
+    "pg": "^8",
+    "@types/pg": "^8"
+  }
+}

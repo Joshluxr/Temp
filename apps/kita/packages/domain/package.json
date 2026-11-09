@@ -1,0 +1,24 @@
+{
+  "name": "@kita/domain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita domain STUB (T-PLAT-01): money value-object types + SQL-derived enum unions only. Zero money-moving logic — contracts freeze (T-CONTRACT-01) pending; real reducers arrive with T-CORE-02.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

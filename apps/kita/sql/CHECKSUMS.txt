@@ -1,0 +1,15 @@
+# apps/kita/sql — T-PLAT-02 checksums. ISOLATED TEST ONLY, never production.
+# Verify from this directory:   sha256sum -c CHECKSUMS.txt
+# Regenerate checksum lines:    sha256sum 001_core.sql 002_core_smoke.sql
+#
+# PROVENANCE — each file below is a VERBATIM byte-for-byte copy of its source path.
+# Source files under docs/kita-plan/ are architect-owned planning artifacts and were NOT modified.
+#
+#   docs/kita-plan/sql/001_core.sql        -> apps/kita/sql/001_core.sql
+#     sha256 da4b3e0e9ea259d3389298411603c2a0b026e90fd8fdb56066c5d74e6ef92123
+#   docs/kita-plan/sql/002_core_smoke.sql  -> apps/kita/sql/002_core_smoke.sql
+#     sha256 336d944e7aab09c1355f9021150df9aa52012c07325431b954f637c97d896703
+#
+# Checksum lines (valid for `sha256sum -c`):
+da4b3e0e9ea259d3389298411603c2a0b026e90fd8fdb56066c5d74e6ef92123  001_core.sql
+336d944e7aab09c1355f9021150df9aa52012c07325431b954f637c97d896703  002_core_smoke.sql
