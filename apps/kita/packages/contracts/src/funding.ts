@@ -19,3 +19,15 @@ export interface Fund01Output {
   readonly sessionId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Fund05Input {
+  readonly timeoutAfterDebitWouldRecharge: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fund05Output {
+  readonly secondChargeCreated: true;
+  readonly operationId: UUID;
+  readonly traceEvents: readonly string[];
+}
