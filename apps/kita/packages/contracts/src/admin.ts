@@ -55,3 +55,20 @@ export interface Adm04Output {
   readonly blockedPropertyOverridden: true;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Maker-checker (T-ADM-05). Second login of the same person cannot approve.
+ */
+export interface Adm05Input {
+  readonly samePersonSecondLogin: boolean;
+  readonly requesterPersonId?: UUID;
+  readonly checkerPersonId?: UUID;
+  readonly journalPosting?: never;
+  readonly commandAuthority?: never;
+}
+
+export interface Adm05Output {
+  readonly approved: true;
+  readonly commandAuthorityGranted: true;
+  readonly traceEvents: readonly string[];
+}
