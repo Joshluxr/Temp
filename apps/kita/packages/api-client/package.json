@@ -1,0 +1,31 @@
+{
+  "name": "@kita/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita API client STUB (T-PLAT-01 lane): idempotent command RECOVERY helpers. Read-oriented; never invokes a financial reducer; never returns mock data when the server is unreachable.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./command-recovery": {
+      "types": "./src/command-recovery.ts",
+      "default": "./src/command-recovery.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kita/contracts": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

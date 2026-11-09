@@ -78,6 +78,35 @@ export function hasFreshStepUp(person: WorkforcePerson, now: number = Date.now()
   return person.stepUpAt !== undefined && now - person.stepUpAt <= STEP_UP_WINDOW_MS;
 }
 
+/**
+ * Default-deny authorization for admin reads (docs/kita-plan/09-admin-security.md I2).
+ * The archive only has `user | admin` (08-admin-rbac.md §0), so this ladder is a
+ * read-only projection of that model, not an invented superuser.
+ */
+export interface AdminPermission {
+  readonly permission: string;
+  readonly minRole: 'user' | 'admin';
+  readonly reason: string;
+}
+
+export const ADMIN_PERMISSIONS = {
+  transfersRead: { permission: 'queue.read', minRole: 'user', reason: 'masked queue read' },
+  casesRead: { permission: 'case.read', minRole: 'user', reason: 'case queue read' },
+  auditRead: { permission: 'audit.read', minRole: 'user', reason: 'append-only audit read' },
+  piiReveal: { permission: 'pii.reveal', minRole: 'admin', reason: 'privileged reveal, audited' },
+  documentsRead: { permission: 'documents.read', minRole: 'admin', reason: 'evidence document read' },
+} as const satisfies Record<string, AdminPermission>;
+
+export type AdminPermissionKey = keyof typeof ADMIN_PERMISSIONS;
+
+const ROLE_RANK: Readonly<Record<'user' | 'admin', number>> = { user: 1, admin: 2 };
+
+export function authorize(person: WorkforcePerson, required: AdminPermission): boolean {
+  if (!hasGrant(person, required.permission)) return false;
+  const held = person.roles.reduce((best, role) => Math.max(best, ROLE_RANK[role as 'user'] ?? 0), 0);
+  return held >= ROLE_RANK[required.minRole];
+}
+
 function encodeJson(value: unknown): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }

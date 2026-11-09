@@ -1,0 +1,10 @@
+packages:
+  - 'apps/customer'
+  - 'apps/admin'
+  - 'apps/mobile'
+  - 'packages/ui'
+  - 'packages/domain'
+  - 'packages/database'
+  - 'packages/platform'
+  - 'packages/contracts'
+  - 'packages/api-client'

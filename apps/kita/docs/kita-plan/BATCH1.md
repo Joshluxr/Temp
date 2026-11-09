@@ -14,9 +14,9 @@ touched by this batch.
 |---|---|
 | coder-21 admin-next | `apps/admin/**` |
 | coder-22 expo-app | `apps/mobile/**` |
-| coder-23 sql-isolate | `sql/**`, `database/**`, `packages/database/**` |
+| coder-23 sql-isolate | `sql/00{1,2}_*.sql`, `sql/CHECKSUMS.txt`, `database/**`, `packages/database/**` |
 | coder-24 domain-stub | `packages/domain/**`, `packages/contracts/**`, `packages/api-client/**`, `packages/platform/**`, `tests/features/**` |
-| coder-25 workspace-docs | `package.json` (workspaces), `pnpm-workspace.yaml`, `docs/FORBIDDEN.md`, `docs/runbooks/platform.md`, `.github/workflows/ci.yml`, `README.md`, this file's structure |
+| coder-25 workspace-docs | `package.json` (workspaces), `pnpm-workspace.yaml`, `docs/FORBIDDEN.md`, `docs/runbooks/platform.md`, `sql/roles.sql` (new file, no collision with 001/002), `.github/workflows/ci.yml`, `README.md`, this file's structure |
 
 Plan of record (read-only for all lanes): `docs/kita-plan/13-backlog.md` T-PLAT-01/T-PLAT-02,
 `12-tests-gates.md` L4/L7, `11-infrastructure.md` K2/K4, `SOL-REVIEW.md`.
@@ -76,9 +76,13 @@ Scope delivered by this lane (T-PLAT-01 / T-PLAT-02 coordination + platform scaf
 * `package.json` — `workspaces` converted from `apps/*`+`packages/*` globs to the explicit list
   (`customer`, `admin`, `mobile`, `packages/ui`, `packages/domain`, `packages/database`,
   `packages/platform`) so new packages join deliberately.
-* `pnpm-workspace.yaml` — same explicit workspace set for the pnpm layout required by T-PLAT-01
-  (exact patched lockfiles); note: no lockfile exists yet, so package-manager choice is recorded
-  as an open item below.
+* `pnpm-workspace.yaml` — explicit workspace set (customer, admin, mobile, packages/ui,domain,
+  database,platform,contracts,api-client) for the pnpm layout required by T-PLAT-01 (exact patched
+  lockfiles); note: no lockfile exists yet, so package-manager choice is recorded as an open item
+  below.
+* `sql/roles.sql` — least-privilege role DDL contract (`kita_migration` / `kita_api` /
+  `kita_worker`, isolated test DB only) backing runbook §3; new file, does not touch coder-23's
+  `001_core.sql`/`002_core_smoke.sql`.
 * `docs/FORBIDDEN.md` — machine-scannable register of prohibited calls/endpoints (the CI scan and
   every lane read this file as the single source of truth).
 
@@ -87,10 +91,13 @@ Status facts (exists vs pending, as of this write):
 * Exists: npm-workspace scaffold (`apps/customer`, `apps/admin`, `apps/mobile`, `packages/ui`,
   `packages/domain`), `tsconfig.base.json`, `.gitignore`, `sql/001_core.sql` + `002_core_smoke.sql`
   + `CHECKSUMS.txt` (verbatim copies of architect-owned `docs/kita-plan/sql/`, hashes recorded).
-* Pending from other lanes: `packages/database`, `packages/platform`, `packages/contracts`,
-  `packages/api-client`, `tests/features/test-plat-01.spec.ts`, `test-plat-02.spec.ts`,
-  `pnpm-lock.yaml`. CI steps depending on absent paths fail closed until the lanes land them —
-  this is intended, not a broken pipeline.
+* Landed mid-write (lanes 23/24, still in progress): `packages/contracts/src/{platform,context,
+  result,generated}.ts`, `packages/api-client/src/command-recovery.ts`,
+  `packages/database/{src/migrate.ts,src/invariant.ts,migrations/001_core.sql}`,
+  `packages/platform/validate-build-baseline.ts` (+ empty `__tests__/workers` dirs).
+* Pending from other lanes: `pnpm-lock.yaml`, `tests/features/test-plat-0{1,2}.spec.ts` (dir is
+  currently empty), lane sections above. CI steps depending on absent paths fail closed until the
+  lanes land them — this is intended, not a broken pipeline.
 
 Open items recorded by this lane:
 
