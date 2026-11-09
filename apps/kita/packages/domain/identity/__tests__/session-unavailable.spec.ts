@@ -7,9 +7,8 @@
  * only correct behavior of any pre-T-CORE-02 bindSession is `unavailable('bindSession')`
  * wrapped in `err(...)` — it must NEVER return an ok Session.
  *
- * Mocks only: no database, no network, no real IdP evidence. Fixture secrets use the
- * workspace canaries "hunter2" (password) and "sk_live" (API key); every assertion proves
- * they never leak into the failure surface.
+ * Mocks only: no database, no network, no real IdP evidence. Fixture canaries must
+ * never leak into the failure surface.
  */
 
 import { describe, expect, it } from 'vitest';
