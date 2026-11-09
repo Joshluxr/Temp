@@ -1,25 +1,24 @@
 BATCH-OK
 
-Authorize only the exact T-TX-07 `openErrorClaim` pure clock checker described below.
+Authorize only T-GROW-04: qualifyReferral as a pure checker, within the exact scope below.
 
-T-TX-04 landed: `rewriteIssuedReceiptAfterPricingUpdate === true` returns `POLICY_UNAVAILABLE` / 409; otherwise `dependency_unavailable` / 503. TEST-TX-04: 2 passed.
+Recorded completion: T-TX-07 landed. supportHandoffResetsStatutoryClock => POLICY_UNAVAILABLE, HTTP 409; otherwise HTTP 503 with no refund. TEST-TX-07: 2 passed.
 
-Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-02, T-TX-05, T-TX-06, T-TX-10.
+HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-02, T-TX-05, T-TX-06, T-TX-10.
 
-Allowed implementation files only, relative to `/workspace/apps/kita`:
-
-- `packages/domain/transfers/open-error-claim.ts`
-- `tests/features/test-tx-07.spec.ts`
-- `packages/contracts/src/transfers.ts` — additive Tx07 types only.
+Allowed implementation files only:
+- packages/domain/rewards/qualify-referral.ts
+- tests/features/test-grow-04.spec.ts
+- packages/contracts/src/rewards.ts — additive Grow04 types only.
 
 Required behavior:
+- Never return ok:true. Never issue points or qualify a self-referral.
+- selfReferral === true => LIMIT_EXCEEDED, HTTP 409, message: "Self-referral blocked and household signal reviewed."
+- Otherwise => HTTP 503, dependency_unavailable, because the referral/points store is not implemented; T-REWARD-01 remains HOLD.
+- The explicit self-referral check takes precedence over the unavailable-store response.
+- Reuse Tx08CommandContext, or use a WorkerContext pick named Grow04CommandContext.
+- Pure checker only: no DB access, no money movement, no executeCommand, no points issuance, and no persistent state changes.
 
-- Reuse `Tx08CommandContext`.
-- `supportHandoffResetsStatutoryClock === true` returns `POLICY_UNAVAILABLE` / 409. This check takes precedence over the unavailable-store response. Support handoff never resets the original statutory clock.
-- Otherwise return `dependency_unavailable` / 503 because the case/calendar store is not implemented.
-- Never return `ok: true`, reset the original statutory clock on support handoff, or grant a refund.
-- Keep the checker pure: no DB access, no case/calendar writes, no money operations, no `executeCommand`, and no remedy or refund implementation. Do not implement the money slices from the previous T-TX-07 HOLD.
+Required focused coverage in tests/features/test-grow-04.spec.ts: self-referral returns LIMIT_EXCEEDED/409; all other inputs return dependency_unavailable/503; no result is ok:true and no points are issued.
 
-TEST-TX-07 must cover the strict-true 409 branch, the otherwise-503 branch, the absence of successful responses, preservation of the original statutory clock on support handoff, and no refund granted. Tests must exercise the pure checker without DB, money, `executeCommand`, or remedy dependencies.
-
-Route implementation through the Qoder Efficient swarm on GPU `gpu-fqaf`, then Sol max review on the VM. Changes outside this exact scope require HOLD.
+No held task or broader referral/points implementation is authorized. If this exact checker cannot be implemented within these files and constraints, HOLD and report the blocker without expanding scope.
