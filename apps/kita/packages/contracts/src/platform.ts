@@ -629,3 +629,31 @@ export interface Plat10BlockingEvidenceDetail {
 }
 
 export type Plat10FailureDetail = Plat10BlockingEvidenceDetail;
+
+/**
+ * Privacy retention / legal holds (T-PLAT-09). Always fail closed. A legal
+ * hold never deletes. Absence of a hold never authorizes deletion here.
+ */
+export interface Plat09Input {
+  readonly worker: WorkerIdentity;
+  readonly subjectId: UUID;
+  readonly legalHoldActive: boolean;
+  readonly requestKind: 'delete' | 'export';
+  readonly journalPosting?: never;
+  readonly documentWrite?: never;
+}
+
+export interface Plat09Output {
+  readonly deleted: false;
+  readonly exported: false;
+  readonly holdPreserved: true;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Plat09PolicyUnavailableDetail {
+  readonly code: 'POLICY_UNAVAILABLE';
+  readonly subjectId: UUID;
+  readonly reason: string;
+}
+
+export type Plat09FailureDetail = Plat09PolicyUnavailableDetail;
