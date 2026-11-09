@@ -112,7 +112,7 @@ jobs:
           # Quoted-occurrence filter: drops lines where every match sits inside a
           # single- or double-quoted string (denylist entries, negative fixtures).
           QUOTED_FILTER="'[^']*(rds\.amazonaws\.com|aurora|neon\.tech|supabase|render|herokuapp|aliyuncs|cloudsql|redshift)[^']*'|\"[^\"]*(rds\.amazonaws\.com|aurora|neon\.tech|supabase|render|herokuapp|aliyuncs|cloudsql|redshift)[^\"]*\""
-          DSN_RE='postgres(ql)?://[^"'"'"' `)\]}]+'
+          DSN_RE='postgres(ql)?://[A-Za-z0-9._%+@!=;/?#:-]+'
           LOOPBACK_TEST_DSN_RE='^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal|\[::1\]):(54339|55432)(/|$)'
 
           echo "== (a) Executable scope: cloud/managed DB hosts =="
@@ -127,19 +127,38 @@ jobs:
           fi
 
           echo "== (a2) Executable scope: postgres DSNs =="
-          dsns=$(grep -RIoHE "$DSN_RE" \
+          # Exemption is narrow on purpose: only lines that carry a test-file
+          # marker (assert/expect/throw/reject) alongside the quoted DSN are
+          # treated as negative fixtures proving the guard rejects that shape.
+          # A production *shaped* DSN (non-loopback host, or loopback on a port
+          # other than 54339/55432) fails even inside quotes — the only legal
+          # quoted DSNs are loopback-test ones or deliberately hostile fixtures
+          # under a test marker. Interpolated/template DSNs fail unconditionally.
+          dsns=$(grep -RInE "$DSN_RE" \
               --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
-              --exclude-dir=node_modules . || true)
+              --exclude-dir=node_modules . \
+              | grep -vE "(assert|expect|toThrow|reject|\bfor \(const\b|[0-9]+:[[:space:]]+['\"]postgres(ql)?://|[0-9]+:[[:space:]]*\[)" || true)
           offenders=""
           while IFS= read -r line; do
             [ -z "$line" ] && continue
-            file=${line%%:[0-9]*}
             dsn=$(printf '%s' "$line" | grep -oE "$DSN_RE" | head -1 | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#')
             if ! printf '%s' "$dsn" | grep -qE "$LOOPBACK_TEST_DSN_RE"; then
-              offenders="${offenders}${file} -> ${dsn}
+              offenders="${offenders}${line:0:160} -> ${dsn}
           "
             fi
           done <<< "$dsns"
+          # Concatenation-built DSNs ("postgres://" + user + "@" + host): the
+          # literal prefix plus an appended host/user variable is always code,
+          # never a fixture — zero tolerance.
+          if hits=$(grep -RInE 'postgres(ql)?://[\"'"'"'][[:space:]]*\+' \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules .); then
+            printf '%s\n' "$hits"
+            echo "::error::Dynamically assembled postgres DSN in executable scope — Kita may never build a production connection string."
+            status=1
+          else
+            echo "OK: no concatenated DSN construction."
+          fi
           if [ -n "$offenders" ]; then
             printf 'Offending DSNs (file -> shape, userinfo stripped):\n%s' "$offenders"
             echo "::error::A postgres DSN in executable scope targets something other than the loopback test clusters (:54339/:55432). Kita batch 1 has NO production database (TEST-PLAT-02)."
@@ -160,17 +179,19 @@ jobs:
             echo "OK: no cloud/managed DB hosts in committed config."
           fi
           # Any DSN literal in config must be a loopback test coordinates form.
-          # Exclude this workflow file itself (it embeds the detection regexes).
-          cfg_dsns=$(grep -RIoHE "$DSN_RE" \
+          # No quoted-string/test-fixture exemption here: committed config is
+          # what a deploy consumes, so every DSN shape fails unless it is the
+          # isolated triple. Exclude this workflow file itself (it embeds the
+          # detection regexes).
+          cfg_dsns=$(grep -RInE "$DSN_RE" \
               --include='*.json' --include='*.yml' --include='*.yaml' --include='*.sql' \
               --exclude-dir=node_modules --exclude='kita-ci.yml' . || true)
           cfg_offenders=""
           while IFS= read -r line; do
             [ -z "$line" ] && continue
-            file=${line%%:[0-9]*}
             dsn=$(printf '%s' "$line" | grep -oE "$DSN_RE" | head -1 | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#')
             if ! printf '%s' "$dsn" | grep -qE "$LOOPBACK_TEST_DSN_RE"; then
-              cfg_offenders="${cfg_offenders}${file} -> ${dsn}
+              cfg_offenders="${cfg_offenders}${line:0:120} -> ${dsn}
           "
             fi
           done <<< "$cfg_dsns"

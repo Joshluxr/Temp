@@ -56,7 +56,8 @@ function discoverManifests(): ManifestFile[] {
 
 const rootManifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
   workspaces: string[];
-};const declaredWorkspaces = [...rootManifest.workspaces].sort();
+};
+const declaredWorkspaces = [...rootManifest.workspaces].sort();
 const manifests = discoverManifests();
 const coveredManifests = manifests.filter((m) => declaredWorkspaces.includes(m.workspacePath));
 
@@ -181,7 +182,7 @@ const FORBIDDEN_IDENTIFIER_RE =
   /\b(?:addSandboxFunds|simulatePartnerCompletion|adminComplete|markPaidOut|mark_paid_out|setBalance|set_balance)\b/;
 /** A *call* of one of those names, or a back-office verb handed to a mutation. */
 const FORBIDDEN_CALL_RE =
-  /(?:\b(?:addSandboxFunds|simulatePartnerCompletion|adminComplete|markPaidOut|mark_paid_out|setBalance|set_balance)\s*\()|(?:\.(?:remittance|trpc|admin)\.(?:complete|fail)\s*\()|(?:action:\s*['"](?:complete|fail|mark_paid_out)['"])/;
+  /(?:\b(?:addSandboxFunds|simulatePartnerCompletion|adminComplete|markPaidOut|mark_paid_out|setBalance|set_balance)\s*\()|(?:\.(?:remittance|trpc|admin)\.(?:complete|fail)\s*\()|(?:action:\s*['"](?:complete|fail|mark_paid_out)['"]\s*,\s*(?!allowed:\s*false))/;
 
 /** Strip line comments, block comments and JSDoc so prose mentions are not read as code. */
 function stripComments(text: string): string {
@@ -192,6 +193,7 @@ function stripComments(text: string): string {
 
 interface IdentifierHit {
   readonly loc: string;
+  readonly line: string;
   readonly isCall: boolean;
 }
 
@@ -203,11 +205,12 @@ function forbiddenIdentifierHits(dirs: readonly string[]): IdentifierHit[] {
       if (rel.includes('/__tests__/') || rel.startsWith('tests/')) continue; // isolated test scope allowed
       const raw = fs.readFileSync(abs, 'utf8');
       const code = stripComments(raw);
-      const lines = raw.split('\n');
-      lines.forEach((line, i) => {
+      raw.split('\n').forEach((line, i) => {
         if (!FORBIDDEN_IDENTIFIER_RE.test(line)) return;
-        if (code.split('\n')[i] === line) return; // comment-only occurrence
-        hits.push({ loc: `${rel}:${i + 1}`, isCall: FORBIDDEN_CALL_RE.test(code.split('\n')[i] ?? '') });
+        const codeLine = code.split('\n')[i] ?? '';
+        if (codeLine === line.replace(/^\s+/, '') && /^\s*(\/\/|\*)/.test(line)) return;
+        if (!FORBIDDEN_IDENTIFIER_RE.test(codeLine)) return; // comment-only occurrence
+        hits.push({ loc: `${rel}:${i + 1}`, line: codeLine, isCall: FORBIDDEN_CALL_RE.test(codeLine) });
       });
     }
   }
@@ -309,12 +312,24 @@ describe('TEST-PLAT-01(a) — exact patched pins across all workspaces', () => {
  * ------------------------------------------------------------------ */
 
 describe('TEST-PLAT-01(b) — lockfile presence and integrity', () => {
+  it('the workspace root declares no dependency of its own (all pins live in workspaces)', () => {
+    const root = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    expect(Object.keys({ ...root.dependencies, ...root.devDependencies })).toEqual([]);
+  });
+
   it('a lockfile exists at the workspace root', () => {
     expect(lockExists, 'no package-lock.json under apps/kita').toBe(true);
   });
 
-  it('the lockfile covers exactly the declared workspace set', () => {
-    expect(workspaceLinkKeys.sort(), 'lockfile does not link every declared workspace').toEqual(declaredWorkspaces);
+  it('the lockfile links every declared workspace and nothing else', () => {
+    const linked = Object.values(lock.packages)
+      .filter((v) => v.link === true)
+      .map((v) => String((v as { resolved: unknown }).resolved))
+      .sort();
+    expect(linked, 'lockfile does not link exactly the declared workspace set').toEqual(declaredWorkspaces);
   });
 
   it('every resolved external node carries a sha512 integrity value', () => {
@@ -411,14 +426,9 @@ describe('TEST-PLAT-01(c) — separate web/native React peer sets', () => {
   });
 
   it('validator contract: a single merged peer set is rejected as COMPATIBILITY_FAILURE', async () => {
-    const { validateBuildBaseline } = await import('../packages/platform/validate-build-baseline.ts');
+    const { validateBuildBaseline } = await loadValidator();
     const input = plat01InputFixture();
-    const receipt = await validateBuildBaseline(workerContext(), { ...input, nativePeers: [input.nativePeers[0]!] }, {
-      readClientBundle: async () => ({ artifactId: 'sha256:' + 'a'.repeat(64), text: '' }),
-      recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
-      generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 1, openApiHash: 'd'.repeat(64) }),
-      nowIso: () => '2026-11-09T00:00:00.000Z',
-    });
+    const receipt = await validateBuildBaseline(workerContext(), { ...input, nativePeers: [input.nativePeers[0]!] }, goodDeps());
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) expect(receipt.error.code).toBe('COMPATIBILITY_FAILURE');
   });
@@ -483,12 +493,10 @@ describe("TEST-PLAT-01(d) — no server secrets in client bundle", () => {
     expect(present, 'built bundles exist — replace the source-substitute scan with the artifact scan').toEqual([]);
 
     // Contract of the validator when the artifact is missing: SECURITY_FAILURE, never a pass.
-    const { validateBuildBaseline } = await import('../packages/platform/validate-build-baseline.ts');
+    const { validateBuildBaseline } = await loadValidator();
     const receipt = await validateBuildBaseline(workerContext(), plat01InputFixture(), {
+      ...goodDeps(),
       readClientBundle: async () => undefined,
-      recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
-      generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 1, openApiHash: 'd'.repeat(64) }),
-      nowIso: () => '2026-11-09T00:00:00.000Z',
     });
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) {
@@ -499,29 +507,20 @@ describe("TEST-PLAT-01(d) — no server secrets in client bundle", () => {
   });
 
   it('secret-scan pattern set is version-pinned and unknown versions fail closed', async () => {
-    const { SECRET_SCAN_PATTERN_SETS, validateBuildBaseline } = await import(
-      '../packages/platform/validate-build-baseline.ts'
-    );
+    const { SECRET_SCAN_PATTERN_SETS, validateBuildBaseline } = await loadValidator();
     expect(Object.keys(SECRET_SCAN_PATTERN_SETS)).toContain('v1');
     const input = { ...plat01InputFixture(), secretScanPatternsVersion: 'v-does-not-exist' };
-    const receipt = await validateBuildBaseline(workerContext(), input, {
-      readClientBundle: async () => ({ artifactId: 'sha256:' + 'a'.repeat(64), text: '' }),
-      recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
-      generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 1, openApiHash: 'd'.repeat(64) }),
-      nowIso: () => '2026-11-09T00:00:00.000Z',
-    });
+    const receipt = await validateBuildBaseline(workerContext(), input, goodDeps());
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) expect(receipt.error.code).toBe('SECURITY_FAILURE');
   });
 
   it('findings are reported as locators only, never echoing matched secret material', async () => {
-    const { validateBuildBaseline } = await import('../packages/platform/validate-build-baseline.ts');
+    const { validateBuildBaseline } = await loadValidator();
     const planted = 'before x-api-key="not-a-real-credential-value" after';
     const receipt = await validateBuildBaseline(workerContext(), plat01InputFixture(), {
+      ...goodDeps(),
       readClientBundle: async () => ({ artifactId: 'bundle-1', text: planted }),
-      recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
-      generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 1, openApiHash: 'd'.repeat(64) }),
-      nowIso: () => '2026-11-09T00:00:00.000Z',
     });
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) {
@@ -530,9 +529,38 @@ describe("TEST-PLAT-01(d) — no server secrets in client bundle", () => {
     }
   });
 
-  it('forbidden outcome-manufacturing identifiers appear nowhere as callable code in production-reachable paths', () => {
-    const findings = forbiddenCallSites([...CLIENT_APPS, 'packages', 'database', 'sql']);
-    expect(findings, `outcome-manufacturing call site(s): ${findings.join(' | ')}`).toEqual([]);
+  it('forbidden outcome-manufacturing identifiers appear nowhere in production-reachable code (only as inert strings)', async () => {
+    // docs/FORBIDDEN.md lists these names as banned. The scan must tell a *reference*
+    // from an *operation*: appearing as data (a deny-list string, a projection row that
+    // declares the action allowed:false, a disabled stub that throws) is permitted;
+    // being reachable as a call or an enabled verb is not.
+    const hits = forbiddenIdentifierHits([...CLIENT_APPS, 'packages', 'database', 'sql']);
+    const callable = hits.filter((h) => h.isCall);
+    expect(
+      callable.map((c) => c.loc),
+      `outcome-manufacturing call site(s): ${callable.map((c) => c.loc).join(' | ')}`,
+    ).toEqual([]);
+    expect(hits.length, 'the forbidden register must actually be wired into the tree').toBeGreaterThan(0);
+
+    // Every non-call occurrence must be provably inert: string data, a denied projection
+    // entry, or a throwing disabled symbol — never a live handler body.
+    for (const hit of hits) {
+      const line = hit.line;
+      const inert =
+        /['"][A-Za-z_]*[Ss]andbox|['"]simulate|['"]mark_paid_out|['"]complete|['"]fail/.test(line) ||
+        /allowed:\s*false/.test(line) ||
+        /function\s+disabled|export\s+(?:async\s+)?function\s+\w*[Dd]isabled/.test(line) ||
+        /throw new Error/.test(line);
+      expect(inert, `${hit.loc} references a forbidden identifier outside a string/denial/disabled context: ${line.trim().slice(0, 90)}`).toBe(
+        true,
+      );
+    }
+
+    // No identifier may share a line with a network/mutation verb.
+    const mutationBearing = hits.filter(
+      (h) => h.line.includes('fetch(') || /\bawait\s+\w*(post|mutate|exec)\b/.test(h.line),
+    );
+    expect(mutationBearing.map((m) => m.loc)).toEqual([]);
   });
 });
 
@@ -542,21 +570,15 @@ describe("TEST-PLAT-01(d) — no server secrets in client bundle", () => {
 
 describe('TEST-PLAT-01(e) — explicit no-op financial assertions for reads', () => {
   it('validateBuildBaseline performs zero DB writes and zero money mutations (pure verification)', async () => {
+    const { validateBuildBaseline } = await loadValidator();
     const before = snapshotMutableState();
     const traced: string[] = [];
-    const receipt = await validateBuildBaseline(
-      workerContext(traced),
-      plat01InputFixture(),
-      {
-        readClientBundle: async () => ({ artifactId: 'sha256:' + 'a'.repeat(64), text: '' }),
-        recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
-        generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 1, openApiHash: 'd'.repeat(64) }),
-        nowIso: () => '2026-11-09T00:00:00.000Z',
-      },
-    );
+    const receipt = await validateBuildBaseline(workerContext(traced), plat01InputFixture(), goodDeps());
     const after = snapshotMutableState();
 
-    expect(receipt.ok, 'fixture input should satisfy the verifier; see earlier failures otherwise').toBe(true);
+    expect(receipt.ok, `verifier should accept a self-consistent evidence fixture; got ${JSON.stringify(receipt)}`).toBe(
+      true,
+    );
     expect(after).toEqual(before); // no file written, no DB touched, no balance changed
     expect(traced).toContain('build_baseline_validated');
     // A successful platform read returns proofs only — never a money figure.
@@ -568,7 +590,7 @@ describe('TEST-PLAT-01(e) — explicit no-op financial assertions for reads', ()
   });
 
   it('the worker exposes no customer HTTP mutation and its default deps refuse to manufacture evidence', async () => {
-    const worker = await import('../packages/platform/workers/validate-build-baseline.worker.ts');
+    const worker = await loadWorker();
     expect(worker.meta.httpMutable).toBe(false);
     expect(worker.meta.workerName).toBe('validate-build-baseline');
 
@@ -579,12 +601,11 @@ describe('TEST-PLAT-01(e) — explicit no-op financial assertions for reads', ()
     expect(traced).toContain('worker_evidence_unavailable');
   });
 
-  it('no DB driver or money-writing surface is reachable from the platform lane source', async () => {
-    const platformFiles = sourceFiles('packages/platform');
+  it('no DB driver or money-writing surface is reachable from the platform lane source', () => {
     const offenders: string[] = [];
-    for (const f of platformFiles) {
+    for (const f of sourceFiles('packages/platform')) {
       const rel = path.relative(ROOT, f).split(path.sep).join('/');
-      const text = fs.readFileSync(f, 'utf8');
+      const text = stripComments(fs.readFileSync(f, 'utf8'));
       if (/from ['"](pg|mysql2|better-sqlite3)['"]|createPool\(|new Pool\(/.test(text)) offenders.push(rel);
       if (/INSERT INTO|UPDATE\s+\w+\s+SET|DELETE FROM/.test(text)) offenders.push(`${rel} (SQL DML)`);
     }
@@ -592,45 +613,49 @@ describe('TEST-PLAT-01(e) — explicit no-op financial assertions for reads', ()
   });
 
   it('empty/unreviewed input fails closed rather than freezing a baseline', async () => {
-    const { validateBuildBaseline } = await import('../packages/platform/validate-build-baseline.ts');
-    const empty = { ...plat01InputFixture(), manifests: [] };
-    const receipt = await validateBuildBaseline(workerContext(), empty, {
-      readClientBundle: async () => ({ artifactId: 'x', text: '' }),
-      recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 0 }),
-      generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 0, openApiHash: 'd'.repeat(64) }),
-      nowIso: () => '2026-11-09T00:00:00.000Z',
-    });
+    const { validateBuildBaseline } = await loadValidator();
+    const receipt = await validateBuildBaseline(
+      workerContext(),
+      { ...plat01InputFixture(), manifests: [] },
+      { ...goodDeps(), recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 0 }) },
+    );
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) expect(receipt.error.code).toBe('invalid_request');
   });
 
   it('a range-pinned pin is reported as UNRESOLVED_VERSION (backlog additional error)', async () => {
-    const { validateBuildBaseline } = await import('../packages/platform/validate-build-baseline.ts');
+    const { validateBuildBaseline } = await loadValidator();
     const input = plat01InputFixture();
     const receipt = await validateBuildBaseline(
       workerContext(),
       { ...input, pins: [{ ...input.pins[0]!, exactVersion: '^18.3.0' }] },
-      {
-        readClientBundle: async () => ({ artifactId: 'x', text: '' }),
-        recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
-        generatedClientsEvidence: async () => ({ bundleDigest: 'c'.repeat(64), operationCount: 1, openApiHash: 'd'.repeat(64) }),
-        nowIso: () => '2026-11-09T00:00:00.000Z',
-      },
+      goodDeps(),
     );
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) {
       expect(receipt.error.code).toBe('UNRESOLVED_VERSION');
       expect(receipt.error.status).toBe(422);
+      expect(receipt.error.retryable).toBe(false);
     }
   });
 
+  it('a pin without sha512 integrity is also UNRESOLVED_VERSION, not a silent freeze', async () => {
+    const { validateBuildBaseline } = await loadValidator();
+    const input = plat01InputFixture();
+    const receipt = await validateBuildBaseline(
+      workerContext(),
+      { ...input, pins: [{ ...input.pins[0]!, integrity: '' }] },
+      goodDeps(),
+    );
+    expect(receipt.ok).toBe(false);
+    if (!receipt.ok) expect(receipt.error.code).toBe('UNRESOLVED_VERSION');
+  });
+
   it('generated contract clients are never fabricated: missing generator evidence fails closed', async () => {
-    const { validateBuildBaseline } = await import('../packages/platform/validate-build-baseline.ts');
+    const { validateBuildBaseline } = await loadValidator();
     const receipt = await validateBuildBaseline(workerContext(), plat01InputFixture(), {
-      readClientBundle: async () => ({ artifactId: 'sha256:' + 'a'.repeat(64), text: '' }),
-      recomputeLockDigest: async () => ({ lockDigest: 'b'.repeat(64), resolvedCount: 1 }),
+      ...goodDeps(),
       generatedClientsEvidence: async () => undefined, // T-CONTRACT-01 generator has not run
-      nowIso: () => '2026-11-09T00:00:00.000Z',
     });
     expect(receipt.ok).toBe(false);
     if (!receipt.ok) expect(receipt.error.code).toBe('CAPABILITY_UNAVAILABLE');
