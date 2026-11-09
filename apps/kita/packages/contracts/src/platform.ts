@@ -532,3 +532,32 @@ export interface Plat05VersionConflictDetail {
 }
 
 export type Plat05FailureDetail = Plat05VersionConflictDetail;
+
+/**
+ * Financial-health observation (T-PLAT-06). Health projection is not ledger
+ * authority. Until exporters exist, observeFinancialHealth fails closed and
+ * must not write audit_events, dispatch alerts, or include PII.
+ */
+export interface Plat06Input {
+  readonly worker: WorkerIdentity;
+  readonly windowStart: string;
+  readonly windowEnd: string;
+  readonly redactedTraceEventCount: number;
+  readonly journalPosting?: never;
+  readonly pii?: never;
+  readonly rawPayloads?: never;
+}
+
+export interface Plat06Output {
+  readonly alertsDeliveredToNamedOnCall: boolean;
+  readonly piiLeaked: false;
+  readonly sloBreaches: readonly string[];
+  readonly traceEvents: readonly string[];
+}
+
+export interface Plat06TelemetryExportFailureDetail {
+  readonly code: 'TELEMETRY_EXPORT_FAILURE';
+  readonly reason: string;
+}
+
+export type Plat06FailureDetail = Plat06TelemetryExportFailureDetail;
