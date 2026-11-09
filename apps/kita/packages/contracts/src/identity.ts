@@ -31,3 +31,16 @@ export interface Auth02Output {
   readonly customerId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Auth03Input {
+  readonly newDestinationWithoutFreshAssurance: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Auth03Output {
+  readonly financialActionAuthorized: true;
+  readonly stepUpBound: true;
+  readonly customerId: UUID;
+  readonly traceEvents: readonly string[];
+}
