@@ -28,3 +28,22 @@ export interface Rec01Output {
   readonly mask: string;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Wallet recipient (T-REC-02). Wrong network or expired validation blocks payout.
+ */
+export interface Rec02Input {
+  readonly recipientId: UUID;
+  readonly network: 'gcash' | 'maya' | string;
+  readonly wrongNetwork: boolean;
+  readonly validationExpired: boolean;
+  readonly walletIdentifier?: string;
+  readonly journalPosting?: never;
+  readonly payoutAuthorization?: never;
+}
+
+export interface Rec02Output {
+  readonly payoutAuthorized: true;
+  readonly versionId: UUID;
+  readonly traceEvents: readonly string[];
+}
