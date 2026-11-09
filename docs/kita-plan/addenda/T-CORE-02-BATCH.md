@@ -1,6 +1,8 @@
 BATCH-HOLD
-- Remaining T-CORE-01 evidence: run vitest on t-core-01-*.spec.ts; wire package exports.
-- T-CORE-02 not authorized.
-- T-LEDGER-02 not authorized.
-- R1 freeze still blocks refunds.
-- Production NOT APPROVED.
+
+- Do not start T-CORE-02.
+- Exports exist.
+- Vitest: 43 passed.
+- HOLD reason: executeCommand would touch money_operations.
+- Next allowed: T-IDENTITY-01 sessions/contacts schema only, with no KYC success.
+- Alternatively, keep HOLD only.
