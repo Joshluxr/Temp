@@ -1,23 +1,25 @@
 BATCH-OK
 
-Authorize only T-TX-09 `respondToRfi` as a PURE checker within this exact scope.
+Authorize only the exact T-TX-03 `listTransfers` pure checker described below.
 
-T-TX-08 landed: `wrongAccountOrCrossCaseAttachment === true` returns `unauthorized` / 403; otherwise 503. TEST-TX-08: 2 passed.
+T-TX-09 landed: `confidentialRiskInPublicProjection` returns `unauthorized` / 403; otherwise `dependency_unavailable` / 503. TEST-TX-09: 2 passed.
 
-Allowed files only:
-- `packages/domain/transfers/respond-to-rfi.ts`
-- `tests/features/test-tx-09.spec.ts`
-- `packages/contracts/src/transfers.ts` — additive Tx09 types only.
+Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-02, T-TX-05, T-TX-06, T-TX-07, T-TX-10.
+
+Allowed implementation files only:
+
+- `packages/domain/transfers/list-transfers.ts`
+- `tests/features/test-tx-03.spec.ts`
+- `packages/contracts/src/transfers.ts` — additive Tx03 types only.
 
 Required behavior:
-- Never return `ok: true`.
-- Never project confidential risk details publicly; confidential risk details must be absent from the public projection, including error responses.
-- When `confidentialRiskInPublicProjection === true`, return `unauthorized` / 403. This denial takes precedence over dependency unavailability.
-- Otherwise return `dependency_unavailable` / 503 because the case/RFI store is not implemented.
+
 - Reuse `Tx08CommandContext`.
+- `cursorExposesOtherCustomer === true` returns `unauthorized` / 403. This check takes precedence over the unavailable-store response. A stable cursor cannot expose another customer's records.
+- Otherwise return `dependency_unavailable` / 503 because the transfer history store is not implemented; T-TX-02 remains HOLD.
+- Never return `ok: true` or expose another customer's records. Do not fabricate transfer history.
 - Keep the checker pure: no DB access, no money operations, and no `executeCommand`.
-- Tests must cover the 403 denial, the 503 fallback, the absence of confidential risk details in public projection, and the absence of any `ok: true` outcome.
 
-Holds: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01 through T-TX-07.
+TEST-TX-03 must cover the strict-true 403 branch, the otherwise-503 branch, and the absence of successful or record-leaking responses.
 
-Only this exact checker is authorized.
+Route implementation through the Qoder Efficient swarm on GPU `gpu-fqaf`, then Sol max review on the VM. Changes outside this exact scope require HOLD.
