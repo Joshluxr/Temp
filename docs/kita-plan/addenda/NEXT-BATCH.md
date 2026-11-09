@@ -1,21 +1,24 @@
 BATCH-OK
 
-Authorize T-PUB-02 only: a pure estimateQuote checker reusing Pub01CommandContext.
-
-T-PUB-01 landed: unapprovedLicenseOrPartnerClaim => POLICY_UNAVAILABLE 409; otherwise 503. TEST-PUB-01: 2 passed.
+Authorize T-PUB-03 only: implement the listCapabilities PURE checker through the established GPU Qoder coding workflow. Reuse Pub01CommandContext.
 
 Allowed files only:
-- packages/domain/catalog/estimate-quote.ts
-- tests/features/test-pub-02.spec.ts
-- packages/contracts/src/catalog.ts — additive Pub02 types only
+- packages/domain/catalog/list-capabilities.ts
+- tests/features/test-pub-03.spec.ts
+- packages/contracts/src/catalog.ts — additive Pub03 types only
 
 Required behavior:
-- Never return ok:true. Never yield an executable transfer or quoteId.
-- staleIndicativeFeed === true => RATE_STALE 409. Label the stale feed as an estimate; it cannot yield an executable transfer.
-- Otherwise return 503 dependency_unavailable because the indicative snapshot store is not implemented. T-QUOTE-01 remains HOLD.
-- No DB access, money movement, or executeCommand. Keep the checker pure and reuse Pub01CommandContext.
-- TEST-PUB-02 must cover both branches and assert that neither returns ok:true, an executable transfer, or a quoteId.
+- Never return ok:true.
+- disabledUsStateOrOrigin === true => CAPABILITY_UNAVAILABLE, HTTP 403. Disabled US states or origins cannot accept money.
+- Otherwise => dependency_unavailable, HTTP 503, because the capabilities catalog store is not implemented.
+- No DB access, money handling, executeCommand, or country-wide default allow.
 
-HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04.
+TEST-PUB-03 must cover the disabled-state/origin 403 rejection and the otherwise 503 dependency_unavailable response, with no ok:true outcome.
 
-No other work is authorized by this batch. If this exact scope cannot be maintained, HOLD.
+Landed:
+- T-PUB-02: staleIndicativeFeed => RATE_STALE, HTTP 409; otherwise HTTP 503 with no quoteId.
+- TEST-PUB-02: 2 passed.
+
+Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04.
+
+Authorization is limited to this exact checker and these three files. HOLD if implementation requires broader scope.

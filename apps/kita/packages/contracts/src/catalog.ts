@@ -31,3 +31,15 @@ export interface Pub02Output {
   readonly quoteId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pub03Input {
+  readonly disabledUsStateOrOrigin: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pub03Output {
+  readonly moneyAccepted: true;
+  readonly countryWideDefaultAllow: true;
+  readonly traceEvents: readonly string[];
+}
