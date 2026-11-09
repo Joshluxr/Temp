@@ -593,3 +593,39 @@ export interface Plat07CapabilityUnavailableDetail {
 }
 
 export type Plat07FailureDetail = Plat07CapabilityUnavailableDetail;
+
+/**
+ * Release gates (T-PLAT-10). Evaluate manifests only. Never ok:true, never
+ * claims no financial break. DEP-15 live gates are not implemented.
+ */
+export type Plat10EvidenceState = 'missing' | 'failing' | 'present';
+
+export interface Plat10EvidenceManifest {
+  readonly security: Plat10EvidenceState;
+  readonly load: Plat10EvidenceState;
+  readonly accessibility: Plat10EvidenceState;
+  readonly financial: Plat10EvidenceState;
+}
+
+export interface Plat10Input {
+  readonly worker: WorkerIdentity;
+  readonly artifactDigest: string;
+  readonly evidence: Plat10EvidenceManifest;
+  readonly journalPosting?: never;
+  readonly liveGateExecution?: never;
+}
+
+export interface Plat10Output {
+  readonly noCriticalGap: true;
+  readonly noUnexplainedFinancialBreak: true;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Plat10BlockingEvidenceDetail {
+  readonly code: 'SECURITY_FAILURE' | 'invalid_request';
+  readonly axis: keyof Plat10EvidenceManifest;
+  readonly state: Plat10EvidenceState;
+  readonly reason: string;
+}
+
+export type Plat10FailureDetail = Plat10BlockingEvidenceDetail;
