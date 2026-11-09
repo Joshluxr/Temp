@@ -3,7 +3,8 @@
  * STRIPPED (Sol CONDITIONAL-PASS: presentation batch must not touch auth/session):
  *  - useAuth() hook (which itself wraps trpc session queries) — removed entirely
  *  - loading / unauthenticated redirects and admin-role gate — removed
- *  - logout button — removed; replaced by optional onSignOut callback prop
+ *  - logout handler invocation — replaced by optional onSignOut callback prop
+ *    (button renders only when the host app supplies a handler)
  *  - react-router NavLink/Link — replaced with plain anchors + isActive prop
  * Nav items, user badge and sandbox note are now static props. NO backend calls.
  */
@@ -60,7 +61,7 @@ export function AppShell({
   activeHref?: string;
   /** Static display-only identity. The port performs NO authentication or session checks. */
   user?: AppShellUser;
-  /** Optional host-provided sign-out handler; the shell itself calls nothing. */
+  /** Optional host-provided sign-out handler; when set, the sign-out button renders. The shell itself calls nothing else. */
   onSignOut?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
