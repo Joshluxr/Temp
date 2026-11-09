@@ -1,22 +1,28 @@
 BATCH-OK
 
-Authorize only T-ADM-02: queryOpsQueue as a PURE checker.
+Authorize T-ADM-04 only: implement decideCase as a PURE checker within the exact scope below.
 
-Files permitted for this batch:
-- packages/domain/admin/query-ops-queue.ts
-- tests/features/test-adm-02.spec.ts
-- packages/contracts/src/admin.ts — additive Adm02 types only.
+Landed:
+- T-ADM-02: unauthorized => 403; otherwise => 503, with no invented rows.
+- TEST-ADM-02: 2 passed.
 
-Required behavior:
-- No DB access, money operations, or executeCommand.
-- Never return ok: true and never attach mutation rights to a projection.
-- staffAuthorized === false => unauthorized, HTTP 403.
-- Otherwise => dependency_unavailable, HTTP 503, because the live ops queue/T-TX-02 is not implemented.
-- Do not invent transfer rows.
+HOLD:
+- T-ADM-03: would mutate transfers.
+- T-ADM-06: refunds.
+- T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01, T-REWARD-01.
 
-Landed: T-ADM-01 returns 403 for customer/unrelated; otherwise 503. TEST-ADM-01: 4 passed.
+T-ADM-04 permitted files only:
+- packages/domain/admin/decide-case.ts
+- tests/features/test-adm-04.spec.ts
+- packages/contracts/src/admin.ts — additive Adm04 types only.
 
-HOLD: T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01, T-REWARD-01.
-T-ADM-03: HOLD if it would mutate transfers/money.
+Constraints:
+- PURE checker only. No DB access, money operations, executeCommand, or sanctions override.
+- Never return ok: true. Never override a blocked-property restriction.
 
-Only the exact checker above is authorized. Any work outside this scope is HOLD.
+Required behavior, in precedence order:
+1. unqualifiedRole === true => unauthorized, HTTP 403, retryable: false. An unqualified role cannot override a blocked-property restriction, including when both flags are true.
+2. Otherwise, overrideBlockedProperty === true => APPROVAL_REQUIRED, HTTP 409, retryable: false. Deny the override; no sanctions override is authorized.
+3. Otherwise => dependency_unavailable, HTTP 503, because the case decision store is not implemented. No invented decision rows.
+
+Verification: tests/features/test-adm-04.spec.ts must cover each branch, both flags true, and the invariant that no result has ok: true. All listed HOLD items remain on HOLD.

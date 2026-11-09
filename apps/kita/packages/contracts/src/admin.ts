@@ -38,3 +38,20 @@ export interface Adm02Output {
   readonly mutationRights: true;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Manual case decision (T-ADM-04). Unqualified roles cannot override blocked-property.
+ */
+export interface Adm04Input {
+  readonly unqualifiedRole: boolean;
+  readonly overrideBlockedProperty: boolean;
+  readonly caseId?: UUID;
+  readonly journalPosting?: never;
+  readonly sanctionsOverride?: never;
+}
+
+export interface Adm04Output {
+  readonly decisionRecorded: true;
+  readonly blockedPropertyOverridden: true;
+  readonly traceEvents: readonly string[];
+}
