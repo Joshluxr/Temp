@@ -81,3 +81,30 @@ export interface Kyc02AdverseHoldDetail {
 }
 
 export type Kyc02FailureDetail = Kyc02AdverseHoldDetail;
+
+/**
+ * Document quarantine (T-KYC-03). Infected uploads never reach an analyst viewer.
+ */
+export interface Kyc03Input {
+  readonly worker: WorkerIdentity;
+  readonly documentId: UUID;
+  readonly infectedOrMalicious: boolean;
+  readonly checksum?: string;
+  readonly mimeType?: string;
+  readonly journalPosting?: never;
+  readonly analystAccessUrl?: never;
+}
+
+export interface Kyc03Output {
+  readonly analystViewerGranted: true;
+  readonly accessUrl: string;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Kyc03InfectedRejectedDetail {
+  readonly code: 'SECURITY_FAILURE' | 'invalid_request';
+  readonly documentId: UUID;
+  readonly reason: string;
+}
+
+export type Kyc03FailureDetail = Kyc03InfectedRejectedDetail;
