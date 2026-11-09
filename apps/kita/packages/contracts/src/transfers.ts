@@ -18,3 +18,15 @@ export interface Tx08Output {
   readonly messageId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Tx09Input {
+  readonly confidentialRiskInPublicProjection: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx09Output {
+  readonly confidentialRiskProjected: true;
+  readonly rfiId: UUID;
+  readonly traceEvents: readonly string[];
+}
