@@ -54,3 +54,16 @@ export interface Tx04Output {
   readonly receiptId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Tx07Input {
+  readonly supportHandoffResetsStatutoryClock: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx07Output {
+  readonly statutoryClockReset: true;
+  readonly refundGranted: true;
+  readonly claimId: UUID;
+  readonly traceEvents: readonly string[];
+}
