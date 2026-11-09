@@ -18,3 +18,16 @@ export interface Pub01Output {
   readonly contentId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pub02Input {
+  readonly staleIndicativeFeed: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+  readonly executableQuoteId?: never;
+}
+
+export interface Pub02Output {
+  readonly executableTransfer: true;
+  readonly quoteId: UUID;
+  readonly traceEvents: readonly string[];
+}
