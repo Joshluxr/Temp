@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Pool, type PoolClient } from "pg";
-import { MIGRATIONS_DIR, migrate, MigrationError } from "../src/migrate.js";
+import { MIGRATIONS_DIR, migrate } from "../src/migrate.js";
 
 /**
  * TEST-PLAT-02 harness ONLY — never production code. Boots an isolated PostgreSQL 18
@@ -49,5 +49,3 @@ export async function withFreshInstall(fn: (client: PoolClient) => Promise<void>
     await admin.end();
   }
 }
-
-export { MigrationError };

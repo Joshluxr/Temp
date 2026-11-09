@@ -1,0 +1,37 @@
+{
+  "name": "@kita/database",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita PostgreSQL core schema isolation lane (T-PLAT-02): numbered migrations, checksummed migrate runner, no-money-import invariant. Schema/DDL only — sandbox balances never become live cash; no posting/refund implementation.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./migrate": {
+      "types": "./src/migrate.ts",
+      "default": "./src/migrate.ts"
+    }
+  },
+  "files": [
+    "src",
+    "migrations"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:pg": "KITA_PG_TEST=1 vitest run"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.0.3",
+    "@types/pg": "8.15.5",
+    "typescript": "5.6.3",
+    "vitest": "3.2.4"
+  }
+}

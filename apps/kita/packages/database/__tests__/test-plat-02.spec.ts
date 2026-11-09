@@ -7,13 +7,7 @@ import {
   migrate,
   MigrationError,
 } from "../src/index.js";
-import {
-  adminPool,
-  ownerPool,
-  resetTestDatabase,
-  templateSql,
-  withFreshInstall,
-} from "./helpers/pg-test.js";
+import { adminPool, ownerPool, resetTestDatabase, templateSql } from "./helpers/pg-test.js";
 
 /**
  * TEST-PLAT-02 (KITA-PLAT-02) — Fresh install works and sandbox balances never become
@@ -96,10 +90,12 @@ describe.skipIf(SKIP)("TEST-PLAT-02 — PostgreSQL core migration (T-PLAT-02)", 
     }
     // PUBLIC holds nothing at all inside the schema.
     const { rows } = await client.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM information_schema.role_table_grants g
-        JOIN pg_namespace ns ON ns.nspname='kita'
-        JOIN pg_class c ON c.relname=g.table_name AND c.relnamespace=ns.oid
-        WHERE g.grantee='public'`,
+      `SELECT count(*)::text AS n FROM (
+         SELECT (aclexplode(datacl)).grantee AS grantee
+           FROM pg_class c
+           JOIN pg_namespace ns ON ns.oid=c.relnamespace
+          WHERE ns.nspname='kita' AND c.relkind IN ('r','p','v','m','f')
+       ) x WHERE x.grantee='public'::regrole`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
   });
@@ -137,11 +133,9 @@ describe("TEST-PLAT-02 invariant — no money rows imported (static guard, no DB
   });
 
   it("source DDL carries no fabricated-outcome helpers (addSandboxFunds/simulatePartnerCompletion/admin complete-fail)", () => {
-    for (forbidden of []) void 0;
     const forbiddenTerms = ["addSandboxFunds", "simulatePartnerCompletion", "sandbox_balance_import", "fake_kyc"];
     for (const term of forbiddenTerms) {
       expect(coreSql.toLowerCase()).not.toContain(term.toLowerCase());
     }
   });
-  const forbidden: never[] = [];
 });
