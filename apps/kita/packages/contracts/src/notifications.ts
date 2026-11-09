@@ -19,3 +19,16 @@ export interface Grow07Output {
   readonly notificationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Grow08Input {
+  readonly marketingCampaignDespiteOptOut: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Grow08Output {
+  readonly marketingCampaignSent: true;
+  readonly lawfulServiceNoticeSuppressed: true;
+  readonly notificationId: UUID;
+  readonly traceEvents: readonly string[];
+}
