@@ -64,3 +64,22 @@ export interface Rec03Output {
   readonly newVersion: number;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Repeat send (T-REC-04). Must obtain a new quote; never replay old payment.
+ */
+export interface Rec04Input {
+  readonly historicalTransferId: UUID;
+  readonly recipientId: UUID;
+  readonly reuseOldPayment: boolean;
+  readonly journalPosting?: never;
+  readonly replayCommandId?: never;
+  readonly replayQuoteId?: never;
+  readonly replayProviderRef?: never;
+}
+
+export interface Rec04Output {
+  readonly payableDraftCreated: true;
+  readonly reusedOldPayment: true;
+  readonly traceEvents: readonly string[];
+}
