@@ -122,3 +122,19 @@ export interface Adm10Output {
   readonly queuedExecutionAllowed: true;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Tamper-evident audit (T-ADM-11). Never claim verified anchors without WORM archive.
+ */
+export interface Adm11Input {
+  readonly archiveUnavailable: boolean;
+  readonly chainMismatch: boolean;
+  readonly journalPosting?: never;
+  readonly verifiedAnchorClaim?: never;
+}
+
+export interface Adm11Output {
+  readonly anchorsVerified: true;
+  readonly independentArchiveOk: true;
+  readonly traceEvents: readonly string[];
+}
