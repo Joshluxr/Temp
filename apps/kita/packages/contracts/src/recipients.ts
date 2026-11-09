@@ -47,3 +47,20 @@ export interface Rec02Output {
   readonly versionId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Archive / immutable version (T-REC-03). Old transfer snapshots must survive edits.
+ */
+export interface Rec03Input {
+  readonly recipientId: UUID;
+  readonly expectedVersion: number;
+  readonly expectedVersionMismatch: boolean;
+  readonly journalPosting?: never;
+  readonly mutateHistoricalSnapshot?: never;
+}
+
+export interface Rec03Output {
+  readonly archived: true;
+  readonly newVersion: number;
+  readonly traceEvents: readonly string[];
+}
