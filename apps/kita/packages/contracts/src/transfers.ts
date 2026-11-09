@@ -30,3 +30,15 @@ export interface Tx09Output {
   readonly rfiId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Tx03Input {
+  readonly cursorExposesOtherCustomer: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx03Output {
+  readonly otherCustomerRecordsExposed: true;
+  readonly transferIds: readonly UUID[];
+  readonly traceEvents: readonly string[];
+}
