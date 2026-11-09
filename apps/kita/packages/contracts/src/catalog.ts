@@ -65,3 +65,14 @@ export interface Pub05Output {
   readonly issuedReceiptLocaleRewritten: true;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pub06Input {
+  readonly inaccessibleContrastOrKeyboardContract: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pub06Output {
+  readonly inaccessibleTokensShipped: true;
+  readonly traceEvents: readonly string[];
+}
