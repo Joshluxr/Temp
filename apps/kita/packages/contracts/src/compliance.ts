@@ -160,3 +160,32 @@ export interface Kyc06LimitExceededDetail {
 }
 
 export type Kyc06FailureDetail = Kyc06LimitExceededDetail;
+
+/**
+ * AML filing (T-KYC-07). Support cannot read filings or confidential rationale.
+ */
+export type Kyc07ActorRole = 'support' | 'compliance';
+
+export interface Kyc07Input {
+  readonly worker: WorkerIdentity;
+  readonly caseId: UUID;
+  readonly actorRole: Kyc07ActorRole;
+  readonly filingBody?: string;
+  readonly confidentialRationale?: string;
+  readonly journalPosting?: never;
+}
+
+export interface Kyc07Output {
+  readonly filingVisibleToSupport: true;
+  readonly filingBody: string;
+  readonly confidentialRationale: string;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Kyc07UnauthorizedDetail {
+  readonly code: 'unauthorized';
+  readonly caseId: UUID;
+  readonly reason: string;
+}
+
+export type Kyc07FailureDetail = Kyc07UnauthorizedDetail;
