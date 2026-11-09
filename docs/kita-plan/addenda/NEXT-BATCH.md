@@ -1,28 +1,20 @@
 BATCH-OK
 
-Authorize T-ADM-04 only: implement decideCase as a PURE checker within the exact scope below.
+Authorize only T-ADM-05: a pure decideApproval checker.
 
-Landed:
-- T-ADM-02: unauthorized => 403; otherwise => 503, with no invented rows.
-- TEST-ADM-02: 2 passed.
+Files only:
+- packages/domain/admin/decide-approval.ts
+- tests/features/test-adm-05.spec.ts
+- packages/contracts/src/admin.ts — additive Adm05 types only
 
-HOLD:
-- T-ADM-03: would mutate transfers.
-- T-ADM-06: refunds.
-- T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01, T-REWARD-01.
+Required behavior:
+- Never return ok:true and never grant command authority.
+- samePersonSecondLogin === true: return unauthorized or APPROVAL_STALE, HTTP 409 or 403, retryable:false. A second login of the same person cannot approve.
+- Otherwise return HTTP 503 dependency_unavailable because the approvals store is not implemented.
+- No DB, no money operations, no executeCommand.
 
-T-ADM-04 permitted files only:
-- packages/domain/admin/decide-case.ts
-- tests/features/test-adm-04.spec.ts
-- packages/contracts/src/admin.ts — additive Adm04 types only.
+Tests must verify these fail-closed outcomes. No other files or work are authorized.
 
-Constraints:
-- PURE checker only. No DB access, money operations, executeCommand, or sanctions override.
-- Never return ok: true. Never override a blocked-property restriction.
+Landed: T-ADM-04 — unqualified 403; overrideBlockedProperty APPROVAL_REQUIRED 409; otherwise 503. TEST-ADM-04: 3 passed.
 
-Required behavior, in precedence order:
-1. unqualifiedRole === true => unauthorized, HTTP 403, retryable: false. An unqualified role cannot override a blocked-property restriction, including when both flags are true.
-2. Otherwise, overrideBlockedProperty === true => APPROVAL_REQUIRED, HTTP 409, retryable: false. Deny the override; no sanctions override is authorized.
-3. Otherwise => dependency_unavailable, HTTP 503, because the case decision store is not implemented. No invented decision rows.
-
-Verification: tests/features/test-adm-04.spec.ts must cover each branch, both flags true, and the invariant that no result has ok: true. All listed HOLD items remain on HOLD.
+HOLD: T-ADM-03, T-ADM-06, T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01, T-REWARD-01.
