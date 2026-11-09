@@ -108,3 +108,29 @@ export interface Kyc03InfectedRejectedDetail {
 }
 
 export type Kyc03FailureDetail = Kyc03InfectedRejectedDetail;
+
+/**
+ * List-delta rescreen (T-KYC-05). A new list hit stops queued payout before dispatch.
+ */
+export interface Kyc05Input {
+  readonly worker: WorkerIdentity;
+  readonly subjectId: UUID;
+  readonly newListHit: boolean;
+  readonly listDeltaCursor?: string;
+  readonly journalPosting?: never;
+  readonly payoutDispatch?: never;
+}
+
+export interface Kyc05Output {
+  readonly dispatched: true;
+  readonly holdId: UUID;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Kyc05ListHitHoldDetail {
+  readonly code: 'COMPLIANCE_HOLD';
+  readonly subjectId: UUID;
+  readonly reason: string;
+}
+
+export type Kyc05FailureDetail = Kyc05ListHitHoldDetail;
