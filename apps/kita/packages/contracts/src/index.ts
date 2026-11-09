@@ -9,3 +9,4 @@ export * from './auth.ts';
 export * from './generated.ts';
 export * from './commands.ts';
 export * from './freeze-contracts.ts';
+export * from './events.ts';
