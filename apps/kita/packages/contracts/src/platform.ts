@@ -561,3 +561,35 @@ export interface Plat06TelemetryExportFailureDetail {
 }
 
 export type Plat06FailureDetail = Plat06TelemetryExportFailureDetail;
+
+/**
+ * Environment isolation checker (T-PLAT-07). Pure fail-closed: never claims
+ * an isolated deployment. Production + sandbox/fixture/addSandboxFunds is
+ * CAPABILITY_UNAVAILABLE. All other paths are dependency_unavailable until
+ * live IaC/KMS isolation exists. No Terraform, cloud, DB, or money effects.
+ */
+export type Plat07ClaimedEnvironment = 'production' | 'sandbox';
+
+export interface Plat07Input {
+  readonly worker: WorkerIdentity;
+  readonly claimedEnvironment: Plat07ClaimedEnvironment;
+  readonly sandboxCapabilityPresent: boolean;
+  readonly fixtureAdapterPresent: boolean;
+  readonly addSandboxFundsPresent: boolean;
+  readonly journalPosting?: never;
+  readonly terraformApply?: never;
+}
+
+export interface Plat07Output {
+  readonly isolatedDeployment: true;
+  readonly runtimeFailClosed: true;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Plat07CapabilityUnavailableDetail {
+  readonly code: 'CAPABILITY_UNAVAILABLE';
+  readonly claimedEnvironment: Plat07ClaimedEnvironment;
+  readonly reason: string;
+}
+
+export type Plat07FailureDetail = Plat07CapabilityUnavailableDetail;
