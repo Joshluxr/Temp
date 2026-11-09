@@ -13,6 +13,10 @@
  *   envelope; Plat03Output = atomic consume/apply and recoverable publication
  *   (objective: crash at every commit/send/ack boundary preserves one economic
  *   effect).
+ * - Plat04Input  = inbound provider webhook identity, signature material and
+ *   raw body digest; Plat04Output = authenticated inbox accept with quarantine
+ *   of same-ID changed bodies. Until T-CORE-02 exists, receiveWebhook is
+ *   unavailable and must not write inbox rows.
  *
  * These describe money-adjacent metadata only. Nothing here executes a money
  * effect; addSandboxFunds is banned and never appears in any Kita code path.
@@ -448,3 +452,43 @@ export interface Plat03IdempotencyMismatchDetail {
 
 /** Plat03 typed-error union; carried inside Problem.detail-boundary results per §F2. */
 export type Plat03FailureDetail = Plat03IdempotencyMismatchDetail;
+
+/**
+ * Provider webhook ingress (T-PLAT-04 / receiveWebhook).
+ * Signature bytes and raw body stay locator/digest-only; never persist raw
+ * payloads here. journalPosting is structurally banned.
+ */
+export interface Plat04Input {
+  readonly worker: WorkerIdentity;
+  readonly provider: string;
+  readonly accountId: UUID;
+  readonly deliveryId: string;
+  readonly payloadDigest: string;
+  readonly signatureLocator: string;
+  readonly receivedAt: string;
+  readonly journalPosting?: never;
+  readonly inboxWrite?: never;
+}
+
+/** Proof that an authenticated delivery was recorded without mutating journals. */
+export interface Plat04AcceptProof {
+  readonly provider: string;
+  readonly accountId: UUID;
+  readonly deliveryId: string;
+  readonly inboxState: InboxDeliveryState;
+  readonly sameIdChangedBodyQuarantined: boolean;
+}
+
+export interface Plat04Output {
+  readonly accept: Plat04AcceptProof;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Plat04SignatureRejectedDetail {
+  readonly code: 'SIGNATURE_REJECTED';
+  readonly provider: string;
+  readonly accountId: UUID;
+  readonly reason: string;
+}
+
+export type Plat04FailureDetail = Plat03IdempotencyMismatchDetail | Plat04SignatureRejectedDetail;
