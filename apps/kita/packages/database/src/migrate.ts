@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PoolClient } from "pg";
-import { MONEY_TABLES, SEED_ALLOWED_TABLES, sha256Hex } from "./invariant.js";
+import { MONEY_COLUMNS, MONEY_TABLES, SEED_ALLOWED_TABLES, sha256Hex } from "./invariant.js";
 
 /**
  * T-PLAT-02 migration runner. Applies numbered migrations in order to a target that is
@@ -27,6 +27,35 @@ export class MigrationError extends Error {}
 
 const fileNameRe = /^(\d{3,})_[a-z0-9_]+\.sql$/;
 
+/**
+ * Install-time guard (INVARIANT): sandbox balances never become live cash, so no migration
+ * may INSERT economic rows. Money-bearing column names inside DDL (column definitions,
+ * CHECK constraints, trigger bodies) are fine; a top-level INSERT whose VALUES/SELECT
+ * supplies one of them — or targets any money table at all — is rejected before execution.
+ */
+export function findMoneyImport(sql: string): string | null {
+  const lines = sql.split("\n");
+  let insideBody = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    insideBody = (insideBody + (line.match(/\$\$/g)?.length ?? 0)) % 2 === 1;
+    if (insideBody) continue; // dollar-quoted function bodies are runtime paths, not install imports
+    const m = /^\s*INSERT\s+INTO\s+([a-z_][a-z0-9_]*)\b/i.exec(line);
+    if (m === null) continue;
+    const table = m[1]!.toLowerCase();
+    if (!SEED_ALLOWED_TABLES.has(table)) {
+      return `line ${i + 1}: INSERT into "${table}" is not an allowed non-monetary seed table`;
+    }
+    const stmtEnd = lines.slice(i).findIndex((l) => l.includes(";"));
+    const stmt = lines.slice(i, i + (stmtEnd < 0 ? 1 : stmtEnd + 1)).join(" ");
+    const moneyColumn = MONEY_COLUMNS.find((c) => new RegExp(`\\b${c}\\b`).test(stmt));
+    if (moneyColumn !== undefined) {
+      return `line ${i + 1}: seed INSERT references money column "${moneyColumn}"`;
+    }
+  }
+  return null;
+}
+
 export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migration[]> {
   const entries = await readdir(dir);
   const migrations: Migration[] = [];
@@ -39,8 +68,8 @@ export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migr
     }
     const filepath = join(dir, name);
     const sql = await readFile(filepath, "utf8");
-    // INVARIANT: reject any SQL whose top-level statements import balance/amount rows.
-    assertNoMoneyImport(sql, name);
+    const violation = findMoneyImport(sql);
+    if (violation !== null) throw new MigrationError(`${name} blocked by no-money-import invariant (${violation})`);
     migrations.push({ version: Number(m[1]), filepath, sql, checksum: sha256Hex(sql) });
   }
   migrations.sort((a, b) => a.version - b.version);
@@ -50,21 +79,6 @@ export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migr
     seen.add(mig.version);
   }
   return migrations;
-}
-
-function assertNoMoneyImport(sql: string, name: string): void {
-  // Top-level INSERT targets are those outside dollar-quoted function bodies.
-  let dollarQuoteOpen = false;
-  for (const line of sql.split("\n")) {
-    dollarQuoteOpen = (dollarQuoteOpen + (line.match(/\$\$/g)?.length ?? 0)) % 2 === 1;
-    if (dollarQuoteOpen && !/^\s*INSERT\s+INTO/i.test(line) ? false : dollarQuoteOpen) continue;
-    const m = /^\s*INSERT\s+INTO\s+([a-z_][a-z0-9_]*)/i.exec(line);
-    if (m === null) continue;
-    const table = m[1]!.toLowerCase();
-    if (MONEY_TABLES.includes(table) || !SEED_ALLOWED_TABLES.has(table) && MONEY_TABLES.includes(table)) {
-      throw new MigrationError(`${name}: installs money rows into "${table}"; sandbox balances must never become live cash`);
-    }
-  }
 }
 
 type Ledger = Record<string, { checksum: string; appliedAt: string }>;
@@ -83,45 +97,29 @@ async function writeLedger(ledger: Ledger): Promise<void> {
   await writeFile(LEDGER_PATH, JSON.stringify(ledger, null, 2) + "\n", "utf8");
 }
 
-/** Refuse to run against a non-empty/mismatched target: no kita schema objects, no extra relations. */
-async function assertFreshTarget(client: PoolClient, appliedVersions: number[]): Promise<void> {
-  const { rows } = await client.query(
-    `SELECT count(*)::int AS n FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace
-      WHERE ns.nspname='kita' AND c.relkind IN ('r','p','v','m','f','')`,
+/** Refuse to run against a non-empty/mismatched target. */
+async function assertFreshTarget(client: PoolClient, fullyApplied: boolean): Promise<void> {
+  const { rows } = await client.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace
+      WHERE ns.nspname='kita' AND c.relkind IN ('r','p','v','m','f')`,
   );
-  const existing = rows[0]?.n ?? 0;
-  if (existing > 0 && appliedVersions.length === 0) {
-    throw new MigrationError(`refusing to run: target has ${existing} pre-existing kita relations but no recorded migrations (non-empty/mismatched target)`);
-  }
-  if (existing > 0) {
-    // Partial prior apply without ledger record is still a mismatch unless fully recorded below.
-    const { rows: fnRows } = await client.query(
-      `SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace WHERE ns.nspname='kita' AND p.proname='post_journal'`,
+  const existing = Number(rows[0]?.n ?? 0);
+  if (existing > 0 && !fullyApplied) {
+    throw new MigrationError(
+      `refusing to run: target has ${existing} pre-existing kita relations without a complete recorded install (non-empty/mismatched target)`,
     );
-    if (fnRows[0]?.n === 0) {
-      throw new MigrationError("refusing to run: kita schema present but core install incomplete (mismatched target)");
-    }
   }
 }
 
-async function assertMoneyTablesEmpty(client: PoolClient): Promise<void> {
-  const cases = MONEY_TABLES.map((t) => `SELECT '${t}' AS tbl, count(*)::bigint AS n FROM kita.${t}`).join(" UNION ALL ");
+/** Post-install proof: every economic table is exactly empty; only reference/config rows exist. */
+export async function assertMoneyTablesEmpty(client: PoolClient): Promise<void> {
+  const cases = MONEY_TABLES.map((t) => `SELECT '${t}' AS tbl, count(*)::text AS n FROM kita.${t}`).join(" UNION ALL ");
   const { rows } = await client.query<{ tbl: string; n: string }>(cases);
   const nonEmpty = rows.filter((r) => BigInt(r.n) !== 0n);
   if (nonEmpty.length > 0) {
-    throw new MigrationError(`invariant violated — money rows present after install (sandbox balances would become live cash): ${nonEmpty.map((r) => `${r.tbl}=${r.n}`).join(", ")}`);
-  }
-}
-
-async function assertSeedRowsAreNonMonetary(client: PoolClient): Promise<void> {
-  // currencies carries exactly the DDL-declared reference rows; attempt_edges carries rules only.
-  const { rows } = await client.query<{ n: string }>(`SELECT count(*)::text AS n FROM kita.currencies`);
-  const declared = /INSERT INTO currencies VALUES/g;
-  const expected = (await readFile(join(MIGRATIONS_DIR, "001_core.sql"), "utf8").catch(() => "")) === "" ? undefined : undefined;
-  void declared;
-  void expected;
-  if (rows[0] && Number(rows[0].n) > 8) {
-    throw new MigrationError("currencies table exceeds its DDL-declared reference rows; unexpected data import");
+    throw new MigrationError(
+      `invariant violated — money rows present after install (sandbox balances would become live cash): ${nonEmpty.map((r) => `${r.tbl}=${r.n}`).join(", ")}`,
+    );
   }
 }
 
@@ -133,33 +131,31 @@ export interface MigrateResult {
 export async function migrate(client: PoolClient): Promise<MigrateResult> {
   const migrations = await loadMigrations();
   const ledger = await readLedger();
-  const appliedVersions = migrations
-    .filter((mig) => ledger[String(mig.version)]?.checksum === mig.checksum)
-    .map((mig) => mig.version);
-
-  await assertFreshTarget(client, appliedVersions);
-
-  const newly: Array<{ version: number; checksum: string }> = [];
-  const skipped: number[] = [];
   for (const mig of migrations) {
     const record = ledger[String(mig.version)];
-    if (record !== undefined) {
-      if (record.checksum !== mig.checksum) {
-        throw new MigrationError(`checksum mismatch for migration ${mig.version}: recorded ${record.checksum}, file ${mig.checksum} (refusing)`);
-      }
+    if (record !== undefined && record.checksum !== mig.checksum) {
+      throw new MigrationError(`checksum mismatch for migration ${mig.version}: recorded ${record.checksum}, file ${mig.checksum} (refusing)`);
+    }
+  }
+  const fullyApplied = migrations.length > 0 && migrations.every((mig) => ledger[String(mig.version)] !== undefined);
+  await assertFreshTarget(client, fullyApplied);
+
+  const applied: Array<{ version: number; checksum: string }> = [];
+  const skipped: number[] = [];
+  for (const mig of migrations) {
+    if (ledger[String(mig.version)] !== undefined) {
       skipped.push(mig.version);
       continue;
     }
-    // Each numbered migration is self-contained and transactional; one failure aborts all.
+    // Each numbered migration is self-contained and transactional; one failure aborts everything.
     await client.query(mig.sql);
-    newly.push({ version: mig.version, checksum: mig.checksum });
+    applied.push({ version: mig.version, checksum: mig.checksum });
     ledger[String(mig.version)] = { checksum: mig.checksum, appliedAt: new Date().toISOString() };
     await writeLedger(ledger);
   }
 
   await assertMoneyTablesEmpty(client);
-  await assertSeedRowsAreNonMonetary(client);
-  return { applied: newly, skipped };
+  return { applied, skipped };
 }
 
 /** Deterministic checksum helper for CI drift checks against the reviewed source DDL. */

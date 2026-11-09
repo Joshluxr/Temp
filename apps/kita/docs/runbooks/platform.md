@@ -80,8 +80,9 @@ Enforcement rules:
   must make direct ledger DML impossible *before* relying on triggers. Negative tests required
   (TEST-PLAT-02 / REQ-SC class: attempt direct write as `kita_api` → expect `42501`).
 * No superuser in application env; secrets via runtime injection, never baked images or CI logs.
-* Grant script ownership: lane coder-23 (`sql-isolate`) under `database/` — currently empty dirs;
-  role DDL is **pending**, this table is the contract they must satisfy.
+* Grant DDL: `sql/roles.sql` (filed by coder-25; groups + `kita_migration` / `kita_api` /
+  `kita_worker`, isolated test DB only). Enforcement tests against actual roles belong to
+  TEST-PLAT-02 (coder-23/24) — still **pending**.
 
 ## 4. Related
 

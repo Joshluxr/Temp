@@ -7,6 +7,10 @@
 
 BEGIN;
 
+-- 001_core.sql creates schema kita; roles.sql is idempotent either way. Owner must be the
+-- migration group so grants below survive a fresh cluster (CREATE SCHEMA IF NOT EXISTS keeps
+-- the existing owner when the schema already exists).
+
 -- Cluster-level logins (NOLOGIN groups keep membership grants readable).
 DO $$
 BEGIN

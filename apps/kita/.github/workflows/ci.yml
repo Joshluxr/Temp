@@ -102,11 +102,16 @@ jobs:
         run: cd sql && sha256sum -c CHECKSUMS.txt
 
       # --- fresh Postgres install check ----------------------------------------------
+      # Dual source of truth: the lane coder-23 migrate tool (packages/database/src/migrate.ts,
+      # pending completion) and the direct psql path. Both must produce a schema that passes the
+      # 002 invariant fixture; if migrate.ts gains a CLI entry, keep this step as the independent
+      # oracle (do not replace it with the tool under test).
       - name: Fresh install of core schema into isolated kita_core_test
         run: |
           createdb -T template0 kita_core_test || true
           psql -X -v ON_ERROR_STOP=1 -d kita_core_test -f sql/001_core.sql
           psql -X -v ON_ERROR_STOP=1 -d kita_core_test -f sql/002_core_smoke.sql
+          psql -X -v ON_ERROR_STOP=1 -d kita_core_test -f sql/roles.sql
 
       # --- explicit no-sandbox-balance-import assertion -------------------------------
       - name: Assert no sandbox balance import (TEST-PLAT-02 / M59)
