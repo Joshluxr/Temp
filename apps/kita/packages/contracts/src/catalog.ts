@@ -43,3 +43,14 @@ export interface Pub03Output {
   readonly countryWideDefaultAllow: true;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pub04Input {
+  readonly feeOrDeadlineMismatch: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pub04Output {
+  readonly mismatchedDisclosurePublished: true;
+  readonly traceEvents: readonly string[];
+}
