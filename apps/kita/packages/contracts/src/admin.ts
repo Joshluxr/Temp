@@ -106,3 +106,19 @@ export interface Adm09Output {
   readonly exportUrl: string;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Staff grants (T-ADM-10). Revoked approver cannot execute; no financial self-grant.
+ */
+export interface Adm10Input {
+  readonly revokedApprover: boolean;
+  readonly financialSelfGrant: boolean;
+  readonly journalPosting?: never;
+  readonly executeQueuedRequest?: never;
+}
+
+export interface Adm10Output {
+  readonly grantActive: true;
+  readonly queuedExecutionAllowed: true;
+  readonly traceEvents: readonly string[];
+}
