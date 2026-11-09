@@ -134,3 +134,29 @@ export interface Kyc05ListHitHoldDetail {
 }
 
 export type Kyc05FailureDetail = Kyc05ListHitHoldDetail;
+
+/**
+ * Risk / velocity / EDD (T-KYC-06). Concurrent transfers cannot exceed aggregate limit.
+ */
+export interface Kyc06Input {
+  readonly worker: WorkerIdentity;
+  readonly subjectId: UUID;
+  readonly wouldExceedAggregateLimit: boolean;
+  readonly tier?: string;
+  readonly journalPosting?: never;
+  readonly limitReservation?: never;
+}
+
+export interface Kyc06Output {
+  readonly authorized: true;
+  readonly reserved: true;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Kyc06LimitExceededDetail {
+  readonly code: 'LIMIT_EXCEEDED';
+  readonly subjectId: UUID;
+  readonly reason: string;
+}
+
+export type Kyc06FailureDetail = Kyc06LimitExceededDetail;
