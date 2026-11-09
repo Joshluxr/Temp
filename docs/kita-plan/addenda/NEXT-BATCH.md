@@ -1,24 +1,26 @@
 BATCH-OK
 
-Authorize only T-PUB-06: applyKitaTokens as a PURE checker.
+Authorized next batch: T-GROW-07 `sendNotification` PURE checker, limited to the contract below.
 
-Landed: T-PUB-05 — rewriteIssuedReceiptLocale maps POLICY_UNAVAILABLE to HTTP 409; otherwise HTTP 503. TEST-PUB-05: 2 passed.
+Landed: T-PUB-06 — `inaccessibleContrastOrKeyboardContract` returns `POLICY_UNAVAILABLE` / HTTP 409; otherwise HTTP 503. TEST-PUB-06: 2 passed.
 
-Allowed files only:
-- packages/domain/catalog/apply-kita-tokens.ts
-- tests/features/test-pub-06.spec.ts
-- packages/contracts/src/catalog.ts — additive Pub06 types only
+Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04.
 
-Reuse Pub01CommandContext.
+## Allowed files only
 
-Required behavior, in order:
-1. inaccessibleContrastOrKeyboardContract === true returns POLICY_UNAVAILABLE, HTTP 409.
-2. Otherwise return dependency_unavailable, HTTP 503, because the design-token store is not implemented.
+- `packages/domain/notifications/send-notification.ts`
+- `tests/features/test-grow-07.spec.ts`
+- `packages/contracts/src/notifications.ts` — additive Grow07 types only.
 
-Never return ok:true. Never return or ship inaccessible tokens. Keyboard and screen reader flow must pass at required widths.
+## Exact authorized behavior
 
-Tests must cover both failure branches and verify that neither returns ok:true or ships tokens.
+- Pure checker only: no DB, no money, no `executeCommand`, no vendor send, and no notification/outbox store implementation.
+- Never return `ok: true`, report duplicate success, or send a live vendor message.
+- When `duplicateEventPerChannel === true`, return `CAPABILITY_UNAVAILABLE` / HTTP 409. This branch takes precedence.
+- Otherwise return `dependency_unavailable` / HTTP 503 because the notification/outbox store is not implemented.
+- Delivery contract: a duplicate event has one intended message per channel; a second send is denied. This checker never sends or reports success, including on the first attempt.
+- Reuse `Pub01CommandContext` or a `Pick` of `WorkerContext`, named `Grow07CommandContext`.
 
-No DB, money operations, executeCommand, side effects, or design-token store implementation. No CSS/UI files. Do not authorize kita.css, primitives, or icons. No files beyond the three listed above.
+## Required verification
 
-HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04.
+In `tests/features/test-grow-07.spec.ts`, cover the strict-true duplicate branch (409), the otherwise branch (503), and the absence of success and side effects. Keep every change within the three allowed files and the exact pure-checker scope above. Any broader work is HOLD.
