@@ -25,6 +25,14 @@
       "types": "./receive-webhook.ts",
       "default": "./receive-webhook.ts"
     },
+    "./schedule-timer": {
+      "types": "./schedule-timer.ts",
+      "default": "./schedule-timer.ts"
+    },
+    "./replay-dlq": {
+      "types": "./replay-dlq.ts",
+      "default": "./replay-dlq.ts"
+    },
     "./workers/validate-build-baseline.worker": {
       "types": "./workers/validate-build-baseline.worker.ts",
       "default": "./workers/validate-build-baseline.worker.ts"
