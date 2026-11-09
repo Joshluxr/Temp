@@ -7,3 +7,5 @@ export * from './context.ts';
 export * from './platform.ts';
 export * from './auth.ts';
 export * from './generated.ts';
+export * from './commands.ts';
+export * from './freeze-contracts.ts';
