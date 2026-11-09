@@ -492,3 +492,43 @@ export interface Plat04SignatureRejectedDetail {
 }
 
 export type Plat04FailureDetail = Plat03IdempotencyMismatchDetail | Plat04SignatureRejectedDetail;
+
+/**
+ * Timers / DLQ replay (T-PLAT-05). Until T-CORE-02 exists, scheduleTimer and
+ * replayDlq must not write timers, outbox, queues, or journals.
+ */
+export interface Plat05TimerIdentity {
+  readonly timerId: UUID;
+  readonly generation: number;
+  readonly dueAt: string;
+  readonly workKey: string;
+}
+
+export interface Plat05DlqIdentity {
+  readonly deadLetterId: UUID;
+  readonly originalWorkId: UUID;
+  readonly originalPayloadDigest: string;
+}
+
+export interface Plat05Input {
+  readonly worker: WorkerIdentity;
+  readonly timer?: Plat05TimerIdentity;
+  readonly dlq?: Plat05DlqIdentity;
+  readonly journalPosting?: never;
+  readonly queuePublish?: never;
+}
+
+export interface Plat05Output {
+  readonly preservedDeadline: boolean;
+  readonly preservedOriginalKey: boolean;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Plat05VersionConflictDetail {
+  readonly code: 'VERSION_CONFLICT';
+  readonly timerId?: UUID;
+  readonly generation?: number;
+  readonly reason: string;
+}
+
+export type Plat05FailureDetail = Plat05VersionConflictDetail;
