@@ -5,4 +5,5 @@
 export * from './result.ts';
 export * from './context.ts';
 export * from './platform.ts';
+export * from './auth.ts';
 export * from './generated.ts';
