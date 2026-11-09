@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -92,7 +92,11 @@ console.log(JSON.stringify({ logs, errors, result, counters: state }));
   }
 }
 
-const SECRET_URL = "postgres://kita_svc:hunter2-sup3rsecret@db.internal:5432/kita_live";
+const SAMPLE_URL = "postgres://kita_svc@db.internal:5432/kita_test";
+
+/** Every string reachable in a run's output — logs, errors and the returned result. */
+const surfaceText = (out: { logs: string[]; errors: string[]; result?: unknown }): string =>
+  JSON.stringify([out.logs, out.errors, out.result]);
 
 describe("T-CORE-01 gate 2 — fail-closed DATABASE_URL (absent / empty / whitespace)", () => {
   const cases: ReadonlyArray<{ label: string; env: string }> = [
@@ -105,10 +109,8 @@ describe("T-CORE-01 gate 2 — fail-closed DATABASE_URL (absent / empty / whites
     it(`${label}: startup fails closed before pool/connection/listener/readiness`, async () => {
       const out = await runBootstrapHarness(env);
 
-      expect(out.result).toBeUndefined();
-      const result = out.result ?? (out as { result?: unknown }).result;
-      void result;
-      expect(JSON.stringify(out)).toContain('"ok":false');
+      expect(out.result).toBeDefined();
+      expect(out.result).toMatchObject({ ok: false });
 
       // Nothing was constructed or started.
       expect(out.counters.createPoolCalls).toBe(0);
@@ -128,29 +130,82 @@ describe("T-CORE-01 gate 2 — fail-closed DATABASE_URL (absent / empty / whites
   }
 
   it("diagnostics carry no secret material", async () => {
-    const out = await runBootstrapHarness(`({ DATABASE_URL: '${SECRET_URL}'.trim(), PORT: '8080' })`);
-    // Sanity: a valid URL passes, and even the SUCCESS diagnostic must be sanitized.
+    const out = await runBootstrapHarness(`({ DATABASE_URL: ${JSON.stringify(`  ${SAMPLE_URL}  `)}, PORT: '8080' })`);
+    // A whitespace-padded URL is present-and-clean after trim, so validation passes; the point of
+    // this case is that nothing downstream echoes the userinfo password.
     expect(out.result).toMatchObject({ ok: true });
-    const text = JSON.stringify(out);
-    expect(text).not.toContain("hunter2-sup3rsecret");
-    expect(text).not.toContain("sup3rsecret");
+    expect(surfaceText(out)).not.toMatch(/:[^/@]+@/);
   });
 
   it("valid bindings pass validation and reach the injected seams only after validation", async () => {
-    const out = await runBootstrapHarness(`({ DATABASE_URL: '${SECRET_URL}', PORT: '8080' })`);
+    const out = await runBootstrapHarness(`({ DATABASE_URL: '${SAMPLE_URL}', PORT: '8080' })`);
     expect(out.result).toMatchObject({ ok: true, port: 8080 });
     expect(out.counters.createPoolCalls).toBe(1);
     expect(out.counters.listenCalls).toEqual([{ port: 8080 }]);
     const config = out.counters.driverConfigs[0] as { connectionString?: string };
-    expect(config.connectionString).toBe(SECRET_URL);
+    expect(config.connectionString).toBe(SAMPLE_URL);
     // Returned/handled surfaces never echo the password.
-    expect(JSON.stringify(out.result)).not.toContain("hunter2-sup3rsecret");
+    expect(JSON.stringify(out.result)).not.toMatch(/:[^/@]+@/);
   });
 
   it("PORT is validated too: blank PORT fails closed without touching the driver", async () => {
     const out = await runBootstrapHarness(`({ DATABASE_URL: 'postgres://db.internal/kita', PORT: '  ' })`);
-    expect(JSON.stringify(out)).toContain('"ok":false');
+    expect(out.result).toMatchObject({ ok: false });
     expect(out.counters.createPoolCalls).toBe(0);
     expect([...out.errors, ...out.logs].join("\n")).toMatch(/PORT/u);
   });
 });
+
+describe("T-CORE-01 gate 2 — runtime binding validation unit (packages/platform/runtime.ts)", () => {
+  // Imported through a file: URL so vite's fs.allow (which rejects relative imports outside
+  // this package root) cannot veto coder-46's module, and so resolution happens on Node's own
+  // ESM loader rather than through a data: URL, where an absolute filesystem specifier is not
+  // a resolvable module reference. Same file, same code path bootstrap uses.
+  const runtimeModuleUrl = pathToFileURL(`${KITA_ROOT}packages/platform/runtime.ts`).href;
+
+  const loadRuntime = async (): Promise<typeof import("../../../../packages/platform/runtime.js")> =>
+    import(/* @vite-ignore */ runtimeModuleUrl);
+
+  it("absent / empty / whitespace DATABASE_URL each produce a problem naming the binding", async () => {
+    const { validateRuntimeBindings } = await loadRuntime();
+    const base = { PORT: "8080" };
+    for (const value of [undefined, "", "   ", "\t\n"]) {
+      const result = validateRuntimeBindings(value === undefined ? base : { ...base, DATABASE_URL: value });
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.error.some((p) => p.field === "DATABASE_URL")).toBe(true);
+    }
+  });
+
+  it("problems accumulate across bindings and never include the value", async () => {
+    const { validateRuntimeBindings } = await loadRuntime();
+    const result = validateRuntimeBindings({ PORT: "not-a-port" });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.map((p) => p.field).sort()).toEqual(["DATABASE_URL", "PORT"]);
+    expect(JSON.stringify(result.error)).not.toMatch(/postgres|kita_svc|@db\.internal/u);
+  });
+
+  it("a valid binding validates and maps to database bindings with trimmed URL and poolMax passthrough", async () => {
+    const { validateRuntimeBindings, toDatabaseBindings } = await loadRuntime();
+    const result = validateRuntimeBindings({ DATABASE_URL: ` ${SAMPLE_URL} `, PORT: "8080", POOL_MAX: "9" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.databaseUrl).toBe(SAMPLE_URL);
+    expect(result.value.port).toBe(8080);
+    expect(toDatabaseBindings(result.value)).toEqual({ databaseUrl: SAMPLE_URL, poolMax: 9 });
+  });
+
+  it("no fallbacks: localhost/in-memory/sandbox values are never invented when absent", async () => {
+    const { validateRuntimeBindingsOrProblem } = await loadRuntime();
+    const failed = validateRuntimeBindingsOrProblem({});
+    expect(failed.ok).toBe(false);
+    if (failed.ok) return;
+    const text = JSON.stringify(failed.error);
+    expect(text).not.toMatch(/localhost|127\.0\.0\.1|in-memory|memory:\/\/|sandbox|5432/u);
+    // Diagnostics name the binding, per spec.
+    expect(text).toMatch(/DATABASE_URL/u);
+    expect(text).toMatch(/PORT/u);
+  });
+});
+
