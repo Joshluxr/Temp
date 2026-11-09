@@ -1,0 +1,240 @@
+# Kita slice CI — T-PLAT-01 (docs/kita-plan/13-backlog.md "### T-PLAT-01")
+#
+# This workflow lives INSIDE apps/kita on purpose. The repository root security
+# product (.github/workflows/ci.yml) is the ONLY production target of this repo
+# and must never be touched by Kita work (WORKSPACE.md "Kita slice" bullet).
+# Likewise, this workflow:
+#   * runs only for changes under apps/kita/**,
+#   * installs/builds exclusively with `cd apps/kita` (independent npm workspace),
+#   * has NO deploy job, NO environment, NO secrets, NO OIDC role assumption,
+#     and cannot publish artifacts anywhere.
+#
+# Batch-1 hard constraints (docs/kita-plan/SOL-REVIEW.md): no real money, no
+# fake KYC, no outcome-manufacturing paths in any production-reachable source.
+#
+# Branch policy (apps/kita/docs/CI-BRANCH-POLICY.md): `main` is the reviewed
+# trunk; `kita/<task>` feature branches plus the current swarm branch run this
+# identical validation lane on push, and every pull_request runs it regardless
+# of base branch. Triggers are filtered by path, not by branch, so no Kita
+# change escapes these checks.
+name: Kita CI (apps/kita only — never production)
+
+on:
+  # Manual run of the same validation lane (no deploy path exists to reach).
+  workflow_dispatch:
+  pull_request:
+    # No branch filter: every PR into any base runs the same checks, so a PR
+    # from kita/<task> into main is validated identically to one targeting a
+    # feature branch. Path filter below still scopes this lane to apps/kita/**.
+    paths:
+      - "apps/kita/**"
+  push:
+    branches:
+      - main
+      # Feature branches carry the identical validation jobs as PRs (see
+      # apps/kita/docs/CI-BRANCH-POLICY.md). Glob covers kita/T-PLAT-01 style
+      # names; `dong` is the current swarm integration branch.
+      - 'kita/**'
+      - dong
+    tags:
+      - "kita-v*"
+    paths:
+      - "apps/kita/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kita-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  kita:
+    name: Kita workspace checks (T-PLAT-01 / TEST-PLAT-01)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Everything below runs against the isolated test topology only
+      # (kita_core_test, loopback port 54339 per WORKSPACE.md). No live host
+      # variable exists or is referenced anywhere in this workflow.
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: apps/kita
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/kita/package-lock.json
+
+      # Independent workspace rule: NEVER install from the repo root.
+      - name: Install (apps/kita only)
+        run: npm ci
+
+      # ---------------------------------------------------------------
+      # Fail-closed guard 1 — prohibited_runtime_reference_count
+      # (observability metric named by T-MIG-01, docs/kita-plan/13-backlog.md).
+      # A literal on an executable line is legitimate ONLY as a quoted string
+      # inside a denylist/register declaration that names the ban (e.g.
+      # apps/admin/app/page.tsx, apps/admin/lib/secret-scan.ts,
+      # database/tests/isolation-docs.test.mjs) or inside a comment. Any other
+      # occurrence — call, route/procedure definition, import, unquoted token —
+      # fails the job. The detector below is self-exempt so the list stays
+      # nameable; root docs/FORBIDDEN-PRODUCTION-ENDPOINTS.md owns additions.
+      # ---------------------------------------------------------------
+      - name: "Guard: no outcome-manufacturing calls (FORBIDDEN-PATHS F-01..F-05)"
+        run: |
+          set -euo pipefail
+          node scripts/guard-no-outcome-manufacturing.mjs
+
+      # ---------------------------------------------------------------
+      # Fail-closed guard 2 — no production database host/DSN in kita code.
+      # The only permitted PostgreSQL coordinates are the isolated test
+      # clusters declared in WORKSPACE.md / apps/kita/database/config/
+      # isolation.json: loopback hosts on the designated test ports
+      # (54339 kita_core_test, 55432 kita_plan_test). Any cloud/managed-DB
+      # hostname or any DSN pointing elsewhere fails the build. Two scopes:
+      #   (a) executable scope (*.ts/*.tsx/*.js/*.mjs/*.cjs): a bare
+      #       cloud-host marker is legal ONLY as a quoted denylist entry
+      #       (database/src/migrate.mjs PRODUCTION_MARKERS) or a quoted
+      #       negative-test fixture; unquoted markers and ANY DSN fail;
+      #   (b) config scope (*.json/*.yml/*.yaml/*.sql): any match at all
+      #       fails — configuration must never name a production host.
+      # Reported matches have userinfo stripped so credentials never print.
+      # ---------------------------------------------------------------
+      - name: "Guard: no production database host or DSN referenced"
+        run: |
+          set -euo pipefail
+          status=0
+          CLOUD_RE='(rds\.amazonaws\.com|aurora|neon\.tech|supabase\.(co|in)|\.render\.com|herokuapp|aliyuncs|cloudsql|redshift)'
+          # Quoted-occurrence filter: drops lines where every match sits inside a
+          # single- or double-quoted string (denylist entries, negative fixtures).
+          QUOTED_FILTER="'[^']*(rds\.amazonaws\.com|aurora|neon\.tech|supabase|render|herokuapp|aliyuncs|cloudsql|redshift)[^']*'|\"[^\"]*(rds\.amazonaws\.com|aurora|neon\.tech|supabase|render|herokuapp|aliyuncs|cloudsql|redshift)[^\"]*\""
+          DSN_RE='postgres(ql)?://[A-Za-z0-9._%+@!=;/?#:-]+'
+          LOOPBACK_TEST_DSN_RE='^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal|\[::1\]):(54339|55432)(/|$)'
+
+          echo "== (a) Executable scope: cloud/managed DB hosts =="
+          if hits=$(grep -RInE "$CLOUD_RE" \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules . | grep -vE "$QUOTED_FILTER"); then
+            printf '%s\n' "$hits"
+            echo "::error::Unquoted cloud/managed DB host in executable scope — Kita may never wire a production database."
+            status=1
+          else
+            echo "OK: cloud-host names appear only as quoted denylist entries / negative-test fixtures."
+          fi
+
+          echo "== (a2) Executable scope: postgres DSNs =="
+          # Exemption is narrow on purpose: only lines that carry a test-file
+          # marker (assert/expect/throw/reject) alongside the quoted DSN are
+          # treated as negative fixtures proving the guard rejects that shape.
+          # A production *shaped* DSN (non-loopback host, or loopback on a port
+          # other than 54339/55432) fails even inside quotes — the only legal
+          # quoted DSNs are loopback-test ones or deliberately hostile fixtures
+          # under a test marker. Interpolated/template DSNs fail unconditionally.
+          dsns=$(grep -RInE "$DSN_RE" \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules . \
+              | grep -vE "(assert|expect|toThrow|reject|\bfor \(const\b|[0-9]+:[[:space:]]+['\"]postgres(ql)?://|[0-9]+:[[:space:]]*\[)" || true)
+          offenders=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            dsn=$(printf '%s' "$line" | grep -oE "$DSN_RE" | head -1 | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#')
+            if ! printf '%s' "$dsn" | grep -qE "$LOOPBACK_TEST_DSN_RE"; then
+              offenders="${offenders}${line:0:160} -> ${dsn}
+          "
+            fi
+          done <<< "$dsns"
+          # Concatenation-built DSNs ("postgres://" + user + "@" + host): the
+          # literal prefix plus an appended host/user variable is always code,
+          # never a fixture — zero tolerance.
+          if hits=$(grep -RInE 'postgres(ql)?://[\"'"'"'][[:space:]]*\+' \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules .); then
+            printf '%s\n' "$hits"
+            echo "::error::Dynamically assembled postgres DSN in executable scope — Kita may never build a production connection string."
+            status=1
+          else
+            echo "OK: no concatenated DSN construction."
+          fi
+          if [ -n "$offenders" ]; then
+            printf 'Offending DSNs (file -> shape, userinfo stripped):\n%s' "$offenders"
+            echo "::error::A postgres DSN in executable scope targets something other than the loopback test clusters (:54339/:55432). Kita batch 1 has NO production database (TEST-PLAT-02)."
+            status=1
+          else
+            echo "OK: every executable-scope postgres DSN points at a loopback isolated test cluster."
+          fi
+
+          echo "== (b) Config scope (json/yml/sql): zero tolerance for DB hosts =="
+          # Exclude this workflow file itself (it embeds the detection regexes).
+          if hits=$(grep -RInE "$CLOUD_RE" \
+              --include='*.json' --include='*.yml' --include='*.yaml' --include='*.sql' \
+              --exclude-dir=node_modules --exclude='kita-ci.yml' .); then
+            printf '%s\n' "$hits"
+            echo "::error::Committed config names a production/could-be-production DB host. Use env indirection only (database/config/isolation.json structuralChecks)."
+            status=1
+          else
+            echo "OK: no cloud/managed DB hosts in committed config."
+          fi
+          # Any DSN literal in config must be a loopback test coordinates form.
+          # No quoted-string/test-fixture exemption here: committed config is
+          # what a deploy consumes, so every DSN shape fails unless it is the
+          # isolated triple. Exclude this workflow file itself (it embeds the
+          # detection regexes).
+          cfg_dsns=$(grep -RInE "$DSN_RE" \
+              --include='*.json' --include='*.yml' --include='*.yaml' --include='*.sql' \
+              --exclude-dir=node_modules --exclude='kita-ci.yml' . || true)
+          cfg_offenders=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            dsn=$(printf '%s' "$line" | grep -oE "$DSN_RE" | head -1 | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#')
+            if ! printf '%s' "$dsn" | grep -qE "$LOOPBACK_TEST_DSN_RE"; then
+              cfg_offenders="${cfg_offenders}${line:0:120} -> ${dsn}
+          "
+            fi
+          done <<< "$cfg_dsns"
+          if [ -n "$cfg_offenders" ]; then
+            printf 'Offending config DSNs:\n%s' "$cfg_offenders"
+            echo "::error::Committed config carries a non-test DSN."
+            status=1
+          else
+            echo "OK: any config DSN is loopback-test-only."
+          fi
+          exit $status
+
+      # ---------------------------------------------------------------
+      # Fail-closed guard 3 — this workflow must never gain deploy powers.
+      # Asserts the root security-product CI does not invoke this workflow
+      # and that kita-ci.yml itself declares no environment/OIDC/secrets usage.
+      # ---------------------------------------------------------------
+      - name: "Guard: kita is not wired into any production deploy"
+        run: |
+          set -euo pipefail
+          status=0
+          if grep -n 'kita' ../../.github/workflows/*.yml; then
+            echo "::error::A root workflow references Kita — apps/kita must stay out of the security product's production CI."
+            status=1
+          else
+            echo "OK: root security-product CI is Kita-free."
+          fi
+          if grep -nE '^[[:space:]]*(environment|id-token: write|packages: write)[[:space:]:]' \
+              .github/workflows/kita-ci.yml; then
+            echo "::error::Kita workflow requests deploy-adjacent permissions (environment / id-token / packages write)."
+            status=1
+          else
+            echo "OK: no environment, no OIDC role assumption, no package registry write."
+          fi
+          exit $status
+
+      # Existing workspace fan-out scripts (apps/kita/package.json): each runs
+      # `npm run --workspaces --if-present <script>` over apps/* and packages/*.
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Test
+        run: npm test

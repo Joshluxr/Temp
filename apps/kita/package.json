@@ -1,0 +1,26 @@
+{
+  "name": "kita-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita app slice (Sol-approved batch 1: T-PLAT-01 scaffold). Isolated npm workspace; not part of the t3mp3st root build.",
+  "packageManager": "npm@10",
+  "workspaces": [
+    "apps/customer",
+    "apps/admin",
+    "apps/mobile",
+    "packages/ui",
+    "packages/domain",
+    "packages/database",
+    "packages/platform",
+    "packages/contracts",
+    "packages/api-client"
+  ],
+  "scripts": {
+    "dev": "npm run --workspaces --if-present dev",
+    "build": "npm run --workspaces --if-present build",
+    "test": "npm run --workspaces --if-present test",
+    "lint": "npm run --workspaces --if-present lint",
+    "typecheck": "npm run --workspaces --if-present typecheck",
+    "guard:isolation": "node scripts/guard-production-isolation.mjs"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    // Source-file (.ts) import specifiers are the kita slice convention: every
+    // package writes them (see packages/contracts/src/index.ts). Each package's
+    // own tsconfig has no allowImportingTsExtensions, so those imports only pass
+    // under `tsc --noEmit`'s relaxed path-extension check — which does NOT apply
+    // to a project file. This project exports no types and emits nothing, so we
+    // declare the flag explicitly to keep the same convention typecheck-clean.
+    "allowImportingTsExtensions": true,
+  },
+  "include": ["src"]
+}

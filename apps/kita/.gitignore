@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Expo / React Native caches
+.expo/
+.expo-state.json
+.expo-shared/
+ios/Pods/
+android/.gradle/
+android/app/build/
+
+# environment and secrets — never commit
+.env
+.env.*
+!.env.example
+
+# logs / local tooling
+*.log
+.DS_Store
+coverage/

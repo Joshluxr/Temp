@@ -1,0 +1,572 @@
+[
+  {
+    "method": "POST",
+    "path": "/v1/auth/authorization-requests",
+    "operationId": "startAuthorization"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/callbacks",
+    "operationId": "completeAuthorization"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/contact-confirmations",
+    "operationId": "confirmContact"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/content/{slug}",
+    "operationId": "getContent"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/corridors",
+    "operationId": "listCorridors"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/corridors/{id}/payout-options",
+    "operationId": "listPayoutOptions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/estimates",
+    "operationId": "createEstimate"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me",
+    "operationId": "getProfile"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/contact-verifications",
+    "operationId": "createContactVerification"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/logout",
+    "operationId": "logout"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/step-ups",
+    "operationId": "createStepUp"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/recovery",
+    "operationId": "startRecovery"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/auth/sessions",
+    "operationId": "listSessions"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/sessions/{id}/revocations",
+    "operationId": "revokeSession"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/mobile-sessions",
+    "operationId": "createMobileSession"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/closure-requests",
+    "operationId": "requestClosure"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/privacy-requests",
+    "operationId": "requestPrivacyAction"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/identity-sessions",
+    "operationId": "createIdentitySession"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/identity-status",
+    "operationId": "getIdentityStatus"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/document-uploads",
+    "operationId": "createDocumentUpload"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/documents/{id}/completion",
+    "operationId": "completeDocumentUpload"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/recipients",
+    "operationId": "listRecipients"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/recipients",
+    "operationId": "createRecipient"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/recipients/{id}/versions",
+    "operationId": "createRecipientVersion"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/recipients/{id}/archive",
+    "operationId": "archiveRecipient"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/drafts",
+    "operationId": "createDraft"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/drafts/{id}",
+    "operationId": "updateDraft"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/drafts/{id}",
+    "operationId": "getDraft"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/quotes",
+    "operationId": "createQuote"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/quotes/{id}",
+    "operationId": "getQuote"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/transfers",
+    "operationId": "acceptTransfer"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/transfers",
+    "operationId": "listTransfers"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/transfers/{id}",
+    "operationId": "getTransfer"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/transfers/{id}/timeline",
+    "operationId": "getTransferTimeline"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/transfers/{id}/events",
+    "operationId": "streamTransferEvents"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/transfers/{id}/receipt",
+    "operationId": "getReceipt"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/transfers/{id}/funding-sessions",
+    "operationId": "createFundingSession"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/funding-instrument-sessions",
+    "operationId": "createFundingInstrumentSession"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/transfers/{id}/cancellation-requests",
+    "operationId": "requestCancellation"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/transfers/{id}/refund-requests",
+    "operationId": "requestRefund"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/transfers/{id}/error-claims",
+    "operationId": "createErrorClaim"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/transfers/{id}/pickup-instructions",
+    "operationId": "getPickupInstructions"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/operations/{id}",
+    "operationId": "getOperation"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/commands/{key}",
+    "operationId": "getCommandResult"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/support/cases",
+    "operationId": "createSupportCase"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/support/cases/{id}",
+    "operationId": "getCase"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/support/cases/{id}/messages",
+    "operationId": "createSupportMessage"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/support/cases/{id}/responses",
+    "operationId": "respondCase"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/wallets",
+    "operationId": "listWallets"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/wallets/topups",
+    "operationId": "createWalletTopup"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/wallets/conversions",
+    "operationId": "createWalletConversion"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/wallets/withdrawals",
+    "operationId": "createWithdrawal"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/wallets/transfers",
+    "operationId": "createWalletTransfer"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/wallet-quotes",
+    "operationId": "createWalletQuote"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/funding-instruments",
+    "operationId": "confirmFundingInstrument"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/funding-instruments",
+    "operationId": "listFundingInstruments"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/funding-instruments/{id}/revocations",
+    "operationId": "revokeFundingInstrument"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/billers",
+    "operationId": "listBillers"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/billers/{id}/validations",
+    "operationId": "validateBillAccount"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/points",
+    "operationId": "getPoints"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/reward-events",
+    "operationId": "listRewardEvents"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/points/reservations",
+    "operationId": "reservePoints"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/promotions/validations",
+    "operationId": "validatePromotion"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/referrals",
+    "operationId": "createReferral"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/rate-alerts",
+    "operationId": "listRateAlerts"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/rate-alerts",
+    "operationId": "createRateAlert"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/rate-alerts/{id}/pause",
+    "operationId": "pauseRateAlert"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/schedules",
+    "operationId": "createSchedule"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/schedules",
+    "operationId": "listSchedules"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/schedules/{id}/revocations",
+    "operationId": "revokeSchedule"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auto-conversions",
+    "operationId": "createAutoConversion"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/notification-preferences",
+    "operationId": "updateNotificationPreferences"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/bill-payments",
+    "operationId": "createBillPayment"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/business-profiles",
+    "operationId": "createBusinessProfile"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/batches",
+    "operationId": "createBatch"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/batches/{id}",
+    "operationId": "getBatch"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/auth/sessions",
+    "operationId": "createAdminSession"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/transfers",
+    "operationId": "listAdminTransfers"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/transfers/{id}",
+    "operationId": "getAdminTransfer"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/transfers/{id}/holds",
+    "operationId": "createHold"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/holds/{id}/resolutions",
+    "operationId": "resolveHold"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/transfers/{id}/cancellation-requests",
+    "operationId": "adminRequestCancellation"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/transfers/{id}/refund-requests",
+    "operationId": "adminRequestRefund"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/transfers/{id}/reroute-requests",
+    "operationId": "requestReroute"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/payout-attempts/{id}/status-inquiries",
+    "operationId": "inquireAttempt"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/provider-evidence",
+    "operationId": "submitProviderEvidence"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/cases",
+    "operationId": "listAdminCases"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/cases/{id}/decisions",
+    "operationId": "decideCase"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/cases/{id}/screening-reviews",
+    "operationId": "createScreeningReview"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/cases/{id}/risk-decisions",
+    "operationId": "createRiskDecision"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/cases/{id}/filings",
+    "operationId": "recordRegulatoryFiling"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/cases/{id}/assignments",
+    "operationId": "assignCase"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/approvals/{id}/executions",
+    "operationId": "executeApproval"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/approvals",
+    "operationId": "listApprovals"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/approvals/{id}/decisions",
+    "operationId": "decideApproval"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/adjustment-requests",
+    "operationId": "createAdjustmentRequest"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/pricing/simulations",
+    "operationId": "simulatePricing"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/configuration-releases",
+    "operationId": "createConfigRelease"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/configuration-versions",
+    "operationId": "listConfigVersions"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/customers/{id}/pii-reveals",
+    "operationId": "requestPiiReveal"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/access-changes",
+    "operationId": "requestAccessChange"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/audit-events",
+    "operationId": "listAuditEvents"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/routes/{id}/pauses",
+    "operationId": "pauseRoute"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/routes/{id}/reenablement-requests",
+    "operationId": "requestRouteReenable"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/journals/{id}",
+    "operationId": "getJournal"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/statements",
+    "operationId": "importStatement"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/reconciliation-breaks",
+    "operationId": "listBreaks"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/reconciliation-breaks/{id}/resolutions",
+    "operationId": "resolveBreak"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/v1/treasury-positions",
+    "operationId": "getTreasuryPositions"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/treasury-movement-requests",
+    "operationId": "requestTreasuryMovement"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/disputes/{id}/responses",
+    "operationId": "createDisputeResponse"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/report-exports",
+    "operationId": "createReportExport"
+  },
+  {
+    "method": "POST",
+    "path": "/admin/v1/dead-letters/{id}/replays",
+    "operationId": "replayDeadLetter"
+  },
+  {
+    "method": "POST",
+    "path": "/webhooks/v1/{provider}/{accountId}",
+    "operationId": "receiveWebhook"
+  }
+]

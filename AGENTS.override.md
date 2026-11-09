@@ -1,5 +1,21 @@
 # Operator Additions
 
+## Strict session roles (VM Codex + GPU Qoder)
+
+Cursor Grok is coordinator only. It must not implement product code.
+
+| Role | Machine | Tool | Model / effort |
+|---|---|---|---|
+| Coordinator | Cursor VM | Grok | routing, rsync, GitHub |
+| Planner | Cursor VM | Codex CLI | `gpt-6-astra` + `xhigh` (extra high) |
+| Orchestrator / director | Cursor VM | Codex CLI | `gpt-6.1-sol` + `max` |
+| Reviewer | Cursor VM | Codex CLI | `gpt-6.1-sol` + `max` |
+| Coding swarm | GPU `gpu-fqaf` | Qoder CLI | `Efficient` Agent Teams / subagents |
+
+Flow: sync repo to the GPU → Qoder Efficient swarm codes there → bundle/download to the VM → Sol max reviews quality, completeness, bugs, optimizations → coordinator does GitHub. Failed review goes back to Qoder as a fix batch.
+
+Local operator scripts: `~/.coordinator/run-batch.sh`.
+
 ## Contributor Courtesy Merge Cleanup
 
 When a contributor has substantially completed significant changes requested in review and only low-impact merge work remains, maintainers may finish that cleanup and merge the pull request as a courtesy.

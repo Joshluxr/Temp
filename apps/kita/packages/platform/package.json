@@ -1,0 +1,44 @@
+{
+  "name": "@kita/platform",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kita platform tool STUB lane (T-PLAT-01/T-PLAT-02): validateBuildBaseline + migrateCore verification with fail-closed evidence adapters. Verifies only — no installs, no DDL execution, zero money effects; sandbox-money import is rejected structurally and at runtime.",
+  "type": "module",
+  "exports": {
+    "./runtime": {
+      "types": "./runtime.ts",
+      "default": "./runtime.ts"
+    },
+    "./validate-build-baseline": {
+      "types": "./validate-build-baseline.ts",
+      "default": "./validate-build-baseline.ts"
+    },
+    "./migrate-core": {
+      "types": "./migrate-core.ts",
+      "default": "./migrate-core.ts"
+    },
+    "./apply-event": {
+      "types": "./apply-event.ts",
+      "default": "./apply-event.ts"
+    },
+    "./workers/validate-build-baseline.worker": {
+      "types": "./workers/validate-build-baseline.worker.ts",
+      "default": "./workers/validate-build-baseline.worker.ts"
+    },
+    "./workers/migrate-core.worker": {
+      "types": "./workers/migrate-core.worker.ts",
+      "default": "./workers/migrate-core.worker.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. tests/features/test-plat-01.spec.ts"
+  },
+  "dependencies": {
+    "@kita/contracts": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "3.2.4"
+  }
+}

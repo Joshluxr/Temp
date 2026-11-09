@@ -1,0 +1,1312 @@
+{
+  "schema": "kita.migration.disposition-manifest/1",
+  "generated": "2026-11-09",
+  "task": "T-MIG-01",
+  "source_of_truth": {
+    "plan": "docs/kita-plan/03-migration-map.md (section C, 142 rows)",
+    "inventory": "docs/kita-plan/evidence/app-inventory.json",
+    "inventory_sha256": "37f48d2de44128e101ce1b2b8a2706e0b8c43bb4eda284ccd6cb88cab983a8f3",
+    "archive_root": "docs/kita-sources/kimi-archive/app"
+  },
+  "dispositions": [
+    "replace",
+    "remove",
+    "port-ui-only"
+  ],
+  "disposition_mapping": {
+    "replace": "Source decision replace|modify, plus non-UI retain|move (CREDITS.md attribution, api/lib/requestcontext.ts, postcss.config.js): target responsibility is rewritten, reused with stated behavior changes, or preserved with adjusted path/imports.",
+    "remove": "Source decision remove — omitted from the target. Remove NEVER means deleting docs/kita-sources: the supplied archive is read-only historical evidence and must be preserved in full.",
+    "port-ui-only": "Source decision move|retain on the UI presentation surface only (src/components/ui/** primitives, public/icons/** Kita assets, use-mobile.ts, lib/utils.ts): visual intent ports; no domain, provider or financial behavior crosses this boundary."
+  },
+  "invariants": [
+    "Every physical archive file has exactly one primary disposition; missing, duplicate and extra paths fail scripts/check-migration-inventory.ts.",
+    "Sandbox balances, wallet funding, IDs, provider refs and KYC approvals never import into production books (docs/sandbox-history.md; TEST-PLAT-02).",
+    "addSandboxFunds is not a production export anywhere in apps/kita (docs/FORBIDDEN-PATHS.md F-01); check-migration-inventory.ts fails closed if it becomes one.",
+    "No money posting exists in this batch: journal creation stays behind frozen contracts and approved posting templates."
+  ],
+  "counts": {
+    "remove": 15,
+    "replace": 67,
+    "port-ui-only": 60
+  },
+  "files": [
+    {
+      "path": ".backend-features.json",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "3839719f01c0bef14ee591f571bdd381addc9731d3b9f03ccb1b4736f6c448b2",
+      "bytes": 144,
+      "reason": "Kimi generation metadata has no production role."
+    },
+    {
+      "path": ".dockerignore",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": ".dockerignore",
+      "sha256": "63c04a042584ffb92392a0b832664c992d4948d1acb77d6a3160fb939886163e",
+      "bytes": 35,
+      "reason": "Retain formatting/ignore intent, update workspace outputs, secrets and fixture exclusions."
+    },
+    {
+      "path": ".env.example",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "config/env.example",
+      "sha256": "b1d45f3916ad362268a36e7e0ac8c7dd56f33c40bc3a3377fa5b76b1d7624777",
+      "bytes": 1365,
+      "reason": "Document secret refs and environment identifiers; no credentials or permissive sandbox defaults."
+    },
+    {
+      "path": ".gitignore",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": ".gitignore",
+      "sha256": "25b56bca05230fe1d820d5e24f4981837a3d0796796c272fe44dee90607c2a2a",
+      "bytes": 462,
+      "reason": "Retain formatting/ignore intent, update workspace outputs, secrets and fixture exclusions."
+    },
+    {
+      "path": ".prettierignore",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": ".prettierignore",
+      "sha256": "17f593918ed38aec9deac4301d519a4349172c649d1849ce17190cedbde33228",
+      "bytes": 310,
+      "reason": "Retain formatting/ignore intent, update workspace outputs, secrets and fixture exclusions."
+    },
+    {
+      "path": ".prettierrc",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": ".prettierrc",
+      "sha256": "087532218269eb851c22dcc3d5234ea46bfa513b494a3d7b167b1c1f48c410c5",
+      "bytes": 310,
+      "reason": "Retain formatting/ignore intent, update workspace outputs, secrets and fixture exclusions."
+    },
+    {
+      "path": "CREDITS.md",
+      "disposition": "replace",
+      "source_decision": "retain",
+      "target": "CREDITS.md",
+      "sha256": "13de4cb8e01ab01947c6d1fae130892461ea3337e4e412da7bd2bcf377faacea",
+      "bytes": 955,
+      "reason": "Keep fonts and component attributions; augment SBOM/licenses."
+    },
+    {
+      "path": "README.md",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "README.md; docs/sandbox-history.md",
+      "sha256": "c5baec822de147f6b5fb5338093cd237773372b0491fda46200b0fc124db48b9",
+      "bytes": 4002,
+      "reason": "Document real setup/gates and preserve archived sandbox provenance without production claims."
+    },
+    {
+      "path": "api/admin-router.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/admin/*.controller.ts; packages/domain/admin/*.ts",
+      "sha256": "9eccdb4ec5e1434a616f388041dad742c44ee6e27cf4cc34902f5ba95ea7dc00",
+      "bytes": 19465,
+      "reason": "Replace two-role access and status forcing with scoped evidence commands, person-level approval, stale-version checks."
+    },
+    {
+      "path": "api/auth-router.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/auth/session.controller.ts",
+      "sha256": "0741718e5d6c19991060bc246f5db814a0bd958e53d089b85c57c5147cbc4036",
+      "bytes": 725,
+      "reason": "OIDC sessions, actual revocation, device/session inventory; cookie deletion alone does not revoke bearer tokens."
+    },
+    {
+      "path": "api/boot.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/main.ts",
+      "sha256": "613c31edd84d4810955e2bd1cb5a19fba46b7c7ea251cd6daa33100798565227",
+      "bytes": 4759,
+      "reason": "Dedicated API boot, 256KiB default bounds, raw callback route, health/readiness; no Vite/static server."
+    },
+    {
+      "path": "api/context.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/auth/request-context.ts",
+      "sha256": "b6b8e6e1ab58f0482d48817d297eb5e83356d7f23715c36a917521ca1f99f6d7",
+      "bytes": 572,
+      "reason": "Explicit subject, audience, legal entity, authentication assurance and correlation context."
+    },
+    {
+      "path": "api/kimi/auth.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "e739b199ff5679ccd61b65ebf07124c671d06a554fc86de1a128ecb05205d72a",
+      "bytes": 3937,
+      "reason": "Remove Kimi platform identity/session coupling; replace with validated customer/workforce OIDC, PKCE, nonce/state and revocation."
+    },
+    {
+      "path": "api/kimi/platform.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "3d8c5d609a8641877f7e26ce69fa5987ba5ea84425cd27394317dd187b0c094e",
+      "bytes": 712,
+      "reason": "Remove Kimi platform identity/session coupling; replace with validated customer/workforce OIDC, PKCE, nonce/state and revocation."
+    },
+    {
+      "path": "api/kimi/session.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "478659cb9189fc814e9f508b41eb9eb0ba4cf0b76c4cf7f52847709a0ce06393",
+      "bytes": 1130,
+      "reason": "Remove Kimi platform identity/session coupling; replace with validated customer/workforce OIDC, PKCE, nonce/state and revocation."
+    },
+    {
+      "path": "api/kimi/types.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "cdb5cec7f668ea83841b2ad0eaeaf5b85965f72c39cf4ba3bf98297ac25cbe22",
+      "bytes": 307,
+      "reason": "Remove Kimi platform identity/session coupling; replace with validated customer/workforce OIDC, PKCE, nonce/state and revocation."
+    },
+    {
+      "path": "api/lib/clientlog.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/telemetry/ingest.controller.ts",
+      "sha256": "d517f4bd138d69afaef4935f5939c838d4be532225d79ff23ca538632320e362",
+      "bytes": 6917,
+      "reason": "Authenticated, rate-limited allowlist telemetry; no arbitrary browser log ingestion into privileged local logs."
+    },
+    {
+      "path": "api/lib/cookies.ts",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/src/auth/cookies.ts; apps/admin-web/src/auth/cookies.ts",
+      "sha256": "f7a010030fad3689ca38277c9d4193400486464cf3fd6e4c88cf5f6904815be4",
+      "bytes": 462,
+      "reason": "Host-only secure cookies, separate names/origins, CSRF and shorter sessions."
+    },
+    {
+      "path": "api/lib/env.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/config/runtime.ts",
+      "sha256": "c52fc532bcdd2d3d06b3be81466ce727374a20b061eb58dfdf9da7e081b16908",
+      "bytes": 579,
+      "reason": "Strict startup validation, secret references, production/sandbox isolation; no fallback money config."
+    },
+    {
+      "path": "api/lib/http.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/providers/transport.ts",
+      "sha256": "7b31ab2927a42a0f3ab1d883feacc42280a00960a76ca911bcc559e3f143d4db",
+      "bytes": 2827,
+      "reason": "Per-provider deadlines, typed ambiguity, raw evidence and safe retry policy; no blind payment retry."
+    },
+    {
+      "path": "api/lib/logger.ts",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/observability/logger.ts",
+      "sha256": "c5358fa8d0678c0fafd358cc31e83a26f336821fb513bb8020c13ff50b75913b",
+      "bytes": 6763,
+      "reason": "Structured stdout/OTel, scrub errors, no Kimi-specific local file dependency."
+    },
+    {
+      "path": "api/lib/requestcontext.ts",
+      "disposition": "replace",
+      "source_decision": "move",
+      "target": "packages/observability/request-context.ts",
+      "sha256": "e6b9424c68b1100dc7ccfaea9838f62cc7f66d1c18db09d621e55e5f1e3c2056",
+      "bytes": 1863,
+      "reason": "Retain AsyncLocalStorage correlation idea; validate upstream IDs and add trace propagation."
+    },
+    {
+      "path": "api/lib/scrub.ts",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/observability/redaction.ts",
+      "sha256": "c83dade20a5b489a540272b5c56d6a8fa00e6b3e1bff72b864e9587f6ed13e68",
+      "bytes": 2232,
+      "reason": "Allowlist structured fields, fuzz PII/PAN/secret redaction; blacklist alone insufficient."
+    },
+    {
+      "path": "api/lib/vite.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "ba7c9068e75ef736d53024f34d07cb0793786e7d6db5ac0bc5663648a052ce89",
+      "bytes": 742,
+      "reason": "Vite dev/static wiring retired; Next standalone containers own web serving."
+    },
+    {
+      "path": "api/middleware.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/auth/{authentication,authorization}.guard.ts",
+      "sha256": "07d6d4bf5c7bc32f9e2a15c13f228558699b0b4d0b5065d51270ce5e1a6a1274",
+      "bytes": 2016,
+      "reason": "Default-deny object/action policy; no user/admin enum gate."
+    },
+    {
+      "path": "api/queries/connection.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/database/pool.ts",
+      "sha256": "935d3f79901082b54f4ae4292c4dfb9c8ceb402e9eea3e6f177bb7f401156e97",
+      "bytes": 447,
+      "reason": "pg pool, least-privilege role, transactions and retry context."
+    },
+    {
+      "path": "api/queries/users.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/domain/identity/customer-repository.ts",
+      "sha256": "8ce74035f0b155e29a434708d72c9623527606bcd79a6959af00ef17b8b188a7",
+      "bytes": 858,
+      "reason": "Remove ownerUnionId automatic admin; OIDC subject mapping and scoped customers."
+    },
+    {
+      "path": "api/remittance-router.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/customer/*.controller.ts",
+      "sha256": "0cccde215827faf76121a11aee49b54ce8d2189794ff0f43f1c6286dc64bf13f",
+      "bytes": 17467,
+      "reason": "Port command intent; remove simulatePartnerCompletion/addSandboxFunds, implement REST, ownership and idempotency."
+    },
+    {
+      "path": "api/router.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/api/src/app.module.ts",
+      "sha256": "271e5a74e94c109f4c8357197d39e4687271a34f6837e351cca532300471fa01",
+      "bytes": 431,
+      "reason": "REST modules from OpenAPI, no runtime database row export."
+    },
+    {
+      "path": "api/services/core.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/domain/{quotes,ledger,transfers,treasury}/*.ts",
+      "sha256": "49cf30836c1a0fd3d86aceafa4436233347dc40a9b09707097e48f90f76cf7e9",
+      "bytes": 13784,
+      "reason": "Float pricing, simulated funding, unguarded balances and synthetic completion must be replaced by G/E algorithms."
+    },
+    {
+      "path": "components.json",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/ui-web/components.json",
+      "sha256": "22643b642f17cd817ec94d8439a272dac28119af0aebf8219a96ac1c2f4c61dd",
+      "bytes": 461,
+      "reason": "Shared alias and token destinations for ported primitives."
+    },
+    {
+      "path": "contracts/constants.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/contracts/src/auth.ts",
+      "sha256": "1115a0ea08874a7d0ff3c534107ed247c2312a0cb64848dd1cccf0074ae0892d",
+      "bytes": 335,
+      "reason": "Remove one-year Kimi cookie policy; contract constants only."
+    },
+    {
+      "path": "contracts/errors.ts",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/contracts/src/problem.ts",
+      "sha256": "823cdb78cfc45faa3077db9d2f5cd9e1bd8b8f87e5941e38daa6cde0f19d990b",
+      "bytes": 501,
+      "reason": "Stable codes, requestId, retryability, field errors and operation links."
+    },
+    {
+      "path": "contracts/types.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/contracts/src/generated.ts",
+      "sha256": "191164b8f041fdf08032103ccceeeba5eea342c9625263ee987e52d65d290d48",
+      "bytes": 61,
+      "reason": "Generate wire DTOs, do not export DB PII/types."
+    },
+    {
+      "path": "db/migrations/.gitkeep",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "reason": "Replace empty migration evidence with versioned executable SQL."
+    },
+    {
+      "path": "db/migrations/meta/0000_snapshot.json",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "02dfe2d2d4328c5d705d4dfb1f69cc0cce88ae0ebeb0088631e36acb7119aed7",
+      "bytes": 38559,
+      "reason": "Generated MySQL metadata not a production migration."
+    },
+    {
+      "path": "db/migrations/meta/_journal.json",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "749470d7a6b6f6def505edcc599df4d77b2e069aabc95482fa66bae3d4bde014",
+      "bytes": 204,
+      "reason": "Generated MySQL metadata not retained as PostgreSQL history."
+    },
+    {
+      "path": "db/relations.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "85acb8ece8fbb5031fc56fa8c70338d9b8b06ef3b032391fff8532c6373c7186",
+      "bytes": 27,
+      "reason": "Empty placeholder is not schema evidence; FK relationships reside in SQL."
+    },
+    {
+      "path": "db/schema.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/database/migrations/001_core.sql",
+      "sha256": "07e4bffed838b2ea40cfdedd326f2a9f7ba3045a816014f868d341e074eea1c8",
+      "bytes": 12667,
+      "reason": "PostgreSQL executable schema with FK, immutable journal and version/state guards."
+    },
+    {
+      "path": "db/seed.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "tests/fixtures/sandbox.ts",
+      "sha256": "b7af03880addf65c383c49f2b6bb19c739fe67ea718ef816fb11f027dbf73d5a",
+      "bytes": 9313,
+      "reason": "Fictional sandbox-only fixtures with environmental fail-closed guard; no production seeding."
+    },
+    {
+      "path": "drizzle.config.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "554769ef8024b45c332b68850ebe9a34c0b0deab819ca6ef269b164027c2d89a",
+      "bytes": 378,
+      "reason": "MySQL/Drizzle migration path retired; raw SQL migration runner."
+    },
+    {
+      "path": "eslint.config.js",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/eslint-config/index.js",
+      "sha256": "4efe97b16d1200fac0eaf07aa00930a8668b1f96a0be1891ace8c1e712ff0ccb",
+      "bytes": 616,
+      "reason": "Server/client boundaries, no floating money or unawaited financial tasks."
+    },
+    {
+      "path": "index.html",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/customer-web/app/layout.tsx",
+      "sha256": "f6e9ef80f3314d2f462da593610fada2b667ed59b11f8417702c8fa8501cff73",
+      "bytes": 741,
+      "reason": "Port metadata/icons into Next metadata; remove Vite script entry."
+    },
+    {
+      "path": "info.md",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "e86b40922c19326c0d3ddf44ac003359f21f105a38324a471e21ddc678b6eafc",
+      "bytes": 1385,
+      "reason": "Generic scaffold notes are obsolete; preserve only in read-only original archive."
+    },
+    {
+      "path": "package-lock.json",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "pnpm-lock.yaml",
+      "sha256": "e410861bb5cf5f9d5cd5be5174842fdfd41d82c7cba7394fdef8c2e55c0b841b",
+      "bytes": 485654,
+      "reason": "Regenerate from reviewed manifests; lock integrity, licenses and SBOM."
+    },
+    {
+      "path": "package.json",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "package.json; apps/*/package.json",
+      "sha256": "12c466719de55d12bb0868009259087c8c6258ed51464e85c1a384593b9ee6b8",
+      "bytes": 3782,
+      "reason": "pnpm workspaces and exact audited pins; remove mysql2, Kimi, unused AI SDKs and Vite runtime."
+    },
+    {
+      "path": "postcss.config.js",
+      "disposition": "replace",
+      "source_decision": "move",
+      "target": "packages/design-tokens/postcss.config.js",
+      "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27",
+      "bytes": 80,
+      "reason": "Compatible shared Tailwind3 build configuration."
+    },
+    {
+      "path": "public/icons/apple-touch-icon.png",
+      "disposition": "port-ui-only",
+      "source_decision": "retain",
+      "target": "apps/customer-web/public/icons/apple-touch-icon.png; apps/mobile/assets/apple-touch-icon.png",
+      "sha256": "e1fe4a601e08fa47f5f6270c732a776ad5479c0924b5f87d0813887065fe8456",
+      "bytes": 1126,
+      "reason": "Keep Kita bitmap asset after visual/license/contrast review; generate platform-required sizes without changing identity."
+    },
+    {
+      "path": "public/icons/favicon-32.png",
+      "disposition": "port-ui-only",
+      "source_decision": "retain",
+      "target": "apps/customer-web/public/icons/favicon-32.png; apps/mobile/assets/favicon-32.png",
+      "sha256": "6f31d0b2379051a1309c0b00c1f3f14adc31bed71e4a408e7969131211aee0cb",
+      "bytes": 251,
+      "reason": "Keep Kita bitmap asset after visual/license/contrast review; generate platform-required sizes without changing identity."
+    },
+    {
+      "path": "public/icons/icon-192.png",
+      "disposition": "port-ui-only",
+      "source_decision": "retain",
+      "target": "apps/customer-web/public/icons/icon-192.png; apps/mobile/assets/icon-192.png",
+      "sha256": "f399f068f70b6624be9432feef2fd9da86057630ad288c1441ee87630de9820d",
+      "bytes": 1206,
+      "reason": "Keep Kita bitmap asset after visual/license/contrast review; generate platform-required sizes without changing identity."
+    },
+    {
+      "path": "public/icons/icon-512.png",
+      "disposition": "port-ui-only",
+      "source_decision": "retain",
+      "target": "apps/customer-web/public/icons/icon-512.png; apps/mobile/assets/icon-512.png",
+      "sha256": "ea18fa3e9ed791870925fed7d67eaa9dcef27b7b626df199b38c03bbd4b4a992",
+      "bytes": 3591,
+      "reason": "Keep Kita bitmap asset after visual/license/contrast review; generate platform-required sizes without changing identity."
+    },
+    {
+      "path": "public/icons/icon-maskable-512.png",
+      "disposition": "port-ui-only",
+      "source_decision": "retain",
+      "target": "apps/customer-web/public/icons/icon-maskable-512.png; apps/mobile/assets/icon-maskable-512.png",
+      "sha256": "0c426262dfc2e2d9bb540656133e6d9611c2125891a047dbe18ed0416dde5b00",
+      "bytes": 3367,
+      "reason": "Keep Kita bitmap asset after visual/license/contrast review; generate platform-required sizes without changing identity."
+    },
+    {
+      "path": "src/App.css",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "a0715e0a09edbd0fbde65816a75e0fa0fc8b314c5260c0768c19bf3aac22621a",
+      "bytes": 606,
+      "reason": "Unused generic Vite styles and logo animation do not belong in Kita product."
+    },
+    {
+      "path": "src/App.tsx",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/customer-web/app/layout.tsx; apps/admin-web/app/layout.tsx",
+      "sha256": "0257613f957270dd69e8bd77a265fff96258e33ee58fe978540024246cc3a604",
+      "bytes": 2024,
+      "reason": "Next route trees; physical admin separation and scoped server reads."
+    },
+    {
+      "path": "src/components/AppShell.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/ui-web/customer-shell.tsx; apps/admin-web/components/admin-shell.tsx",
+      "sha256": "6765162de6ab236b80adb0f8ce423aba48c9974bdcdbfb755f1f8c33d29038af",
+      "bytes": 7607,
+      "reason": "Split customer/admin navigation and audience; replace tRPC identity hooks."
+    },
+    {
+      "path": "src/components/AuthLayout.tsx",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "apps/admin-web/components/workbench-layout.tsx",
+      "sha256": "751e39d2bdf3c420a80debbb4780637f14e32e09b335e02f1ad3a03f9f3508cb",
+      "bytes": 9039,
+      "reason": "Remove duplicate Kimi scaffold/links and build dedicated workforce workbench."
+    },
+    {
+      "path": "src/components/AuthLayoutSkeleton.tsx",
+      "disposition": "replace",
+      "source_decision": "move",
+      "target": "packages/ui-web/auth-layout-skeleton.tsx",
+      "sha256": "aa6c35cd632c36c36d2e0830c064703d848f0cd02c0c6ce488a9f3fafe5a19e4",
+      "bytes": 1618,
+      "reason": "Useful skeleton; reduced motion and status semantics."
+    },
+    {
+      "path": "src/components/Brand.tsx",
+      "disposition": "replace",
+      "source_decision": "retain",
+      "target": "packages/ui-web/brand.tsx",
+      "sha256": "964cda57664b78e43932ac7fcb4bb175fa1d261a6799c54c534d5eb0f3ca3a67",
+      "bytes": 744,
+      "reason": "Retain Kita wordmark; accessible name and correct ink/lime variants."
+    },
+    {
+      "path": "src/components/QuoteCalculator.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/components/quote-calculator.tsx",
+      "sha256": "ca2a0d4833e490b20a369c8dc22af7730f45129b6be0bb8ce6b9a5ad3cb32f77",
+      "bytes": 9339,
+      "reason": "Retain form/composition; server-only pricing, exact strings, stale/expiry distinction and race-safe response selection."
+    },
+    {
+      "path": "src/components/StatusBadge.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/ui-web/status-badge.tsx",
+      "sha256": "a00d4e4d939932018fca7c9ec39f74057575aab868c941062f94e567b60a5fec",
+      "bytes": 1029,
+      "reason": "Map independent states, neutral review, accessible icons/text; no paid=settled collapse."
+    },
+    {
+      "path": "src/components/ui/accordion.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/accordion.tsx",
+      "sha256": "1e00288c7eee72380002164ea3ff7589df5d92f2f1b8c7aa5077596ef680acdb",
+      "bytes": 2039,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/alert-dialog.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/alert-dialog.tsx",
+      "sha256": "683cf8b6c3b0c29fb0e31f36e8c7794c63ab5b7ab431f7441ea2d478bbf9fe41",
+      "bytes": 3850,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/alert.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/alert.tsx",
+      "sha256": "49d8311589b810b106aada8ef7b13f70b2b1f68cfce4e1458b7f31a191f420e9",
+      "bytes": 1614,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/aspect-ratio.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/aspect-ratio.tsx",
+      "sha256": "6a75117416aa89200cf31e8d61643b428e812f479caea857c80004b26d893e79",
+      "bytes": 280,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/avatar.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/avatar.tsx",
+      "sha256": "e637ab3522c01631eac2e456588ef301314e2bb7940ebf7cd96e698a868d47bc",
+      "bytes": 1083,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/badge.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/badge.tsx",
+      "sha256": "e7455feb113b38c59456ba29a9ec264b5ffa1daae8883866332ad637ffd57c31",
+      "bytes": 1633,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/breadcrumb.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/breadcrumb.tsx",
+      "sha256": "22f3f4c13ed1085c4131379bfccc6fb173a474f861636bc2736506820153aa08",
+      "bytes": 2357,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/button-group.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/button-group.tsx",
+      "sha256": "ccbf09097f5ebf2eec86f1a96cb92e8dd39d251ebb5867394196c8b4fec68a5c",
+      "bytes": 2209,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/button.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/button.tsx",
+      "sha256": "5a5c4b8b60a8a80ba7b8b5d0319be2d3c61bfd2ce4fc2a645371dee9f6db0a77",
+      "bytes": 2218,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/calendar.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/calendar.tsx",
+      "sha256": "c8e67d15d8622135b72045d974a3234ea99f5ffcc1b981eafea8847a14ae1f12",
+      "bytes": 7793,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/card.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/card.tsx",
+      "sha256": "2040cdff27cd1ed771e0ebbd15abcd73d31f2f1e4be6664bd6816fffd2a87476",
+      "bytes": 1987,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/carousel.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/carousel.tsx",
+      "sha256": "10c5388b66d98f0c555dad2e5b89b9bc846fbc1a3de101ee8b98abc305ec2c51",
+      "bytes": 5542,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/chart.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/chart.tsx",
+      "sha256": "39a2fde544144e0ed0e3e7f76eb3f3988f570f849f30f62208c6f3e2fc4e3e4f",
+      "bytes": 10069,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/checkbox.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/checkbox.tsx",
+      "sha256": "a8292972a5b81eff164f621ac0bb66f4ed4419d1599e2d4901968e216574677f",
+      "bytes": 1219,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/collapsible.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/collapsible.tsx",
+      "sha256": "661444318605c90d19e47e4d21289a68b4c5f7f01782be70dafa80d3f7a4cd08",
+      "bytes": 786,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/command.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/command.tsx",
+      "sha256": "416cdc19eb9e7301b51f9665b4f1a797534769a6bb58a563808979f460b0b8a2",
+      "bytes": 4804,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/context-menu.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/context-menu.tsx",
+      "sha256": "70e547a9bececcc98adf2fbfb2cae05c99179707ab0edb1ddfb5d2de329dab42",
+      "bytes": 8274,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/dialog.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/dialog.tsx",
+      "sha256": "6333f1124e85ff25bce5061ac9ab5981e5346782d5535c9dfeeb51b2d535a7cc",
+      "bytes": 3981,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/drawer.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/drawer.tsx",
+      "sha256": "0c9464ed4f95207ff6ec0b8f433f550388ea0fe57fecd36bbe100b084ee46a3e",
+      "bytes": 4255,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/dropdown-menu.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/dropdown-menu.tsx",
+      "sha256": "ba022169876b487c849d046ac577654ab61a4cfba158305c8790c572b704ed9e",
+      "bytes": 8410,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/empty.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/empty.tsx",
+      "sha256": "584b491f9eb69f8041b3d3732a4d139f5af01de19a00b7a97656c7af7a78716a",
+      "bytes": 2396,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/field.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/field.tsx",
+      "sha256": "e9dcb51b16e5f235bdf23a0b4a092e55c05b2bad08a83126ac675b72aae5380d",
+      "bytes": 6145,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/form.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/form.tsx",
+      "sha256": "a12f73507ab613e9d797979b988a15e32d23458fc8dd4ba71b922aeee977a3b6",
+      "bytes": 3764,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/hover-card.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/hover-card.tsx",
+      "sha256": "031f6a309d87c8e42a2282fccc277dde75e373de8c93dad881582c9dc13e05d0",
+      "bytes": 1532,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/input-group.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/input-group.tsx",
+      "sha256": "c0df02569e483db8ee86bd51b3b392a1ba62b276604d8c7ea90a9efc5faa9e25",
+      "bytes": 5065,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/input-otp.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/input-otp.tsx",
+      "sha256": "7fd7ed5273f849cde558238148ee1bbae729aa1149407c7c732b6c65906933d2",
+      "bytes": 2240,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/input.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/input.tsx",
+      "sha256": "56b7fd30208addbcc2468cfda4f5bc0a55342211deaab61ee35b1c352b1622f1",
+      "bytes": 962,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/item.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/item.tsx",
+      "sha256": "6d64b756260749245b3a1f292e2aaf2774d7ec0b8bb99403eb8c1be31bd26900",
+      "bytes": 4494,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/kbd.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/kbd.tsx",
+      "sha256": "886e04c83aaa016dfce924e461aa38aa68a9f5c83bdaedd6209dc358c32a8f22",
+      "bytes": 862,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/label.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/label.tsx",
+      "sha256": "9ec42c8a57e82311118b794318409ee02b2cebfa49ba6cce8457cff6448cd471",
+      "bytes": 611,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/menubar.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/menubar.tsx",
+      "sha256": "b4be4da586ce1288e8259b1e760a9e317eb0ee9183548c762d8b2a222bbdb3e5",
+      "bytes": 8380,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/navigation-menu.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/navigation-menu.tsx",
+      "sha256": "d71f57fe0f365541fbf5d00196b0b78a461d8c4f38d35293e5754680d93b9245",
+      "bytes": 6664,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/pagination.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/pagination.tsx",
+      "sha256": "374ad135c3d4ff3ec080a0009cd9745cdd0e12faa89d2b0e86074f11e5127fd1",
+      "bytes": 2717,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/popover.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/popover.tsx",
+      "sha256": "29a217781737bbf5c430859b3de46097a44ada81c4143c2d05543d2167de0ee1",
+      "bytes": 1635,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/progress.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/progress.tsx",
+      "sha256": "9e36ca3f10bc56b69058d8edd342832b72c8c1b2d36cd142a0decb2445c3b724",
+      "bytes": 726,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/radio-group.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/radio-group.tsx",
+      "sha256": "b12ca5cef859dd75b274337234bae66e413b0f97845243254a1dedcb2d7a7237",
+      "bytes": 1466,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/resizable.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/resizable.tsx",
+      "sha256": "4634b0a700b91e5d422babc1f068b6d145b5f000c8aff62d5cfc9b5711fbff73",
+      "bytes": 1980,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/scroll-area.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/scroll-area.tsx",
+      "sha256": "1c5d0b242d0513848f4bfa9b57ba7f438d9b1120617029941bfaa137196ecead",
+      "bytes": 1645,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/select.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/select.tsx",
+      "sha256": "68fc754d3042f9fec3406895845e6fcc05d44f93a049478a9d3c706919100ebe",
+      "bytes": 6344,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/separator.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/separator.tsx",
+      "sha256": "e9dddbd8dbbc0eccd683306481b0f0bbc8e2b60ea97817416ebb9fe7fbbbdca8",
+      "bytes": 699,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/sheet.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/sheet.tsx",
+      "sha256": "fbe9b257fd95b9865e1aba651489899c959ed5c16cb8493fe8c2733f83b92ee1",
+      "bytes": 4076,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/sidebar.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/sidebar.tsx",
+      "sha256": "6074d8027b4bc9ea2d5eb1527a8528a7fa69df96f6261b9c6441c3980d41700f",
+      "bytes": 21638,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/skeleton.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/skeleton.tsx",
+      "sha256": "f2aea81d8baf2b621945382aabac150e3db40f20d19ac1abea7aff805f1dc33c",
+      "bytes": 276,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/slider.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/slider.tsx",
+      "sha256": "640996327017c3977e3c61eee8ec55230fa0bec509d0f4b44bdc9acdd8eca138",
+      "bytes": 1996,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/sonner.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/sonner.tsx",
+      "sha256": "a3868f2a8aafd8e2dc96b7ae145009939e9d8723cbb5a4b61d7b7d9bed9df478",
+      "bytes": 1020,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/spinner.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/spinner.tsx",
+      "sha256": "3e6e6e8d37fb4069f8e43e55318f8db06fbc36e6c8be0096da3c9337c1c798b9",
+      "bytes": 331,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/switch.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/switch.tsx",
+      "sha256": "17f2390d98e8ce4d9e90155eac1918266914d6a9ada7c276b5d1c917cef0e969",
+      "bytes": 1177,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/table.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/table.tsx",
+      "sha256": "95e3ef5db88b3bbfb68eed12f341fb942e40ca815f4342e1d5dbc8c8d47c783d",
+      "bytes": 2434,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/tabs.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/tabs.tsx",
+      "sha256": "e8469e599381cf021ce751c27cca3d8cb06440a45665ca9c2ef2efb0acef1fd9",
+      "bytes": 1969,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/textarea.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/textarea.tsx",
+      "sha256": "de4e9fb0fd8e8ed10ea2e475ffe202a922ffe77e3f3edb2c517b0781447ad1b4",
+      "bytes": 759,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/toggle-group.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/toggle-group.tsx",
+      "sha256": "c63c671fe328f2c1e0d58e3df82a474e73834037c5a39a9ff566a4b3b2cf9010",
+      "bytes": 2300,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/toggle.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/toggle.tsx",
+      "sha256": "ab2e52debb86451889ac9519dfe27daf3a86d70aa2833da8ed8f6cf3146197ff",
+      "bytes": 1556,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/components/ui/tooltip.tsx",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/ui/tooltip.tsx",
+      "sha256": "cbc12f4086448f8a307ed5fbb160f79467c84a44c48ca0dbd2c62e39a2db6f5d",
+      "bytes": 1892,
+      "reason": "Port existing accessible primitive; replace aliases/use-mobile imports, test keyboard/focus and Kita contrast; add use client only where hooks/browser APIs require it."
+    },
+    {
+      "path": "src/const.ts",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/contracts/src/routes.ts",
+      "sha256": "f46e9241d92cd3a39ae007ebe69160e6949153ccdbea3590b0d14a0b0deb8ec7",
+      "bytes": 36,
+      "reason": "Named customer routes; no hardcoded Kimi login."
+    },
+    {
+      "path": "src/hooks/use-mobile.ts",
+      "disposition": "port-ui-only",
+      "source_decision": "move",
+      "target": "packages/ui-web/hooks/use-mobile.ts",
+      "sha256": "ad0936f84f1df79d3697bfbff9c18f8ad58431c1cbaf2359c6a853b0fcc9f28b",
+      "bytes": 565,
+      "reason": "Retain responsive hint; never authorization or native platform detection."
+    },
+    {
+      "path": "src/hooks/useAuth.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/api-client/use-session.ts",
+      "sha256": "6e1317eff811f5f358832bb827737eadea68cfd308d7be9c4aa484d4ea8d53b3",
+      "bytes": 1471,
+      "reason": "OIDC session read, rotation/revocation, real permissions, clear caches on logout."
+    },
+    {
+      "path": "src/index.css",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/design-tokens/kita.css",
+      "sha256": "8c12efd269040f00b9432edf00629fc90368ed50a40614ca0cf75b0eb3685e05",
+      "bytes": 5020,
+      "reason": "Preserve ink/warm/lime and fonts; correct exact hex/contrast, import in both web apps."
+    },
+    {
+      "path": "src/lib/format.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/money/format.ts",
+      "sha256": "38af7e2a482de45f2e3868069732d0219288b2a03df20588ef9f1871f6d729c9",
+      "bytes": 1579,
+      "reason": "Exact BigInt/string formatting and locale/currency exponents; remove Number conversion."
+    },
+    {
+      "path": "src/lib/logger.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/observability/browser.ts",
+      "sha256": "81e58e3e745478dc36e7f6c64cdbb06cc361556b4c978a3eca7752c3fb68cb8c",
+      "bytes": 7348,
+      "reason": "Consent-aware allowlist and no screen replay on money/identity pages."
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "disposition": "port-ui-only",
+      "source_decision": "retain",
+      "target": "packages/ui-web/lib/utils.ts",
+      "sha256": "7c8c3dfc0cdd370d44932828eb067ef771c8fe7996693221d5d4b90af6d54f2d",
+      "bytes": 166,
+      "reason": "Class merging utility remains useful, module path adjusted."
+    },
+    {
+      "path": "src/main.tsx",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "1b81be0019913bb9070b9656bdea3774eb406498ce6587587328e8ba47383c33",
+      "bytes": 434,
+      "reason": "Next owns hydration and entry point."
+    },
+    {
+      "path": "src/pages/AdminAudit.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/admin-web/app/audit/page.tsx",
+      "sha256": "f262a0e08b4a248dad7433cca521dc16eaf8b00beb14f3098e606bc8d6d3f320",
+      "bytes": 8400,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Use authorized commands and independent approval, no forced complete/fail."
+    },
+    {
+      "path": "src/pages/AdminCompliance.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/admin-web/app/compliance/page.tsx",
+      "sha256": "66dd0519f36474dfc985d3abdac5c982c6a6ae053216ffb14e0bc86c6e1394d0",
+      "bytes": 10796,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Use authorized commands and independent approval, no forced complete/fail."
+    },
+    {
+      "path": "src/pages/AdminConfiguration.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/admin-web/app/configuration/page.tsx",
+      "sha256": "79255fa534476a7ae5ac8f2a5b2ccb7f8c047e0706c0135a8e8a4956f4747ac5",
+      "bytes": 17950,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Use authorized commands and independent approval, no forced complete/fail."
+    },
+    {
+      "path": "src/pages/AdminOverview.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/admin-web/app/page.tsx",
+      "sha256": "bfd1543e6ce7168832cace2339b86cba0e44a0a4b032f8140c30e97e29c05f48",
+      "bytes": 6421,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Use authorized commands and independent approval, no forced complete/fail."
+    },
+    {
+      "path": "src/pages/AdminTransactions.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/admin-web/app/transfers/page.tsx",
+      "sha256": "b93cd616942fab07327375707e7bb6325189c9434e5ae78e33c5187fc4dc80c6",
+      "bytes": 17033,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Use authorized commands and independent approval, no forced complete/fail."
+    },
+    {
+      "path": "src/pages/Dashboard.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/home/page.tsx",
+      "sha256": "688116f602c66db9f42580b01d7f7a91000a018a31c78bda6fafcd6127db40ba",
+      "bytes": 9885,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/Home.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/page.tsx",
+      "sha256": "fb5289780c89a43d5e769cc842158c9c70d1af2b04f9e0695c4db30f8224035e",
+      "bytes": 20312,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/Login.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/login/page.tsx",
+      "sha256": "406cc32af9b312238f148af7e06adc8d56d678fe5db88b0a70df0f69f487037a",
+      "bytes": 1253,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/NotFound.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/not-found.tsx",
+      "sha256": "31222cf9efae454f03320317db1385c2314904fa1b8fe508417e9d7538ce741f",
+      "bytes": 724,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/Recipients.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/recipients/page.tsx",
+      "sha256": "bc7b50d8149517df06a64da1743db812653a194b3bdbc9f15d4ae04d0fc603de",
+      "bytes": 8697,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/SendMoney.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/send/page.tsx",
+      "sha256": "0907713b1a43bc20c60ee0a87d6e51525f0ac8984f68f4fe52394701abe1c9bb",
+      "bytes": 19426,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/TransferDetails.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/transfers/[id]/page.tsx",
+      "sha256": "c57f52e6ebdb9ff0f149394f7e19048abc23b87b4a90141ddaf7ac0b8e853608",
+      "bytes": 10864,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/pages/Wallet.tsx",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "apps/customer-web/app/wallet/page.tsx",
+      "sha256": "aaa951d5e7432cfa9f5c81f58cd6a7f94db609c1cb5e02b23dc4fe4f7d083992",
+      "bytes": 8749,
+      "reason": "Retain useful Kita layout; replace tRPC with scoped OpenAPI queries and full empty/error/pending states. Remove sandbox success/funding controls; implement provider-backed flow and truthful financial status."
+    },
+    {
+      "path": "src/providers/trpc.tsx",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/api-client/query-provider.tsx",
+      "sha256": "4b29a7cd0a16720f021b1daf5b9e07f6cd4435b9273d65a5b144cfb12f81bc60",
+      "bytes": 954,
+      "reason": "OpenAPI client with scoped query keys and conservative mutation retry."
+    },
+    {
+      "path": "tailwind.config.js",
+      "disposition": "replace",
+      "source_decision": "modify",
+      "target": "packages/design-tokens/tailwind.config.ts",
+      "sha256": "149b62bbe6c8c83d2f3dfb3196bbdb309156a63a7a289acc12f6c9066c763752",
+      "bytes": 2777,
+      "reason": "Keep Tailwind3 during port; scan workspace components; retain Kita palette."
+    },
+    {
+      "path": "tsconfig.app.json",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/tsconfig/tsconfig.app.json",
+      "sha256": "4f315c21e5baadb1c1a1453478549f4f53bc04a44fad30bebb7c3e1247d69706",
+      "bytes": 930,
+      "reason": "Strict monorepo Node/Next/Expo targets, separate DOM/native types and no unchecked indexed access."
+    },
+    {
+      "path": "tsconfig.json",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/tsconfig/tsconfig.json",
+      "sha256": "095df19402d5aa87e29ddf7dd3f7259c6588aac659221f36b94b8a5891adb7f2",
+      "bytes": 401,
+      "reason": "Strict monorepo Node/Next/Expo targets, separate DOM/native types and no unchecked indexed access."
+    },
+    {
+      "path": "tsconfig.node.json",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/tsconfig/tsconfig.node.json",
+      "sha256": "c3dd0fb522feba3596713f51b95bd53d781d845d24aedbfa2ac093d8b39c5120",
+      "bytes": 653,
+      "reason": "Strict monorepo Node/Next/Expo targets, separate DOM/native types and no unchecked indexed access."
+    },
+    {
+      "path": "tsconfig.server.json",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "packages/tsconfig/tsconfig.server.json",
+      "sha256": "7166d855e0fb97203e1ce5dcbdda8546e5a33da543d9ecab67e95f13bc57ed07",
+      "bytes": 616,
+      "reason": "Strict monorepo Node/Next/Expo targets, separate DOM/native types and no unchecked indexed access."
+    },
+    {
+      "path": "vite.config.ts",
+      "disposition": "remove",
+      "source_decision": "remove",
+      "target": "none",
+      "sha256": "9f9870a4c3252052cc5e96e6db4dba3df3be4e6a613b88620f0eb92d925a9c65",
+      "bytes": 2323,
+      "reason": "Retire Vite/PWA plugin and Kimi inspector; reviewed Next/Expo build configuration replaces it."
+    },
+    {
+      "path": "vitest.config.ts",
+      "disposition": "replace",
+      "source_decision": "replace",
+      "target": "vitest.workspace.ts",
+      "sha256": "fb8add3e50ba9d1a82f280430b751dfef08b20c95bd9ef567613836b62d2392c",
+      "bytes": 489,
+      "reason": "Domain fixtures plus real PostgreSQL concurrency/invariant integration tests."
+    }
+  ]
+}

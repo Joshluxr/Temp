@@ -1,0 +1,130 @@
+# ci.yml — T-PLAT-01 / T-PLAT-02 gate pipeline (TEST-PLAT-01, TEST-PLAT-02)
+# Lane coder-25. Gates per docs/kita-plan/12-tests-gates.md L4 (G01/G02) and
+# 13-backlog.md T-PLAT-01/T-PLAT-02. Everything runs inside apps/kita only;
+# the parent t3mp3st security product is never built, installed into, or migrated by CI.
+name: kita-platform
+
+on:
+  push:
+    paths:
+      - 'apps/kita/**'
+  pull_request:
+    paths:
+      - 'apps/kita/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: apps/kita
+
+permissions:
+  contents: read
+
+jobs:
+  test-plat-01:
+    name: TEST-PLAT-01 — exact locks, no server secrets in client bundle
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_PASSWORD: ci-only-not-secret   # ephemeral CI container, never production
+        ports: ['54339:5432']                    # isolated test port per WORKSPACE.md
+        options: >-
+          --health-cmd "pg_isready"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- exact-lock verification -------------------------------------------------
+      - name: Lockfile present (fails until coder-24 freezes pnpm-lock.yaml)
+        run: |
+          test -f pnpm-lock.yaml || { echo "::error::T-PLAT-01 pending: no lockfile frozen"; exit 1; }
+
+      - name: Frozen-lock install (no dependency drift; metric build_dependency_drift)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify workspace set matches BATCH1.md lane map
+        run: |
+          node -e '
+          const w=require("./package.json").workspaces.sort();
+          const want=["apps/admin","apps/customer","apps/mobile","packages/api-client","packages/contracts","packages/database","packages/domain","packages/platform","packages/ui"].sort();
+          const missing=want.filter(x=>!w.includes(x));
+          if(missing.length){console.error("workspaces missing:",missing);process.exit(1)}'
+
+      # --- no-server-secrets-in-client-bundle scan ---------------------------------
+      - name: Build client bundles
+        run: |
+          npm run --workspaces --if-present build
+
+      - name: Scan client bundles for server secrets
+        run: |
+          ! grep -rInE '(DATABASE_URL|PROVIDER_[A-Z_]*(KEY|SECRET|TOKEN)|BEGIN (RSA|EC) PRIVATE KEY)' \
+            apps/customer/.next/static apps/admin/.next/static apps/mobile/dist 2>/dev/null
+          # fail closed if any expected bundle dir is absent
+          ls -d apps/customer/.next/static apps/admin/.next/static >/dev/null
+
+      # --- forbidden outcome-manufacturing scan (docs/FORBIDDEN.md) ------------------
+      - name: No prohibited calls in production-reachable source
+        run: |
+          ! grep -rInE 'addSandboxFunds|simulatePartnerCompletion' \
+            --include='*.ts' --include='*.tsx' \
+            --exclude-dir=node_modules --exclude-dir=__tests__ \
+            apps packages tests 2>/dev/null || {
+              echo "::error::prohibited outcome-manufacturing call found (see docs/FORBIDDEN.md)"; exit 1; }
+
+      # --- lane acceptance specs (coder-24 path) -------------------------------------
+      - name: TEST-PLAT-01 spec
+        run: npx vitest run tests/features/test-plat-01.spec.ts
+
+  test-plat-02:
+    name: TEST-PLAT-02 — fresh Postgres install, no sandbox balance import
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_PASSWORD: ci-only-not-secret
+        ports: ['54339:5432']
+        options: >-
+          --health-cmd "pg_isready"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '54339'
+      PGDATABASE: kita_core_test
+      PGUSER: postgres
+      PGPASSWORD: ci-only-not-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify sql checksums (architect-owned copies, verbatim)
+        run: cd sql && sha256sum -c CHECKSUMS.txt
+
+      # --- fresh Postgres install check ----------------------------------------------
+      # Dual source of truth: the lane coder-23 migrate tool (packages/database/src/migrate.ts,
+      # pending completion) and the direct psql path. Both must produce a schema that passes the
+      # 002 invariant fixture; if migrate.ts gains a CLI entry, keep this step as the independent
+      # oracle (do not replace it with the tool under test).
+      - name: Fresh install of core schema into isolated kita_core_test
+        run: |
+          createdb -T template0 kita_core_test || true
+          psql -X -v ON_ERROR_STOP=1 -d kita_core_test -f sql/001_core.sql
+          psql -X -v ON_ERROR_STOP=1 -d kita_core_test -f sql/002_core_smoke.sql
+          psql -X -v ON_ERROR_STOP=1 -d kita_core_test -f sql/roles.sql
+
+      # --- explicit no-sandbox-balance-import assertion -------------------------------
+      - name: Assert no sandbox balance import (TEST-PLAT-02 / M59)
+        run: |
+          # Fresh core install must carry NO money state at all: 001_core.sql is pure DDL with
+          # zero data seeds, and the 002 fixture transaction rolls back. Any surviving row means
+          # a sandbox balance leaked into live cash.
+          for t in books journals journal_lines account_balances treasury_movements; do
+            c=$(psql -X -tA -d kita_core_test -c "SELECT count(*) FROM $t")
+            [ "$c" = "0" ] || { echo "::error::$t has $c rows after fresh install (sandbox import?)"; exit 1; }
+          done
+          # no seed/migration/platform file may reference sandbox-balance minting
+          ! grep -rInE 'addSandboxFunds|simulatePartnerCompletion' sql database packages packages/platform 2>/dev/null
+
+      - name: TEST-PLAT-02 spec
+        run: npx vitest run tests/features/test-plat-02.spec.ts

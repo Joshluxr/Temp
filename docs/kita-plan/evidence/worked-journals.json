@@ -1,0 +1,950 @@
+{
+  "date": "2026-11-09",
+  "purpose": "Independent planning arithmetic fixtures; variants are alternative branches, not one cumulative ledger; never seed production.",
+  "success": [
+    {
+      "id": "J01",
+      "lines": [
+        {
+          "account": "receivable",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "pending",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        }
+      ]
+    },
+    {
+      "id": "J02",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "receivable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "J03",
+      "lines": [
+        {
+          "account": "pending",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        }
+      ]
+    },
+    {
+      "id": "J04",
+      "lines": [
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "C",
+          "minor": "49500"
+        },
+        {
+          "account": "deferred_margin",
+          "currency": "USD",
+          "side": "C",
+          "minor": "500"
+        },
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "payout_payable",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        }
+      ]
+    },
+    {
+      "id": "J05",
+      "lines": [
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "D",
+          "minor": "49500"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "C",
+          "minor": "49500"
+        }
+      ]
+    },
+    {
+      "id": "J06",
+      "lines": [
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        }
+      ]
+    },
+    {
+      "id": "J07",
+      "lines": [
+        {
+          "account": "payout_transit",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        }
+      ]
+    },
+    {
+      "id": "J08",
+      "lines": [
+        {
+          "account": "payout_payable",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "payout_transit",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        }
+      ]
+    },
+    {
+      "id": "J09",
+      "lines": [
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "D",
+          "minor": "399"
+        },
+        {
+          "account": "deferred_margin",
+          "currency": "USD",
+          "side": "D",
+          "minor": "500"
+        },
+        {
+          "account": "fee_revenue",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        },
+        {
+          "account": "fx_revenue",
+          "currency": "USD",
+          "side": "C",
+          "minor": "500"
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "id": "NET_SETTLE",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "49149"
+        },
+        {
+          "account": "funding_expense",
+          "currency": "USD",
+          "side": "D",
+          "minor": "250"
+        },
+        {
+          "account": "processor_reserve",
+          "currency": "USD",
+          "side": "D",
+          "minor": "1000"
+        },
+        {
+          "account": "receivable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "RESERVE_RELEASE",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "1000"
+        },
+        {
+          "account": "processor_reserve",
+          "currency": "USD",
+          "side": "C",
+          "minor": "1000"
+        }
+      ]
+    },
+    {
+      "id": "PAYOUT_COST",
+      "lines": [
+        {
+          "account": "payout_expense",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "1000"
+        },
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "1000"
+        }
+      ]
+    },
+    {
+      "id": "NEGATIVE_SPREAD",
+      "lines": [
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "fx_loss",
+          "currency": "USD",
+          "side": "D",
+          "minor": "100"
+        },
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50100"
+        },
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "payout_payable",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        }
+      ]
+    },
+    {
+      "id": "REFUND_BEFORE_FX",
+      "lines": [
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "D",
+          "minor": "399"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "REFUND_DEBIT",
+      "lines": [
+        {
+          "account": "refund_transit",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "REFUND_CREDIT",
+      "lines": [
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "refund_transit",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "REFUND_RETURNED",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "refund_transit",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "PAYOUT_RETURN_BEFORE_DELIVERY",
+      "lines": [
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "payout_transit",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        }
+      ]
+    },
+    {
+      "id": "CANCEL_AFTER_FX",
+      "lines": [
+        {
+          "account": "payout_payable",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        },
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "D",
+          "minor": "49500"
+        },
+        {
+          "account": "deferred_margin",
+          "currency": "USD",
+          "side": "D",
+          "minor": "500"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "D",
+          "minor": "399"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "UNWIND_GAIN",
+      "lines": [
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50368"
+        },
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "C",
+          "minor": "49500"
+        },
+        {
+          "account": "fx_gain",
+          "currency": "USD",
+          "side": "C",
+          "minor": "868"
+        }
+      ]
+    },
+    {
+      "id": "UNWIND_LOSS",
+      "lines": [
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "2871000"
+        },
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "2871000"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "48661"
+        },
+        {
+          "account": "fx_loss",
+          "currency": "USD",
+          "side": "D",
+          "minor": "839"
+        },
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "C",
+          "minor": "49500"
+        }
+      ]
+    },
+    {
+      "id": "PARTIAL_RETURN",
+      "lines": [
+        {
+          "account": "prefund",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "1148400"
+        },
+        {
+          "account": "returned_payable",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "1148400"
+        }
+      ]
+    },
+    {
+      "id": "PARTIAL_REFUND",
+      "lines": [
+        {
+          "account": "returned_payable",
+          "currency": "PHP",
+          "side": "D",
+          "minor": "1148400"
+        },
+        {
+          "account": "bridge",
+          "currency": "PHP",
+          "side": "C",
+          "minor": "1148400"
+        },
+        {
+          "account": "bridge",
+          "currency": "USD",
+          "side": "D",
+          "minor": "19800"
+        },
+        {
+          "account": "fx_revenue",
+          "currency": "USD",
+          "side": "D",
+          "minor": "200"
+        },
+        {
+          "account": "fee_revenue",
+          "currency": "USD",
+          "side": "D",
+          "minor": "160"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "20160"
+        }
+      ]
+    },
+    {
+      "id": "LATE_ACH_RETURN",
+      "lines": [
+        {
+          "account": "recovery_receivable",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "CHARGEBACK_FEE",
+      "lines": [
+        {
+          "account": "dispute_expense",
+          "currency": "USD",
+          "side": "D",
+          "minor": "1500"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "C",
+          "minor": "1500"
+        }
+      ]
+    },
+    {
+      "id": "EARLY_ACH_RETURN",
+      "lines": [
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "D",
+          "minor": "399"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "UNRESOLVED_REMEDY",
+      "lines": [
+        {
+          "account": "remediation_expense",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "TAX_POSITIVE",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50499"
+        },
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        },
+        {
+          "account": "tax_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "100"
+        }
+      ]
+    },
+    {
+      "id": "TAX_SETTLE",
+      "lines": [
+        {
+          "account": "tax_payable",
+          "currency": "USD",
+          "side": "D",
+          "minor": "100"
+        },
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "C",
+          "minor": "100"
+        }
+      ]
+    },
+    {
+      "id": "WALLET_TOPUP",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "10000"
+        },
+        {
+          "account": "pending",
+          "currency": "USD",
+          "side": "C",
+          "minor": "10000"
+        }
+      ]
+    },
+    {
+      "id": "WALLET_AVAILABLE",
+      "lines": [
+        {
+          "account": "pending",
+          "currency": "USD",
+          "side": "D",
+          "minor": "10000"
+        },
+        {
+          "account": "available",
+          "currency": "USD",
+          "side": "C",
+          "minor": "10000"
+        }
+      ]
+    },
+    {
+      "id": "WALLET_RESERVE",
+      "lines": [
+        {
+          "account": "available",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "reserved",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50399"
+        }
+      ]
+    },
+    {
+      "id": "WALLET_COMMIT",
+      "lines": [
+        {
+          "account": "reserved",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50399"
+        },
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        }
+      ]
+    },
+    {
+      "id": "REWARD_VEST",
+      "lines": [
+        {
+          "account": "loyalty_expense",
+          "currency": "USD",
+          "side": "D",
+          "minor": "500"
+        },
+        {
+          "account": "reward_provision",
+          "currency": "USD",
+          "side": "C",
+          "minor": "500"
+        }
+      ]
+    },
+    {
+      "id": "REWARD_REDEEM",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50299"
+        },
+        {
+          "account": "reward_provision",
+          "currency": "USD",
+          "side": "D",
+          "minor": "100"
+        },
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        }
+      ]
+    },
+    {
+      "id": "REWARD_EXPIRE",
+      "lines": [
+        {
+          "account": "reward_provision",
+          "currency": "USD",
+          "side": "D",
+          "minor": "400"
+        },
+        {
+          "account": "loyalty_expense_recovery",
+          "currency": "USD",
+          "side": "C",
+          "minor": "400"
+        }
+      ]
+    },
+    {
+      "id": "PROMO_FUND",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "promotion_expense",
+          "currency": "USD",
+          "side": "D",
+          "minor": "399"
+        },
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        }
+      ]
+    },
+    {
+      "id": "PROMO_FAILURE",
+      "lines": [
+        {
+          "account": "principal",
+          "currency": "USD",
+          "side": "D",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "D",
+          "minor": "399"
+        },
+        {
+          "account": "promotion_expense",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        }
+      ]
+    },
+    {
+      "id": "SHORT_FUND",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "49999"
+        },
+        {
+          "account": "unallocated",
+          "currency": "USD",
+          "side": "C",
+          "minor": "49999"
+        }
+      ]
+    },
+    {
+      "id": "SHORT_REFUND",
+      "lines": [
+        {
+          "account": "unallocated",
+          "currency": "USD",
+          "side": "D",
+          "minor": "49999"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "49999"
+        }
+      ]
+    },
+    {
+      "id": "EXCESS_FUND",
+      "lines": [
+        {
+          "account": "cash",
+          "currency": "USD",
+          "side": "D",
+          "minor": "51000"
+        },
+        {
+          "account": "pending",
+          "currency": "USD",
+          "side": "C",
+          "minor": "50000"
+        },
+        {
+          "account": "deferred_fee",
+          "currency": "USD",
+          "side": "C",
+          "minor": "399"
+        },
+        {
+          "account": "excess",
+          "currency": "USD",
+          "side": "C",
+          "minor": "601"
+        }
+      ]
+    },
+    {
+      "id": "EXCESS_REFUND",
+      "lines": [
+        {
+          "account": "excess",
+          "currency": "USD",
+          "side": "D",
+          "minor": "601"
+        },
+        {
+          "account": "refund_payable",
+          "currency": "USD",
+          "side": "C",
+          "minor": "601"
+        }
+      ]
+    }
+  ]
+}

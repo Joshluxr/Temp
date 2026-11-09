@@ -1,0 +1,767 @@
+[
+  {
+    "path": "20261110_025437_enterprise_remit_a87.txt",
+    "bytes": 3326,
+    "sha256": "660bafa6e62161842e7e8ac51a68ab2d3477fca4d8c593d9b794e529271ac654"
+  },
+  {
+    "path": "building_a_philippines_focused_remittance_platform_technical_research.pdf",
+    "bytes": 208677,
+    "sha256": "1f44dcf81157ce993acf58be356120b41ae4737403ee03bccdb906622a5984d0"
+  },
+  {
+    "path": "kimi-archive/Kita_Remittance_Technical_Blueprint.pdf",
+    "bytes": 721138,
+    "sha256": "34a1a9ea7995244a499e31bdf9c7616c59066da2c48700b23cf13015eb0b42db"
+  },
+  {
+    "path": "kimi-archive/app/.backend-features.json",
+    "bytes": 144,
+    "sha256": "3839719f01c0bef14ee591f571bdd381addc9731d3b9f03ccb1b4736f6c448b2"
+  },
+  {
+    "path": "kimi-archive/app/.dockerignore",
+    "bytes": 35,
+    "sha256": "63c04a042584ffb92392a0b832664c992d4948d1acb77d6a3160fb939886163e"
+  },
+  {
+    "path": "kimi-archive/app/.env.example",
+    "bytes": 1365,
+    "sha256": "b1d45f3916ad362268a36e7e0ac8c7dd56f33c40bc3a3377fa5b76b1d7624777"
+  },
+  {
+    "path": "kimi-archive/app/.gitignore",
+    "bytes": 462,
+    "sha256": "25b56bca05230fe1d820d5e24f4981837a3d0796796c272fe44dee90607c2a2a"
+  },
+  {
+    "path": "kimi-archive/app/.prettierignore",
+    "bytes": 310,
+    "sha256": "17f593918ed38aec9deac4301d519a4349172c649d1849ce17190cedbde33228"
+  },
+  {
+    "path": "kimi-archive/app/.prettierrc",
+    "bytes": 310,
+    "sha256": "087532218269eb851c22dcc3d5234ea46bfa513b494a3d7b167b1c1f48c410c5"
+  },
+  {
+    "path": "kimi-archive/app/CREDITS.md",
+    "bytes": 955,
+    "sha256": "13de4cb8e01ab01947c6d1fae130892461ea3337e4e412da7bd2bcf377faacea"
+  },
+  {
+    "path": "kimi-archive/app/README.md",
+    "bytes": 4002,
+    "sha256": "c5baec822de147f6b5fb5338093cd237773372b0491fda46200b0fc124db48b9"
+  },
+  {
+    "path": "kimi-archive/app/api/admin-router.ts",
+    "bytes": 19465,
+    "sha256": "9eccdb4ec5e1434a616f388041dad742c44ee6e27cf4cc34902f5ba95ea7dc00"
+  },
+  {
+    "path": "kimi-archive/app/api/auth-router.ts",
+    "bytes": 725,
+    "sha256": "0741718e5d6c19991060bc246f5db814a0bd958e53d089b85c57c5147cbc4036"
+  },
+  {
+    "path": "kimi-archive/app/api/boot.ts",
+    "bytes": 4759,
+    "sha256": "613c31edd84d4810955e2bd1cb5a19fba46b7c7ea251cd6daa33100798565227"
+  },
+  {
+    "path": "kimi-archive/app/api/context.ts",
+    "bytes": 572,
+    "sha256": "b6b8e6e1ab58f0482d48817d297eb5e83356d7f23715c36a917521ca1f99f6d7"
+  },
+  {
+    "path": "kimi-archive/app/api/kimi/auth.ts",
+    "bytes": 3937,
+    "sha256": "e739b199ff5679ccd61b65ebf07124c671d06a554fc86de1a128ecb05205d72a"
+  },
+  {
+    "path": "kimi-archive/app/api/kimi/platform.ts",
+    "bytes": 712,
+    "sha256": "3d8c5d609a8641877f7e26ce69fa5987ba5ea84425cd27394317dd187b0c094e"
+  },
+  {
+    "path": "kimi-archive/app/api/kimi/session.ts",
+    "bytes": 1130,
+    "sha256": "478659cb9189fc814e9f508b41eb9eb0ba4cf0b76c4cf7f52847709a0ce06393"
+  },
+  {
+    "path": "kimi-archive/app/api/kimi/types.ts",
+    "bytes": 307,
+    "sha256": "cdb5cec7f668ea83841b2ad0eaeaf5b85965f72c39cf4ba3bf98297ac25cbe22"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/clientlog.ts",
+    "bytes": 6917,
+    "sha256": "d517f4bd138d69afaef4935f5939c838d4be532225d79ff23ca538632320e362"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/cookies.ts",
+    "bytes": 462,
+    "sha256": "f7a010030fad3689ca38277c9d4193400486464cf3fd6e4c88cf5f6904815be4"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/env.ts",
+    "bytes": 579,
+    "sha256": "c52fc532bcdd2d3d06b3be81466ce727374a20b061eb58dfdf9da7e081b16908"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/http.ts",
+    "bytes": 2827,
+    "sha256": "7b31ab2927a42a0f3ab1d883feacc42280a00960a76ca911bcc559e3f143d4db"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/logger.ts",
+    "bytes": 6763,
+    "sha256": "c5358fa8d0678c0fafd358cc31e83a26f336821fb513bb8020c13ff50b75913b"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/requestcontext.ts",
+    "bytes": 1863,
+    "sha256": "e6b9424c68b1100dc7ccfaea9838f62cc7f66d1c18db09d621e55e5f1e3c2056"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/scrub.ts",
+    "bytes": 2232,
+    "sha256": "c83dade20a5b489a540272b5c56d6a8fa00e6b3e1bff72b864e9587f6ed13e68"
+  },
+  {
+    "path": "kimi-archive/app/api/lib/vite.ts",
+    "bytes": 742,
+    "sha256": "ba7c9068e75ef736d53024f34d07cb0793786e7d6db5ac0bc5663648a052ce89"
+  },
+  {
+    "path": "kimi-archive/app/api/middleware.ts",
+    "bytes": 2016,
+    "sha256": "07d6d4bf5c7bc32f9e2a15c13f228558699b0b4d0b5065d51270ce5e1a6a1274"
+  },
+  {
+    "path": "kimi-archive/app/api/queries/connection.ts",
+    "bytes": 447,
+    "sha256": "935d3f79901082b54f4ae4292c4dfb9c8ceb402e9eea3e6f177bb7f401156e97"
+  },
+  {
+    "path": "kimi-archive/app/api/queries/users.ts",
+    "bytes": 858,
+    "sha256": "8ce74035f0b155e29a434708d72c9623527606bcd79a6959af00ef17b8b188a7"
+  },
+  {
+    "path": "kimi-archive/app/api/remittance-router.ts",
+    "bytes": 17467,
+    "sha256": "0cccde215827faf76121a11aee49b54ce8d2189794ff0f43f1c6286dc64bf13f"
+  },
+  {
+    "path": "kimi-archive/app/api/router.ts",
+    "bytes": 431,
+    "sha256": "271e5a74e94c109f4c8357197d39e4687271a34f6837e351cca532300471fa01"
+  },
+  {
+    "path": "kimi-archive/app/api/services/core.ts",
+    "bytes": 13784,
+    "sha256": "49cf30836c1a0fd3d86aceafa4436233347dc40a9b09707097e48f90f76cf7e9"
+  },
+  {
+    "path": "kimi-archive/app/components.json",
+    "bytes": 461,
+    "sha256": "22643b642f17cd817ec94d8439a272dac28119af0aebf8219a96ac1c2f4c61dd"
+  },
+  {
+    "path": "kimi-archive/app/contracts/constants.ts",
+    "bytes": 335,
+    "sha256": "1115a0ea08874a7d0ff3c534107ed247c2312a0cb64848dd1cccf0074ae0892d"
+  },
+  {
+    "path": "kimi-archive/app/contracts/errors.ts",
+    "bytes": 501,
+    "sha256": "823cdb78cfc45faa3077db9d2f5cd9e1bd8b8f87e5941e38daa6cde0f19d990b"
+  },
+  {
+    "path": "kimi-archive/app/contracts/types.ts",
+    "bytes": 61,
+    "sha256": "191164b8f041fdf08032103ccceeeba5eea342c9625263ee987e52d65d290d48"
+  },
+  {
+    "path": "kimi-archive/app/db/migrations/.gitkeep",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "kimi-archive/app/db/migrations/meta/0000_snapshot.json",
+    "bytes": 38559,
+    "sha256": "02dfe2d2d4328c5d705d4dfb1f69cc0cce88ae0ebeb0088631e36acb7119aed7"
+  },
+  {
+    "path": "kimi-archive/app/db/migrations/meta/_journal.json",
+    "bytes": 204,
+    "sha256": "749470d7a6b6f6def505edcc599df4d77b2e069aabc95482fa66bae3d4bde014"
+  },
+  {
+    "path": "kimi-archive/app/db/relations.ts",
+    "bytes": 27,
+    "sha256": "85acb8ece8fbb5031fc56fa8c70338d9b8b06ef3b032391fff8532c6373c7186"
+  },
+  {
+    "path": "kimi-archive/app/db/schema.ts",
+    "bytes": 12667,
+    "sha256": "07e4bffed838b2ea40cfdedd326f2a9f7ba3045a816014f868d341e074eea1c8"
+  },
+  {
+    "path": "kimi-archive/app/db/seed.ts",
+    "bytes": 9313,
+    "sha256": "b7af03880addf65c383c49f2b6bb19c739fe67ea718ef816fb11f027dbf73d5a"
+  },
+  {
+    "path": "kimi-archive/app/drizzle.config.ts",
+    "bytes": 378,
+    "sha256": "554769ef8024b45c332b68850ebe9a34c0b0deab819ca6ef269b164027c2d89a"
+  },
+  {
+    "path": "kimi-archive/app/eslint.config.js",
+    "bytes": 616,
+    "sha256": "4efe97b16d1200fac0eaf07aa00930a8668b1f96a0be1891ace8c1e712ff0ccb"
+  },
+  {
+    "path": "kimi-archive/app/index.html",
+    "bytes": 741,
+    "sha256": "f6e9ef80f3314d2f462da593610fada2b667ed59b11f8417702c8fa8501cff73"
+  },
+  {
+    "path": "kimi-archive/app/info.md",
+    "bytes": 1385,
+    "sha256": "e86b40922c19326c0d3ddf44ac003359f21f105a38324a471e21ddc678b6eafc"
+  },
+  {
+    "path": "kimi-archive/app/package-lock.json",
+    "bytes": 485654,
+    "sha256": "e410861bb5cf5f9d5cd5be5174842fdfd41d82c7cba7394fdef8c2e55c0b841b"
+  },
+  {
+    "path": "kimi-archive/app/package.json",
+    "bytes": 3782,
+    "sha256": "12c466719de55d12bb0868009259087c8c6258ed51464e85c1a384593b9ee6b8"
+  },
+  {
+    "path": "kimi-archive/app/postcss.config.js",
+    "bytes": 80,
+    "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27"
+  },
+  {
+    "path": "kimi-archive/app/public/icons/apple-touch-icon.png",
+    "bytes": 1126,
+    "sha256": "e1fe4a601e08fa47f5f6270c732a776ad5479c0924b5f87d0813887065fe8456"
+  },
+  {
+    "path": "kimi-archive/app/public/icons/favicon-32.png",
+    "bytes": 251,
+    "sha256": "6f31d0b2379051a1309c0b00c1f3f14adc31bed71e4a408e7969131211aee0cb"
+  },
+  {
+    "path": "kimi-archive/app/public/icons/icon-192.png",
+    "bytes": 1206,
+    "sha256": "f399f068f70b6624be9432feef2fd9da86057630ad288c1441ee87630de9820d"
+  },
+  {
+    "path": "kimi-archive/app/public/icons/icon-512.png",
+    "bytes": 3591,
+    "sha256": "ea18fa3e9ed791870925fed7d67eaa9dcef27b7b626df199b38c03bbd4b4a992"
+  },
+  {
+    "path": "kimi-archive/app/public/icons/icon-maskable-512.png",
+    "bytes": 3367,
+    "sha256": "0c426262dfc2e2d9bb540656133e6d9611c2125891a047dbe18ed0416dde5b00"
+  },
+  {
+    "path": "kimi-archive/app/src/App.css",
+    "bytes": 606,
+    "sha256": "a0715e0a09edbd0fbde65816a75e0fa0fc8b314c5260c0768c19bf3aac22621a"
+  },
+  {
+    "path": "kimi-archive/app/src/App.tsx",
+    "bytes": 2024,
+    "sha256": "0257613f957270dd69e8bd77a265fff96258e33ee58fe978540024246cc3a604"
+  },
+  {
+    "path": "kimi-archive/app/src/components/AppShell.tsx",
+    "bytes": 7607,
+    "sha256": "6765162de6ab236b80adb0f8ce423aba48c9974bdcdbfb755f1f8c33d29038af"
+  },
+  {
+    "path": "kimi-archive/app/src/components/AuthLayout.tsx",
+    "bytes": 9039,
+    "sha256": "751e39d2bdf3c420a80debbb4780637f14e32e09b335e02f1ad3a03f9f3508cb"
+  },
+  {
+    "path": "kimi-archive/app/src/components/AuthLayoutSkeleton.tsx",
+    "bytes": 1618,
+    "sha256": "aa6c35cd632c36c36d2e0830c064703d848f0cd02c0c6ce488a9f3fafe5a19e4"
+  },
+  {
+    "path": "kimi-archive/app/src/components/Brand.tsx",
+    "bytes": 744,
+    "sha256": "964cda57664b78e43932ac7fcb4bb175fa1d261a6799c54c534d5eb0f3ca3a67"
+  },
+  {
+    "path": "kimi-archive/app/src/components/QuoteCalculator.tsx",
+    "bytes": 9339,
+    "sha256": "ca2a0d4833e490b20a369c8dc22af7730f45129b6be0bb8ce6b9a5ad3cb32f77"
+  },
+  {
+    "path": "kimi-archive/app/src/components/StatusBadge.tsx",
+    "bytes": 1029,
+    "sha256": "a00d4e4d939932018fca7c9ec39f74057575aab868c941062f94e567b60a5fec"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/accordion.tsx",
+    "bytes": 2039,
+    "sha256": "1e00288c7eee72380002164ea3ff7589df5d92f2f1b8c7aa5077596ef680acdb"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/alert-dialog.tsx",
+    "bytes": 3850,
+    "sha256": "683cf8b6c3b0c29fb0e31f36e8c7794c63ab5b7ab431f7441ea2d478bbf9fe41"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/alert.tsx",
+    "bytes": 1614,
+    "sha256": "49d8311589b810b106aada8ef7b13f70b2b1f68cfce4e1458b7f31a191f420e9"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/aspect-ratio.tsx",
+    "bytes": 280,
+    "sha256": "6a75117416aa89200cf31e8d61643b428e812f479caea857c80004b26d893e79"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/avatar.tsx",
+    "bytes": 1083,
+    "sha256": "e637ab3522c01631eac2e456588ef301314e2bb7940ebf7cd96e698a868d47bc"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/badge.tsx",
+    "bytes": 1633,
+    "sha256": "e7455feb113b38c59456ba29a9ec264b5ffa1daae8883866332ad637ffd57c31"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/breadcrumb.tsx",
+    "bytes": 2357,
+    "sha256": "22f3f4c13ed1085c4131379bfccc6fb173a474f861636bc2736506820153aa08"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/button-group.tsx",
+    "bytes": 2209,
+    "sha256": "ccbf09097f5ebf2eec86f1a96cb92e8dd39d251ebb5867394196c8b4fec68a5c"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/button.tsx",
+    "bytes": 2218,
+    "sha256": "5a5c4b8b60a8a80ba7b8b5d0319be2d3c61bfd2ce4fc2a645371dee9f6db0a77"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/calendar.tsx",
+    "bytes": 7793,
+    "sha256": "c8e67d15d8622135b72045d974a3234ea99f5ffcc1b981eafea8847a14ae1f12"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/card.tsx",
+    "bytes": 1987,
+    "sha256": "2040cdff27cd1ed771e0ebbd15abcd73d31f2f1e4be6664bd6816fffd2a87476"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/carousel.tsx",
+    "bytes": 5542,
+    "sha256": "10c5388b66d98f0c555dad2e5b89b9bc846fbc1a3de101ee8b98abc305ec2c51"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/chart.tsx",
+    "bytes": 10069,
+    "sha256": "39a2fde544144e0ed0e3e7f76eb3f3988f570f849f30f62208c6f3e2fc4e3e4f"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/checkbox.tsx",
+    "bytes": 1219,
+    "sha256": "a8292972a5b81eff164f621ac0bb66f4ed4419d1599e2d4901968e216574677f"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/collapsible.tsx",
+    "bytes": 786,
+    "sha256": "661444318605c90d19e47e4d21289a68b4c5f7f01782be70dafa80d3f7a4cd08"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/command.tsx",
+    "bytes": 4804,
+    "sha256": "416cdc19eb9e7301b51f9665b4f1a797534769a6bb58a563808979f460b0b8a2"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/context-menu.tsx",
+    "bytes": 8274,
+    "sha256": "70e547a9bececcc98adf2fbfb2cae05c99179707ab0edb1ddfb5d2de329dab42"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/dialog.tsx",
+    "bytes": 3981,
+    "sha256": "6333f1124e85ff25bce5061ac9ab5981e5346782d5535c9dfeeb51b2d535a7cc"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/drawer.tsx",
+    "bytes": 4255,
+    "sha256": "0c9464ed4f95207ff6ec0b8f433f550388ea0fe57fecd36bbe100b084ee46a3e"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/dropdown-menu.tsx",
+    "bytes": 8410,
+    "sha256": "ba022169876b487c849d046ac577654ab61a4cfba158305c8790c572b704ed9e"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/empty.tsx",
+    "bytes": 2396,
+    "sha256": "584b491f9eb69f8041b3d3732a4d139f5af01de19a00b7a97656c7af7a78716a"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/field.tsx",
+    "bytes": 6145,
+    "sha256": "e9dcb51b16e5f235bdf23a0b4a092e55c05b2bad08a83126ac675b72aae5380d"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/form.tsx",
+    "bytes": 3764,
+    "sha256": "a12f73507ab613e9d797979b988a15e32d23458fc8dd4ba71b922aeee977a3b6"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/hover-card.tsx",
+    "bytes": 1532,
+    "sha256": "031f6a309d87c8e42a2282fccc277dde75e373de8c93dad881582c9dc13e05d0"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/input-group.tsx",
+    "bytes": 5065,
+    "sha256": "c0df02569e483db8ee86bd51b3b392a1ba62b276604d8c7ea90a9efc5faa9e25"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/input-otp.tsx",
+    "bytes": 2240,
+    "sha256": "7fd7ed5273f849cde558238148ee1bbae729aa1149407c7c732b6c65906933d2"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/input.tsx",
+    "bytes": 962,
+    "sha256": "56b7fd30208addbcc2468cfda4f5bc0a55342211deaab61ee35b1c352b1622f1"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/item.tsx",
+    "bytes": 4494,
+    "sha256": "6d64b756260749245b3a1f292e2aaf2774d7ec0b8bb99403eb8c1be31bd26900"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/kbd.tsx",
+    "bytes": 862,
+    "sha256": "886e04c83aaa016dfce924e461aa38aa68a9f5c83bdaedd6209dc358c32a8f22"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/label.tsx",
+    "bytes": 611,
+    "sha256": "9ec42c8a57e82311118b794318409ee02b2cebfa49ba6cce8457cff6448cd471"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/menubar.tsx",
+    "bytes": 8380,
+    "sha256": "b4be4da586ce1288e8259b1e760a9e317eb0ee9183548c762d8b2a222bbdb3e5"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/navigation-menu.tsx",
+    "bytes": 6664,
+    "sha256": "d71f57fe0f365541fbf5d00196b0b78a461d8c4f38d35293e5754680d93b9245"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/pagination.tsx",
+    "bytes": 2717,
+    "sha256": "374ad135c3d4ff3ec080a0009cd9745cdd0e12faa89d2b0e86074f11e5127fd1"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/popover.tsx",
+    "bytes": 1635,
+    "sha256": "29a217781737bbf5c430859b3de46097a44ada81c4143c2d05543d2167de0ee1"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/progress.tsx",
+    "bytes": 726,
+    "sha256": "9e36ca3f10bc56b69058d8edd342832b72c8c1b2d36cd142a0decb2445c3b724"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/radio-group.tsx",
+    "bytes": 1466,
+    "sha256": "b12ca5cef859dd75b274337234bae66e413b0f97845243254a1dedcb2d7a7237"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/resizable.tsx",
+    "bytes": 1980,
+    "sha256": "4634b0a700b91e5d422babc1f068b6d145b5f000c8aff62d5cfc9b5711fbff73"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/scroll-area.tsx",
+    "bytes": 1645,
+    "sha256": "1c5d0b242d0513848f4bfa9b57ba7f438d9b1120617029941bfaa137196ecead"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/select.tsx",
+    "bytes": 6344,
+    "sha256": "68fc754d3042f9fec3406895845e6fcc05d44f93a049478a9d3c706919100ebe"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/separator.tsx",
+    "bytes": 699,
+    "sha256": "e9dddbd8dbbc0eccd683306481b0f0bbc8e2b60ea97817416ebb9fe7fbbbdca8"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/sheet.tsx",
+    "bytes": 4076,
+    "sha256": "fbe9b257fd95b9865e1aba651489899c959ed5c16cb8493fe8c2733f83b92ee1"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/sidebar.tsx",
+    "bytes": 21638,
+    "sha256": "6074d8027b4bc9ea2d5eb1527a8528a7fa69df96f6261b9c6441c3980d41700f"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/skeleton.tsx",
+    "bytes": 276,
+    "sha256": "f2aea81d8baf2b621945382aabac150e3db40f20d19ac1abea7aff805f1dc33c"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/slider.tsx",
+    "bytes": 1996,
+    "sha256": "640996327017c3977e3c61eee8ec55230fa0bec509d0f4b44bdc9acdd8eca138"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/sonner.tsx",
+    "bytes": 1020,
+    "sha256": "a3868f2a8aafd8e2dc96b7ae145009939e9d8723cbb5a4b61d7b7d9bed9df478"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/spinner.tsx",
+    "bytes": 331,
+    "sha256": "3e6e6e8d37fb4069f8e43e55318f8db06fbc36e6c8be0096da3c9337c1c798b9"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/switch.tsx",
+    "bytes": 1177,
+    "sha256": "17f2390d98e8ce4d9e90155eac1918266914d6a9ada7c276b5d1c917cef0e969"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/table.tsx",
+    "bytes": 2434,
+    "sha256": "95e3ef5db88b3bbfb68eed12f341fb942e40ca815f4342e1d5dbc8c8d47c783d"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/tabs.tsx",
+    "bytes": 1969,
+    "sha256": "e8469e599381cf021ce751c27cca3d8cb06440a45665ca9c2ef2efb0acef1fd9"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/textarea.tsx",
+    "bytes": 759,
+    "sha256": "de4e9fb0fd8e8ed10ea2e475ffe202a922ffe77e3f3edb2c517b0781447ad1b4"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/toggle-group.tsx",
+    "bytes": 2300,
+    "sha256": "c63c671fe328f2c1e0d58e3df82a474e73834037c5a39a9ff566a4b3b2cf9010"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/toggle.tsx",
+    "bytes": 1556,
+    "sha256": "ab2e52debb86451889ac9519dfe27daf3a86d70aa2833da8ed8f6cf3146197ff"
+  },
+  {
+    "path": "kimi-archive/app/src/components/ui/tooltip.tsx",
+    "bytes": 1892,
+    "sha256": "cbc12f4086448f8a307ed5fbb160f79467c84a44c48ca0dbd2c62e39a2db6f5d"
+  },
+  {
+    "path": "kimi-archive/app/src/const.ts",
+    "bytes": 36,
+    "sha256": "f46e9241d92cd3a39ae007ebe69160e6949153ccdbea3590b0d14a0b0deb8ec7"
+  },
+  {
+    "path": "kimi-archive/app/src/hooks/use-mobile.ts",
+    "bytes": 565,
+    "sha256": "ad0936f84f1df79d3697bfbff9c18f8ad58431c1cbaf2359c6a853b0fcc9f28b"
+  },
+  {
+    "path": "kimi-archive/app/src/hooks/useAuth.ts",
+    "bytes": 1471,
+    "sha256": "6e1317eff811f5f358832bb827737eadea68cfd308d7be9c4aa484d4ea8d53b3"
+  },
+  {
+    "path": "kimi-archive/app/src/index.css",
+    "bytes": 5020,
+    "sha256": "8c12efd269040f00b9432edf00629fc90368ed50a40614ca0cf75b0eb3685e05"
+  },
+  {
+    "path": "kimi-archive/app/src/lib/format.ts",
+    "bytes": 1579,
+    "sha256": "38af7e2a482de45f2e3868069732d0219288b2a03df20588ef9f1871f6d729c9"
+  },
+  {
+    "path": "kimi-archive/app/src/lib/logger.ts",
+    "bytes": 7348,
+    "sha256": "81e58e3e745478dc36e7f6c64cdbb06cc361556b4c978a3eca7752c3fb68cb8c"
+  },
+  {
+    "path": "kimi-archive/app/src/lib/utils.ts",
+    "bytes": 166,
+    "sha256": "7c8c3dfc0cdd370d44932828eb067ef771c8fe7996693221d5d4b90af6d54f2d"
+  },
+  {
+    "path": "kimi-archive/app/src/main.tsx",
+    "bytes": 434,
+    "sha256": "1b81be0019913bb9070b9656bdea3774eb406498ce6587587328e8ba47383c33"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/AdminAudit.tsx",
+    "bytes": 8400,
+    "sha256": "f262a0e08b4a248dad7433cca521dc16eaf8b00beb14f3098e606bc8d6d3f320"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/AdminCompliance.tsx",
+    "bytes": 10796,
+    "sha256": "66dd0519f36474dfc985d3abdac5c982c6a6ae053216ffb14e0bc86c6e1394d0"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/AdminConfiguration.tsx",
+    "bytes": 17950,
+    "sha256": "79255fa534476a7ae5ac8f2a5b2ccb7f8c047e0706c0135a8e8a4956f4747ac5"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/AdminOverview.tsx",
+    "bytes": 6421,
+    "sha256": "bfd1543e6ce7168832cace2339b86cba0e44a0a4b032f8140c30e97e29c05f48"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/AdminTransactions.tsx",
+    "bytes": 17033,
+    "sha256": "b93cd616942fab07327375707e7bb6325189c9434e5ae78e33c5187fc4dc80c6"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/Dashboard.tsx",
+    "bytes": 9885,
+    "sha256": "688116f602c66db9f42580b01d7f7a91000a018a31c78bda6fafcd6127db40ba"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/Home.tsx",
+    "bytes": 20312,
+    "sha256": "fb5289780c89a43d5e769cc842158c9c70d1af2b04f9e0695c4db30f8224035e"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/Login.tsx",
+    "bytes": 1253,
+    "sha256": "406cc32af9b312238f148af7e06adc8d56d678fe5db88b0a70df0f69f487037a"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/NotFound.tsx",
+    "bytes": 724,
+    "sha256": "31222cf9efae454f03320317db1385c2314904fa1b8fe508417e9d7538ce741f"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/Recipients.tsx",
+    "bytes": 8697,
+    "sha256": "bc7b50d8149517df06a64da1743db812653a194b3bdbc9f15d4ae04d0fc603de"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/SendMoney.tsx",
+    "bytes": 19426,
+    "sha256": "0907713b1a43bc20c60ee0a87d6e51525f0ac8984f68f4fe52394701abe1c9bb"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/TransferDetails.tsx",
+    "bytes": 10864,
+    "sha256": "c57f52e6ebdb9ff0f149394f7e19048abc23b87b4a90141ddaf7ac0b8e853608"
+  },
+  {
+    "path": "kimi-archive/app/src/pages/Wallet.tsx",
+    "bytes": 8749,
+    "sha256": "aaa951d5e7432cfa9f5c81f58cd6a7f94db609c1cb5e02b23dc4fe4f7d083992"
+  },
+  {
+    "path": "kimi-archive/app/src/providers/trpc.tsx",
+    "bytes": 954,
+    "sha256": "4b29a7cd0a16720f021b1daf5b9e07f6cd4435b9273d65a5b144cfb12f81bc60"
+  },
+  {
+    "path": "kimi-archive/app/tailwind.config.js",
+    "bytes": 2777,
+    "sha256": "149b62bbe6c8c83d2f3dfb3196bbdb309156a63a7a289acc12f6c9066c763752"
+  },
+  {
+    "path": "kimi-archive/app/tsconfig.app.json",
+    "bytes": 930,
+    "sha256": "4f315c21e5baadb1c1a1453478549f4f53bc04a44fad30bebb7c3e1247d69706"
+  },
+  {
+    "path": "kimi-archive/app/tsconfig.json",
+    "bytes": 401,
+    "sha256": "095df19402d5aa87e29ddf7dd3f7259c6588aac659221f36b94b8a5891adb7f2"
+  },
+  {
+    "path": "kimi-archive/app/tsconfig.node.json",
+    "bytes": 653,
+    "sha256": "c3dd0fb522feba3596713f51b95bd53d781d845d24aedbfa2ac093d8b39c5120"
+  },
+  {
+    "path": "kimi-archive/app/tsconfig.server.json",
+    "bytes": 616,
+    "sha256": "7166d855e0fb97203e1ce5dcbdda8546e5a33da543d9ecab67e95f13bc57ed07"
+  },
+  {
+    "path": "kimi-archive/app/vite.config.ts",
+    "bytes": 2323,
+    "sha256": "9f9870a4c3252052cc5e96e6db4dba3df3be4e6a613b88620f0eb92d925a9c65"
+  },
+  {
+    "path": "kimi-archive/app/vitest.config.ts",
+    "bytes": 489,
+    "sha256": "fb8add3e50ba9d1a82f280430b751dfef08b20c95bd9ef567613836b62d2392c"
+  },
+  {
+    "path": "kimi_agent_remittancewebsitefullstack.zip",
+    "bytes": 689838,
+    "sha256": "97dab23fb9700532e2db3d386ebc7fbc8d2000514b8f96628d1b33b9b8299d7f"
+  },
+  {
+    "path": "kita_blueprint.txt",
+    "bytes": 87786,
+    "sha256": "ddd993ca6bfd90bec0132c672216853c46a81ab731ef3cc1c74028eda637b1f7"
+  },
+  {
+    "path": "kita_remittance_technical_blueprint.pdf",
+    "bytes": 721138,
+    "sha256": "34a1a9ea7995244a499e31bdf9c7616c59066da2c48700b23cf13015eb0b42db"
+  },
+  {
+    "path": "ph_research.txt",
+    "bytes": 65032,
+    "sha256": "94e7ca8228db743c7cc59c1e1521d2ec375afeb80d8a1a07e77283fd2cc882ca"
+  },
+  {
+    "path": "remit_blueprint.txt",
+    "bytes": 119392,
+    "sha256": "0cf057f1ef7b82fccdb53e947729e89ac4c6135ccd3450388a4f364a4e9f3e5b"
+  },
+  {
+    "path": "remittance-platform-technical-build-research.md",
+    "bytes": 201781,
+    "sha256": "dd8ad092f7d63e0d8687645b2f24abeeb1e6c1af335ec63f465a161ac546cd16"
+  },
+  {
+    "path": "remittance_platform_technical_blueprint.pdf",
+    "bytes": 1233871,
+    "sha256": "f1b3016d9e4948e22fefe7b98f6757fcb886889a00c2a966f3bb5f547c6f0e4d"
+  },
+  {
+    "path": "remittance_platform_technical_research.md",
+    "bytes": 10930,
+    "sha256": "7bbbc2730d050eb7c94e63078e6912854cf69dc00c4d4770e7753afcd9e07195"
+  }
+]

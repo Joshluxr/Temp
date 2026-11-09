@@ -1,0 +1,166 @@
+{
+  "$comment": "Kita T-PLAT-02 production-isolation contract. Machine-readable twin of isolation.md in this directory. Sources: docs/kita-plan/SOL-REVIEW.md, docs/kita-plan/13-backlog.md (T-PLAT-02), docs/kita-plan/sql/001_core.sql, docs/kita-plan/sql/002_core_smoke.sql, docker-compose.yml.",
+  "schemaVersion": 1,
+  "task": "T-PLAT-02",
+  "objective": "KITA-PLAT-02 - fresh install works and sandbox balances never become live cash",
+  "reviewStatus": "CONDITIONAL-PASS (Sol); second batch requires Sol re-review of the scaffold",
+  "database": "kita_core_test",
+  "host": "127.0.0.1",
+  "port": 54339,
+  "topology": {
+    "cluster": "throwaway",
+    "loopbackOnly": true,
+    "provisionedBy": "apps/kita/database/scripts/provision-cluster.sh",
+    "toolingLoginRole": "kita_test",
+    "migrationOwnerRoleRequirements": ["CREATEROLE", "owner of kita_core_test only", "never used by api or worker connections"],
+    "migrationOwnerRoleReason": "docs/kita-plan/sql/001_core.sql:2 - apply once to an empty database as a migration owner with CREATEROLE",
+    "runtimeRoles": [
+      {"name": "kita_api", "login": false, "createdBy": "ddl", "source": "docs/kita-plan/sql/001_core.sql:7"},
+      {"name": "kita_worker", "login": false, "createdBy": "ddl", "source": "docs/kita-plan/sql/001_core.sql:8"},
+      {"name": "kita_posting", "login": false, "createdBy": "ddl", "grants": ["EXECUTE kita.post_journal"], "source": "docs/kita-plan/sql/001_core.sql:9"},
+      {"name": "kita_auditor", "login": false, "createdBy": "ddl", "grants": ["SELECT ON ALL TABLES IN SCHEMA kita"], "source": "docs/kita-plan/sql/001_core.sql:10"}
+    ],
+    "noRuntimeDirectLedgerWrites": {
+      "tables": ["journals", "journal_lines", "ledger_accounts", "account_balances", "approval_decisions"],
+      "assertedIn": "docs/kita-plan/sql/002_core_smoke.sql:98-99",
+      "statedIn": "docs/kita-plan/sql/001_core.sql:178-180"
+    },
+    "composeHasPostgresService": false,
+    "composeEvidence": "docker-compose.yml at repository root declares exactly one service (app, t3mp3st, 127.0.0.1:3333) and NO postgres/db service, no PGDATA volume, no database connection string"
+  },
+  "applyProcedure": {
+    "command": "psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54339 -d kita_core_test -f docs/kita-plan/sql/001_core.sql -f docs/kita-plan/sql/002_core_smoke.sql",
+    "fixtureRollsBack": true,
+    "fixtureSource": "docs/kita-plan/sql/002_core_smoke.sql:1-3,102"
+  },
+  "forbiddenEndpoints": [
+    {
+      "name": "addSandboxFunds",
+      "kind": "mutation",
+      "origin": "docs/kita-sources/kimi-archive/app/api/remittance-router.ts:242",
+      "effect": "posts adjustment ledger pair 'Sandbox wallet top-up' crediting customer Available wallet",
+      "production": "forbidden - do not port, do not reimplement, exclude from build path"
+    },
+    {
+      "name": "simulatePartnerCompletion",
+      "kind": "mutation",
+      "origin": "docs/kita-sources/kimi-archive/app/api/remittance-router.ts:281",
+      "effect": "flips transfer to completed, runs completeTransferLedger, appends payout.completed attributed to 'Sandbox payout partner'",
+      "production": "forbidden - outcome manufacturing without provider evidence"
+    },
+    {
+      "name": "admin.complete",
+      "kind": "mutation",
+      "origin": "docs/kita-sources/kimi-archive/app/api/admin-router.ts:35,79-82,112",
+      "production": "forbidden"
+    },
+    {
+      "name": "admin.fail",
+      "kind": "mutation",
+      "origin": "docs/kita-sources/kimi-archive/app/api/admin-router.ts:35,83-85",
+      "production": "forbidden"
+    },
+    {
+      "name": "admin.mark_paid_out",
+      "kind": "mutation",
+      "origin": "docs/kita-sources/kimi-archive/app/api/admin-router.ts:35",
+      "production": "forbidden"
+    },
+    {
+      "name": "fakeKycApproval",
+      "kind": "any",
+      "origin": "kita.identity_decisions (docs/kita-plan/sql/001_core.sql:76), kita.screenings (:77)",
+      "production": "forbidden - state changes require evidence_id NOT NULL and verified evidence; no simulated identity or screening clearance in batch 1"
+    },
+    {
+      "name": "liveProviderMoneyInstruction",
+      "kind": "any",
+      "origin": "kita.provider_attempts leg funding/fx/payout/refund (docs/kita-plan/sql/001_core.sql:41-53)",
+      "production": "forbidden in batch 1 - no real money; external activation gated by T-DEPEND-01 plus N approvals"
+    }
+  ],
+  "forbiddenSeedingSources": [
+    {
+      "source": "kimi-archive MySQL dumps (drizzle dialect mysql)",
+      "evidence": "docs/kita-sources/kimi-archive/app/drizzle.config.ts:12; db/schema.ts uses mysqlTable throughout",
+      "blockedObjects": ["ledger_accounts", "ledger_transactions", "ledger_entries"],
+      "schemaEvidence": "docs/kita-sources/kimi-archive/app/db/schema.ts:114,128,141",
+      "reason": "decimal(20,2) float-shaped amounts with no book/entity dimension; cannot map onto kita.account_balances without inventing provenance"
+    },
+    {
+      "source": "sandbox account_balances / wallet balances from any archive or fixture",
+      "targetTables": ["kita.account_balances", "kita.ledger_accounts"],
+      "schemaEvidence": "docs/kita-plan/sql/001_core.sql:55,56",
+      "reason": "account_balances has no book_id and no status column; provenance must come from journals + verified evidence only"
+    },
+    {
+      "source": "docs/kita-sources/kimi-archive/app/db/seed.ts sandbox workspace seeding",
+      "evidence": "db/seed.ts:25,63-68 fictional transfers, :97 audit action 'sandbox.seeded', :101-104 'Sandbox wallet opening balance' keyed adjustment:seed-wallet",
+      "reason": "docs/kita-plan/03-migration-map.md:53 refiles seed.ts to tests/fixtures/sandbox.ts behind an environmental fail-closed guard; no production seeding"
+    },
+    {
+      "source": "books rows with status='sandbox'",
+      "schemaEvidence": "docs/kita-plan/sql/001_core.sql:14 CHECK(status IN ('disabled','sandbox','live','closed'))",
+      "fixtureEvidence": "docs/kita-plan/sql/002_core_smoke.sql:15 inserts status='sandbox' inside BEGIN..ROLLBACK",
+      "allowedDatabases": ["kita_core_test"]
+    },
+    {
+      "source": "provider_accounts rows with environment='sandbox' attached to a live book",
+      "schemaEvidence": "docs/kita-plan/sql/001_core.sql:18 CHECK(environment IN ('sandbox','production'))"
+    },
+    {
+      "source": "fixture-coded objects from 002_core_smoke.sql",
+      "patterns": ["ledger_accounts.code LIKE 'fixture:%'", "evidence.object_ref LIKE 'test-only://%'", "policies.body ? 'fixture'", "books.legal_entity LIKE 'isolated-smoke-%'", "evidence.source = 'isolated-test'"],
+      "evidence": "docs/kita-plan/sql/002_core_smoke.sql:15-19"
+    },
+    {
+      "source": "DDL static seed rows permitted anywhere (reference data only, non-monetary)",
+      "permitted": ["currencies (docs/kita-plan/sql/001_core.sql:13)", "attempt_edges (docs/kita-plan/sql/001_core.sql:44-53)"],
+      "note": "not a blocking vector; recorded so the gate does not flag them"
+    }
+  ],
+  "liveBalanceDerivation": {
+    "rule": "wallet / account_balances projections in live DBs derive only from signed opening evidence plus journals",
+    "path": [
+      "kita.evidence verified=true (docs/kita-plan/sql/001_core.sql:19,143)",
+      "kita.policies kind='posting' approved via independent kita.approvals + kita.approval_decisions (:16,:72-74,:119-122)",
+      "open kita.accounting_periods (:35,:142)",
+      "kita.post_journal SECURITY DEFINER inserting kita.journals + kita.journal_lines and applying locked per-account deltas to kita.account_balances (:133-167,:152-156)"
+    ],
+    "guardrails": [
+      "per-currency balanced journal constraint triggers (docs/kita-plan/sql/001_core.sql:112-118)",
+      "immutability triggers on journals/journal_lines/ledger_accounts/account_balances-adjacent tables (docs/kita-plan/sql/001_core.sql:169-171)",
+      "no runtime UPDATE/DELETE/INSERT granted on ledger tables (docs/kita-plan/sql/001_core.sql:178-180)",
+      "docs/kita-plan/03-migration-map.md:161 first production ledger opens from signed bank/provider evidence"
+    ]
+  },
+  "promotionGate": {
+    "name": "no sandbox books",
+    "blocking": true,
+    "assert": "no sandbox books",
+    "query": "SELECT count(*) FROM kita.books WHERE status = 'sandbox';",
+    "expected": 0,
+    "onFailure": "abort promotion; fail release; page platform owner",
+    "appliesTo": "every live/candidate production database, before and as a step of each live migration job",
+    "supportingQueries": [
+      {"id": "no_sandbox_provider_accounts_on_live_books", "query": "SELECT count(*) FROM kita.provider_accounts pa JOIN kita.books b ON b.id = pa.book_id WHERE b.status = 'live' AND pa.environment = 'sandbox';", "expected": 0},
+      {"id": "no_fixture_ledger_accounts", "query": "SELECT count(*) FROM kita.ledger_accounts WHERE code LIKE 'fixture:%';", "expected": 0},
+      {"id": "no_test_only_evidence", "query": "SELECT count(*) FROM kita.evidence WHERE object_ref LIKE 'test-only://%';", "expected": 0},
+      {"id": "no_fixture_policies", "query": "SELECT count(*) FROM kita.policies WHERE body ? 'fixture';", "expected": 0},
+      {"id": "no_unverified_evidence_journals", "query": "SELECT count(*) FROM kita.journals j JOIN kita.evidence e ON e.id = j.evidence_id WHERE NOT e.verified;", "expected": 0},
+      {"id": "no_isolated_smoke_books", "query": "SELECT count(*) FROM kita.books WHERE legal_entity LIKE 'isolated-smoke-%';", "expected": 0}
+    ],
+    "structuralChecks": [
+      "live target DSN must NOT be host 127.0.0.1 port 54339 database kita_core_test",
+      "live connection role must not hold CREATEROLE",
+      "kita_api/kita_worker/kita_posting/kita_auditor remain NOLOGIN",
+      "002_core_smoke.sql privilege assertions (has_table_privilege checks) still pass against live schema"
+    ]
+  },
+  "batchOneScope": {
+    "realMoney": false,
+    "fakeKyc": false,
+    "liveProviderCalls": false,
+    "notes": "Documentation slice owns apps/kita/database/config/isolation.md and isolation.json only; SQL copies, src/, scripts/ and tests are owned by other agents."
+  }
+}
