@@ -55,3 +55,29 @@ export interface Kyc01CaptureNotApprovalDetail {
 }
 
 export type Kyc01FailureDetail = Kyc01CaptureNotApprovalDetail;
+
+/**
+ * Provider identity decision (T-KYC-02). Later adverse evidence blocks new payout.
+ */
+export interface Kyc02Input {
+  readonly worker: WorkerIdentity;
+  readonly subjectId: UUID;
+  readonly laterAdverseDecision: boolean;
+  readonly evidenceLocator?: string;
+  readonly journalPosting?: never;
+  readonly payoutAuthorization?: never;
+}
+
+export interface Kyc02Output {
+  readonly eligibleForNewPayout: true;
+  readonly decisionId: UUID;
+  readonly traceEvents: readonly string[];
+}
+
+export interface Kyc02AdverseHoldDetail {
+  readonly code: 'COMPLIANCE_HOLD';
+  readonly subjectId: UUID;
+  readonly reason: string;
+}
+
+export type Kyc02FailureDetail = Kyc02AdverseHoldDetail;
