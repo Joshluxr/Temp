@@ -1,0 +1,338 @@
+[
+  {
+    "id": "SC-01",
+    "name": "Per-currency journal property sequences",
+    "expected": "Generate100000 seeded sequences including USD/PHP/JPY, fees, refunds and reversals; every committed journal balances by book/currency and replay has no new effect",
+    "method": "unit/property + real PostgreSQL"
+  },
+  {
+    "id": "SC-02",
+    "name": "Empty, one-sided, cross-book or wrong-currency journal",
+    "expected": "Deferred header/line constraints and composite FKs reject; no partial balance projection survives",
+    "method": "SQL integration"
+  },
+  {
+    "id": "SC-03",
+    "name": "Append/update/delete committed journal",
+    "expected": "Runtime direct write denied; owner trigger blocks mutation; later transaction cannot add lines; full reversal exactly negates original",
+    "method": "SQL privileges/invariants"
+  },
+  {
+    "id": "SC-04",
+    "name": "Money rounding and overflow",
+    "expected": "G1 golden send/inverse/JPY/tranche/fee/tax/cumulative partial vectors; reject float JSON, precision loss, overflow and excessive decimal places",
+    "method": "unit/property"
+  },
+  {
+    "id": "SC-05",
+    "name": "Concurrent wallet debits",
+    "expected": "Barrier100 clients spending last available funds; permitted total never exceeds initial balance; failed commands leave no reservation/outbox",
+    "method": "multiconnection PostgreSQL"
+  },
+  {
+    "id": "SC-06",
+    "name": "Concurrent provider liquidity",
+    "expected": "Two accepted transfers compete for final prefund including fee/buffer; one reservation succeeds; no negative available",
+    "method": "multiconnection PostgreSQL"
+  },
+  {
+    "id": "SC-07",
+    "name": "Customer double tap, same key and new key same quote",
+    "expected": "One transfer, one economic event and one payout authority; mismatched same-key body409",
+    "method": "API/concurrency"
+  },
+  {
+    "id": "SC-08",
+    "name": "Quote expiry during confirmation",
+    "expected": "At expiry equality reject; before expiry transaction commits accepted terms; client clock/timezone never controls",
+    "method": "time-controlled integration"
+  },
+  {
+    "id": "SC-09",
+    "name": "Accepted quote waits90 minutes/days for funding",
+    "expected": "Accepted binding promise preserved with treasury cost; unaccepted expired quote cannot execute; late uninitiated funds enter remedy flow",
+    "method": "workflow/treasury"
+  },
+  {
+    "id": "SC-10",
+    "name": "Recipient edit/archive during acceptance",
+    "expected": "Ownership and version conflict; immutable submitted destination unaffected; no re-directed in-flight payment",
+    "method": "API/concurrency"
+  },
+  {
+    "id": "SC-11",
+    "name": "Stale FX/cache/provider unavailable/outlier",
+    "expected": "No executable quote on stale feed; indicative display marked; disable rates on invalid values; no fabricated fallback",
+    "method": "provider fault injection"
+  },
+  {
+    "id": "SC-12",
+    "name": "Two workers/lease expiry",
+    "expected": "Only one stable authority; expired submitting lease triggers inquiry, not fresh submit; provider dedup tested",
+    "method": "worker concurrency"
+  },
+  {
+    "id": "SC-13",
+    "name": "Crash before provider call and after acceptance",
+    "expected": "Restart queries original reference; bounded retry only under contract; one real remote effect",
+    "method": "provider fault injection"
+  },
+  {
+    "id": "SC-14",
+    "name": "Timeout before/after primary acceptance, backup unavailable",
+    "expected": "Unknown retains reservation, blocks reroute; proven nonacceptance permits independently approved fallback only",
+    "method": "adapter certification"
+  },
+  {
+    "id": "SC-15",
+    "name": "Temporary provider not-found and expired idempotency window",
+    "expected": "No new instruction until authoritative no-effect proof; repeated inquires keep case visible",
+    "method": "adapter certification"
+  },
+  {
+    "id": "SC-16",
+    "name": "Duplicate, reordered, delayed and equivalent webhooks",
+    "expected": "Delivery+business dedup; paid never regresses; true later return processed once",
+    "method": "inbox/reducer"
+  },
+  {
+    "id": "SC-17",
+    "name": "Invalid signature/replay/malformed/oversize/changed body same ID",
+    "expected": "Reject or quarantine with no financial effect; durable valid receipt precedes2xx",
+    "method": "ingress security"
+  },
+  {
+    "id": "SC-18",
+    "name": "Unknown provider code or amount/currency/beneficiary mismatch",
+    "expected": "Quarantine and case; customer promise unchanged; no automatic success/failure",
+    "method": "adapter security"
+  },
+  {
+    "id": "SC-19",
+    "name": "Outbox send/commit/ack crash and queue purge",
+    "expected": "Same event republished; consumer effect once; DB sweeper recovers missing queue work",
+    "method": "chaos"
+  },
+  {
+    "id": "SC-20",
+    "name": "Worker restart/DLQ replay/active-transfer deployment",
+    "expected": "IDs and request hashes preserved, timers survive; replay permission and audit required",
+    "method": "chaos/deployment"
+  },
+  {
+    "id": "SC-21",
+    "name": "Hold/resume races with dispatch",
+    "expected": "Hold before dispatch commit blocks; later hold records in-flight and cancel inquiry; resolving one hold leaves others",
+    "method": "concurrency"
+  },
+  {
+    "id": "SC-22",
+    "name": "Cancellation versus recipient deposit/pickup",
+    "expected": "Original request/agent time and actual recipient event govern policy; funded remedy meets signed deadline without erasing exposure",
+    "method": "workflow/legal clock"
+  },
+  {
+    "id": "SC-23",
+    "name": "ACH initiated/settled/returned after delivery",
+    "expected": "Initiated posts no cash; release only after policy evidence; late return preserves paid and creates recovery/loss",
+    "method": "ledger/provider"
+  },
+  {
+    "id": "SC-24",
+    "name": "Card authorize/capture/net settle/reserve/dispute",
+    "expected": "Auth no journal; captured receivable; exact gross-to-net fees/reserve; late dispute separate",
+    "method": "ledger/provider"
+  },
+  {
+    "id": "SC-25",
+    "name": "Full and cumulative partial refunds",
+    "expected": "Cap principal/fees/tax, exact final remainder; duplicate/unknown refunds retain allocation; rejected refund does not extinguish obligation",
+    "method": "property/concurrency"
+  },
+  {
+    "id": "SC-26",
+    "name": "Refund plus chargeback/ACH return overlap",
+    "expected": "Lock entitlement; no second automatic customer credit; actual double credit is receivable/loss with evidence",
+    "method": "ledger/concurrency"
+  },
+  {
+    "id": "SC-27",
+    "name": "Refund before collection/after FX/after payout",
+    "expected": "Only actual events reversed; independent corporate remediation if payout not returned; all E7\u2013E10 balances checked",
+    "method": "ledger golden"
+  },
+  {
+    "id": "SC-28",
+    "name": "Payout reject, debit-return, partial return",
+    "expected": "Liability remains until evidence; returned cash restores asset; original delivery history retained",
+    "method": "ledger/provider"
+  },
+  {
+    "id": "SC-29",
+    "name": "Cash pickup uncollected expiry and late collection",
+    "expected": "Available not delivered; expiry query/cancellation evidence required; late collected callback investigated",
+    "method": "adapter/workflow"
+  },
+  {
+    "id": "SC-30",
+    "name": "Bills accepted/posted/partial/reversed/duplicate period",
+    "expected": "Only biller proof completes; individual financial obligations and remediation remain traceable",
+    "method": "adapter/workflow"
+  },
+  {
+    "id": "SC-31",
+    "name": "Maker self-approval through second login",
+    "expected": "Person-level DB trigger rejects; expired/hash/version mismatched request cannot execute",
+    "method": "admin/database"
+  },
+  {
+    "id": "SC-32",
+    "name": "Support direct finance API/tenant IDOR/audience confusion",
+    "expected": "Every referenced object scoped; deny and audit; customer token cannot be admin",
+    "method": "security matrix"
+  },
+  {
+    "id": "SC-33",
+    "name": "PII reveal/export and role revocation",
+    "expected": "Fresh assurance/purpose/audit/expiry; revoked grant stops queued execution; no AML leakage",
+    "method": "security matrix"
+  },
+  {
+    "id": "SC-34",
+    "name": "KYC UI spoof, stale evidence, adverse reversal, SDK tamper",
+    "expected": "No provider evidence no approval; re-KYC/review holds queued payout; accessible fallback preserved",
+    "method": "identity integration"
+  },
+  {
+    "id": "SC-35",
+    "name": "Screening outage/list update during submission",
+    "expected": "Fail closed before authorization; new list rescreen stops queued work; no unsupported legal override",
+    "method": "compliance concurrency"
+  },
+  {
+    "id": "SC-36",
+    "name": "Recovery/SIM-swap/new device/new recipient/admin MFA",
+    "expected": "Risk hold and step-up; recovery does not bypass controls; keystore invalidation reauth tested",
+    "method": "web/mobile security"
+  },
+  {
+    "id": "SC-37",
+    "name": "Campaign last-budget race/code farming",
+    "expected": "Atomic caps and entitlement; failure releases; no principal reduction; policy stacking deterministic",
+    "method": "property/concurrency"
+  },
+  {
+    "id": "SC-38",
+    "name": "Points vest/expiry/redemption/refund race",
+    "expected": "FIFO lots cannot overspend; duplicate earn once; spent-points reversal never takes unrelated fiat",
+    "method": "points/property"
+  },
+  {
+    "id": "SC-39",
+    "name": "Referral self/linked household/returned qualifier",
+    "expected": "Self blocked, linked household reviewed, one qualification and delayed benefit, reversal/appeal retained",
+    "method": "rewards/fraud"
+  },
+  {
+    "id": "SC-40",
+    "name": "Rate alert oscillation/stale feed/consent",
+    "expected": "Threshold crossing/hysteresis/cooldown/dedup; no money execution; opt-out respected",
+    "method": "worker/property"
+  },
+  {
+    "id": "SC-41",
+    "name": "Auto-conversion revoke/balance/rate-bound race",
+    "expected": "Atomic one-shot mandate, exact net target/fee caps; unknown remains executing; no ACH debit from alert",
+    "method": "workflow/concurrency"
+  },
+  {
+    "id": "SC-42",
+    "name": "Scheduled transfer DST/missing consent/offline",
+    "expected": "One occurrence per ID, documented local-time mapping, skip/notify without unauthorized catch-up debit",
+    "method": "time-controlled workflow"
+  },
+  {
+    "id": "SC-43",
+    "name": "Notification duplicates/delivery unknown/quiet hours",
+    "expected": "Message dedup and category consent; app fetches authoritative state; no pickup secret on lock screen",
+    "method": "messaging/mobile"
+  },
+  {
+    "id": "SC-44",
+    "name": "Missing/duplicate/timing/fee/FX statement lines",
+    "expected": "Three-way reconciliation detects all seeded discrepancies; zero amount tolerance; raw file retained",
+    "method": "reconciliation fixtures"
+  },
+  {
+    "id": "SC-45",
+    "name": "Projection drift/closed period/safeguarding deficit",
+    "expected": "Drift and shortfall stop affected new exposure; closed-period change denied; as-of reports independently reconstruct",
+    "method": "finance controls"
+  },
+  {
+    "id": "SC-46",
+    "name": "Database restore with already-paid remote instruction",
+    "expected": "Old writer credential fenced; evidence window replayed/reconciled; no duplicate payout after reopen",
+    "method": "disaster recovery"
+  },
+  {
+    "id": "SC-47",
+    "name": "Provider outage/global stop/secret rotation",
+    "expected": "New exposure stopped while inquiry/refund servicing works; rotated signature overlap and invalid-key rejection",
+    "method": "resilience/security"
+  },
+  {
+    "id": "SC-48",
+    "name": "Accessibility and low-device matrix",
+    "expected": "Full funnel360/375/768/1024/1440px, keyboard/focus/SR/200% zoom/reduced motion, real low-end Android and iOS",
+    "method": "manual + axe + device"
+  },
+  {
+    "id": "SC-49",
+    "name": "Load/hot-account/campaign/provider contention",
+    "expected": "A7 targets at stated steady/3x load, no deadlock leakage or overdraft; p95 and safety evidence separate",
+    "method": "load/PostgreSQL"
+  },
+  {
+    "id": "SC-50",
+    "name": "Privacy/legal holds/backup/vendor deletion",
+    "expected": "Eligible PII deleted; required held evidence retained with restricted purpose; no test environment live PII",
+    "method": "privacy integration"
+  },
+  {
+    "id": "SC-51",
+    "name": "Stablecoin wrong chain/depeg/reorg/off-ramp down",
+    "expected": "No PHP available from provisional chain status; custody identity, fees and recovered/unresolved exposure reconcile",
+    "method": "sandbox treasury"
+  },
+  {
+    "id": "SC-52",
+    "name": "Business KYB/signatories/batch partial results",
+    "expected": "KYB prerequisite, exact approval hash, item states/journals, rerun never repeats paid item",
+    "method": "business workflow"
+  },
+  {
+    "id": "SC-53",
+    "name": "Production fixture leakage and unapproved market",
+    "expected": "Build/startup/route gates reject sandbox adapters, keys, fake funding and disabled jurisdiction/product",
+    "method": "release isolation"
+  },
+  {
+    "id": "SC-54",
+    "name": "Independent audit chain under concurrency",
+    "expected": "Per-book anchors serialized; WORM mirror detects missing/tampered sequence; primary rewrite cannot alter external anchor",
+    "method": "audit controls"
+  },
+  {
+    "id": "SC-55",
+    "name": "Foreign-key and ownership graph",
+    "expected": "Reject cross-book customer/quote/recipient/evidence/attempt/journal references and missing parent rows",
+    "method": "SQL/API"
+  },
+  {
+    "id": "SC-56",
+    "name": "Complete US-PH successful fixture",
+    "expected": "All J00\u2013J09, actual fee/reserve variants and receipt match500/3.99/503.99/28710; open obligations zero only on evidence",
+    "method": "full end-to-end"
+  }
+]

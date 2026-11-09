@@ -1,0 +1,406 @@
+[
+  {
+    "id": "F-AUTH-01",
+    "title": "Kimi OAuth login (code exchange, JWKS access-token verify, profile fetch, user upsert, HS256 session cookie)",
+    "plan_ids": [
+      "KITA-AUTH-01",
+      "KITA-AUTH-02"
+    ],
+    "disposition": "Replace Kimi identity/session/bootstrap with scoped OIDC, revocation and workforce lifecycle",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-AUTH-02",
+    "title": "Session cookie verification per request",
+    "plan_ids": [
+      "KITA-AUTH-02",
+      "KITA-AUTH-05"
+    ],
+    "disposition": "Replace Kimi identity/session/bootstrap with scoped OIDC, revocation and workforce lifecycle",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-AUTH-03",
+    "title": "Logout",
+    "plan_ids": [
+      "KITA-AUTH-02"
+    ],
+    "disposition": "Replace Kimi identity/session/bootstrap with scoped OIDC, revocation and workforce lifecycle",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-AUTH-04",
+    "title": "Admin bootstrap for app owner",
+    "plan_ids": [
+      "KITA-ADM-01",
+      "KITA-ADM-10"
+    ],
+    "disposition": "Replace Kimi identity/session/bootstrap with scoped OIDC, revocation and workforce lifecycle",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-CORE-01",
+    "title": "Public marketing site + live rate strip",
+    "plan_ids": [
+      "KITA-PUB-01",
+      "KITA-PUB-02",
+      "KITA-QUOTE-04"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-CORE-02",
+    "title": "Quote calculation + persistence, send/receive direction, fee table, promo discounts",
+    "plan_ids": [
+      "KITA-QUOTE-01",
+      "KITA-QUOTE-02",
+      "KITA-QUOTE-03",
+      "KITA-GROW-03"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-CORE-03",
+    "title": "Customer workspace aggregate (profile, KYC state, recipients, 12 transfers, points, alerts, balance)",
+    "plan_ids": [
+      "KITA-AUTH-06",
+      "KITA-KYC-02",
+      "KITA-REC-01",
+      "KITA-TX-03",
+      "KITA-WAL-01",
+      "KITA-GROW-01",
+      "KITA-GROW-05"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-CORE-04",
+    "title": "Transfer receipt download",
+    "plan_ids": [
+      "KITA-TX-04"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-CORE-05",
+    "title": "Seed dataset",
+    "plan_ids": [
+      "KITA-PLAT-02",
+      "KITA-PLAT-07"
+    ],
+    "disposition": "Move fictional fixtures to isolated test-only package; remove all production seeds of money/KYC",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-KYC-01",
+    "title": "Customer KYC submission",
+    "plan_ids": [
+      "KITA-KYC-01",
+      "KITA-KYC-02",
+      "KITA-KYC-03"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-KYC-02",
+    "title": "Manual KYC decisioning",
+    "plan_ids": [
+      "KITA-ADM-04",
+      "KITA-KYC-07"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-KYC-03",
+    "title": "KYC gate on money movement",
+    "plan_ids": [
+      "KITA-KYC-04",
+      "KITA-KYC-05",
+      "KITA-KYC-06"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-LEDGER-01",
+    "title": "Double-entry core with per-currency balance assertion",
+    "plan_ids": [
+      "KITA-FIN-01"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-LEDGER-02",
+    "title": "Idempotent posting keys",
+    "plan_ids": [
+      "KITA-TX-01",
+      "KITA-FIN-01",
+      "KITA-PLAT-03"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-LEDGER-03",
+    "title": "Funding legs by payment method",
+    "plan_ids": [
+      "KITA-FUND-01",
+      "KITA-FUND-02",
+      "KITA-FUND-03"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-LEDGER-04",
+    "title": "FX conversion + payout legs on completion",
+    "plan_ids": [
+      "KITA-FIN-06",
+      "KITA-PAY-03",
+      "KITA-GROW-01"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-LEDGER-05",
+    "title": "Wallet top-up / balance",
+    "plan_ids": [
+      "KITA-WAL-01",
+      "KITA-WAL-02"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-LEDGER-06",
+    "title": "Ledger reconciliation view",
+    "plan_ids": [
+      "KITA-FIN-03",
+      "KITA-FIN-04",
+      "KITA-FIN-07"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-RATE-01",
+    "title": "Configurable FX mid-market + markup bps",
+    "plan_ids": [
+      "KITA-QUOTE-03",
+      "KITA-QUOTE-04",
+      "KITA-ADM-08"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-RATE-02",
+    "title": "Rate alerts",
+    "plan_ids": [
+      "KITA-GROW-05"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-PAYOUT-01",
+    "title": "Transfer creation with risk routing",
+    "plan_ids": [
+      "KITA-TX-01",
+      "KITA-KYC-06",
+      "KITA-PAY-01"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-PAYOUT-02",
+    "title": "Recipient book + archive",
+    "plan_ids": [
+      "KITA-REC-01",
+      "KITA-REC-02",
+      "KITA-REC-03"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-PAYOUT-03",
+    "title": "Customer cancellation with compensating refund",
+    "plan_ids": [
+      "KITA-TX-05",
+      "KITA-TX-06"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-PAYOUT-04",
+    "title": "Partner completion simulation",
+    "plan_ids": [
+      "KITA-PAY-03",
+      "KITA-ADM-07",
+      "KITA-PLAT-07"
+    ],
+    "disposition": "Remove customer simulation endpoint; replace with authenticated provider evidence and inquiry",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-PAYOUT-05",
+    "title": "Admin ops state machine (9 actions)",
+    "plan_ids": [
+      "KITA-ADM-03",
+      "KITA-ADM-04",
+      "KITA-ADM-06",
+      "KITA-ADM-07"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-PAYOUT-06",
+    "title": "Reroute between payout partners",
+    "plan_ids": [
+      "KITA-PAY-01",
+      "KITA-ADM-06"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-FUNDING-01",
+    "title": "Funding-provider attribution",
+    "plan_ids": [
+      "KITA-FUND-01",
+      "KITA-FUND-02",
+      "KITA-FUND-03",
+      "KITA-FUND-04"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-FUNDING-02",
+    "title": "InstaPay/PESONet rail selection",
+    "plan_ids": [
+      "KITA-PAY-02"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-ADMIN-01",
+    "title": "Ops overview KPIs",
+    "plan_ids": [
+      "KITA-ADM-02",
+      "KITA-FIN-07"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-ADMIN-02",
+    "title": "Transfer search/filter",
+    "plan_ids": [
+      "KITA-ADM-02"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-ADMIN-03",
+    "title": "Team access management",
+    "plan_ids": [
+      "KITA-ADM-01",
+      "KITA-ADM-10"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-ADMIN-04",
+    "title": "Second-person approval workflow",
+    "plan_ids": [
+      "KITA-ADM-05",
+      "KITA-ADM-08"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-ADMIN-05",
+    "title": "Hash-chained audit trail + verifier",
+    "plan_ids": [
+      "KITA-ADM-11"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-NOTIF-01",
+    "title": "In-app status surfacing (poll-based)",
+    "plan_ids": [
+      "KITA-TX-02",
+      "KITA-GROW-07"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-COMPLIANCE-01",
+    "title": "Purpose & source-of-funds capture",
+    "plan_ids": [
+      "KITA-KYC-06",
+      "KITA-TX-01"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-COMPLIANCE-02",
+    "title": "Disclosure acceptance",
+    "plan_ids": [
+      "KITA-TX-01",
+      "KITA-TX-04"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-COMPLIANCE-03",
+    "title": "Global intake hold switch",
+    "plan_ids": [
+      "KITA-ADM-12"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-COMPLIANCE-04",
+    "title": "Observability / request correlation",
+    "plan_ids": [
+      "KITA-PLAT-06"
+    ],
+    "disposition": "Replace unsafe implementation; preserve intended experience through production controls",
+    "source": "gpu-research/02-feature-catalog.md"
+  },
+  {
+    "id": "F-COMPLIANCE-05",
+    "title": "Installable PWA",
+    "plan_ids": [
+      "KITA-AUTH-07",
+      "KITA-PUB-06",
+      "KITA-PLAT-07"
+    ],
+    "disposition": "Modify: installable public shell plus Expo native; no cached financial pages or offline command replay",
+    "source": "gpu-research/02-feature-catalog.md"
+  }
+]

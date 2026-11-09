@@ -1,0 +1,1961 @@
+[
+  {
+    "id": "KITA-PUB-01",
+    "title": "Kita public site and legal identity",
+    "ui": "/",
+    "operation": "getContent",
+    "tables": [
+      "policies"
+    ],
+    "function": "publishContent",
+    "module": "catalog",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Unapproved license or partner claim is absent",
+    "test": "TEST-PUB-01",
+    "task": "T-PUB-01",
+    "section": "D",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PUB-02",
+    "title": "Indicative send/receive calculator",
+    "ui": "/",
+    "operation": "createEstimate",
+    "tables": [
+      "policies"
+    ],
+    "function": "estimateQuote",
+    "module": "catalog",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Stale feed labels estimate and cannot yield executable transfer",
+    "test": "TEST-PUB-02",
+    "task": "T-PUB-02",
+    "section": "D",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PUB-03",
+    "title": "Origin and payout capability catalog",
+    "ui": "/locations",
+    "operation": "listCorridors",
+    "tables": [
+      "capabilities"
+    ],
+    "function": "listCapabilities",
+    "module": "catalog",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Disabled US state or origin cannot accept money",
+    "test": "TEST-PUB-03",
+    "task": "T-PUB-03",
+    "section": "D",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PUB-04",
+    "title": "Fee and delivery transparency",
+    "ui": "/fees",
+    "operation": "listPayoutOptions",
+    "tables": [
+      "capabilities",
+      "policies"
+    ],
+    "function": "describeDelivery",
+    "module": "catalog",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Fee and deadline agree with accepted terms",
+    "test": "TEST-PUB-04",
+    "task": "T-PUB-04",
+    "section": "D",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PUB-05",
+    "title": "English and Filipino localization",
+    "ui": "all customer screens",
+    "operation": "getContent",
+    "tables": [
+      "receipts",
+      "policies"
+    ],
+    "function": "resolveLocale",
+    "module": "catalog",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Receipt and consent retain chosen language",
+    "test": "TEST-PUB-05",
+    "task": "T-PUB-05",
+    "section": "D",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PUB-06",
+    "title": "Accessible responsive Kita tokens",
+    "ui": "all clients",
+    "operation": "internal",
+    "tables": [
+      "none"
+    ],
+    "function": "applyKitaTokens",
+    "module": "catalog",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Keyboard and screen reader flow passes at all required widths",
+    "test": "TEST-PUB-06",
+    "task": "T-PUB-06",
+    "section": "D",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-01",
+    "title": "Registration and verified contacts",
+    "ui": "/signup",
+    "operation": "createContactVerification",
+    "tables": [
+      "customers"
+    ],
+    "function": "verifyContact",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Unverified contact cannot authorize transfer",
+    "test": "TEST-AUTH-01",
+    "task": "T-AUTH-01",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-02",
+    "title": "Customer OIDC and logout/revocation",
+    "ui": "/login",
+    "operation": "logout",
+    "tables": [
+      "customers"
+    ],
+    "function": "revokeSession",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Revoked token cannot continue financial command",
+    "test": "TEST-AUTH-02",
+    "task": "T-AUTH-02",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-03",
+    "title": "Passkeys and step-up",
+    "ui": "/profile/security",
+    "operation": "createStepUp",
+    "tables": [
+      "consents"
+    ],
+    "function": "requireStepUp",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "New destination needs fresh assurance",
+    "test": "TEST-AUTH-03",
+    "task": "T-AUTH-03",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-04",
+    "title": "Account recovery and device changes",
+    "ui": "/recovery",
+    "operation": "startRecovery",
+    "tables": [
+      "cases",
+      "holds"
+    ],
+    "function": "recoverAccount",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Recovery cannot bypass new-destination hold",
+    "test": "TEST-AUTH-04",
+    "task": "T-AUTH-04",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-05",
+    "title": "Device/session inventory",
+    "ui": "/profile/devices",
+    "operation": "listSessions",
+    "tables": [
+      "customers"
+    ],
+    "function": "listSessions",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Revoked device cannot refresh token",
+    "test": "TEST-AUTH-05",
+    "task": "T-AUTH-05",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-06",
+    "title": "Profile and account closure",
+    "ui": "/profile",
+    "operation": "requestClosure",
+    "tables": [
+      "customers",
+      "cases"
+    ],
+    "function": "requestClosure",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Closure preserves outstanding refund and lawful records",
+    "test": "TEST-AUTH-06",
+    "task": "T-AUTH-06",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-AUTH-07",
+    "title": "Native secure storage/deep links/biometrics",
+    "ui": "mobile login",
+    "operation": "createMobileSession",
+    "tables": [
+      "customers"
+    ],
+    "function": "exchangeMobileCode",
+    "module": "identity",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Expired key or hostile deep link requires safe reauthentication",
+    "test": "TEST-AUTH-07",
+    "task": "T-AUTH-07",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-01",
+    "title": "Profile/document/selfie capture",
+    "ui": "/verification",
+    "operation": "createIdentitySession",
+    "tables": [
+      "identity_decisions",
+      "documents"
+    ],
+    "function": "startIdentity",
+    "module": "compliance",
+    "worker": "startIdentityWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Capture callback alone never approves customer",
+    "test": "TEST-KYC-01",
+    "task": "T-KYC-01",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-02",
+    "title": "Provider identity decision and re-KYC",
+    "ui": "/verification",
+    "operation": "getIdentityStatus",
+    "tables": [
+      "identity_decisions"
+    ],
+    "function": "applyIdentityEvidence",
+    "module": "compliance",
+    "worker": "applyIdentityEvidenceWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Later adverse decision blocks new payout",
+    "test": "TEST-KYC-02",
+    "task": "T-KYC-02",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-03",
+    "title": "Secure additional documents",
+    "ui": "/verification",
+    "operation": "createDocumentUpload",
+    "tables": [
+      "documents",
+      "cases"
+    ],
+    "function": "quarantineUpload",
+    "module": "compliance",
+    "worker": "quarantineUploadWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Infected upload never reaches analyst viewer",
+    "test": "TEST-KYC-03",
+    "task": "T-KYC-03",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-04",
+    "title": "Sender/recipient sanctions PEP adverse-media screening",
+    "ui": "admin/compliance",
+    "operation": "createScreeningReview",
+    "tables": [
+      "screenings",
+      "cases"
+    ],
+    "function": "evaluateScreening",
+    "module": "compliance",
+    "worker": "evaluateScreeningWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Unavailable or stale list cannot silently pass",
+    "test": "TEST-KYC-04",
+    "task": "T-KYC-04",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-05",
+    "title": "Ongoing list-delta rescreen",
+    "ui": "admin/compliance",
+    "operation": "internal",
+    "tables": [
+      "screenings",
+      "holds"
+    ],
+    "function": "rescreenDelta",
+    "module": "compliance",
+    "worker": "rescreenDeltaWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "New list hit stops queued payout before dispatch",
+    "test": "TEST-KYC-05",
+    "task": "T-KYC-05",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-06",
+    "title": "Risk tiers velocity EDD",
+    "ui": "admin/risk",
+    "operation": "createRiskDecision",
+    "tables": [
+      "policies",
+      "cases"
+    ],
+    "function": "evaluateRisk",
+    "module": "compliance",
+    "worker": "evaluateRiskWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Concurrent transfers cannot exceed aggregate limit",
+    "test": "TEST-KYC-06",
+    "task": "T-KYC-06",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-KYC-07",
+    "title": "AML case reporting QA confidentiality",
+    "ui": "admin/aml",
+    "operation": "recordRegulatoryFiling",
+    "tables": [
+      "cases",
+      "documents"
+    ],
+    "function": "recordFiling",
+    "module": "compliance",
+    "worker": "recordFilingWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Support cannot read AML filing or confidential rationale",
+    "test": "TEST-KYC-07",
+    "task": "T-KYC-07",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-REC-01",
+    "title": "Bank recipient creation/validation",
+    "ui": "/recipients",
+    "operation": "createRecipient",
+    "tables": [
+      "recipients",
+      "recipient_versions"
+    ],
+    "function": "createRecipient",
+    "module": "recipients",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Ownership/name/account validation enforced server-side",
+    "test": "TEST-REC-01",
+    "task": "T-REC-01",
+    "section": "D/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-REC-02",
+    "title": "GCash/Maya recipient rules",
+    "ui": "/recipients",
+    "operation": "createRecipientVersion",
+    "tables": [
+      "recipient_versions"
+    ],
+    "function": "validateWalletRecipient",
+    "module": "recipients",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Wrong network or expired validation blocks payout",
+    "test": "TEST-REC-02",
+    "task": "T-REC-02",
+    "section": "D/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-REC-03",
+    "title": "Recipient immutable change/archive",
+    "ui": "/recipients",
+    "operation": "archiveRecipient",
+    "tables": [
+      "recipients",
+      "recipient_versions"
+    ],
+    "function": "archiveRecipient",
+    "module": "recipients",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Old transfer snapshot survives destination edit",
+    "test": "TEST-REC-03",
+    "task": "T-REC-03",
+    "section": "D/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-REC-04",
+    "title": "Repeat send and version revalidation",
+    "ui": "/home",
+    "operation": "createDraft",
+    "tables": [
+      "drafts",
+      "recipient_versions"
+    ],
+    "function": "repeatTransfer",
+    "module": "recipients",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Repeat obtains new quote and never replays old payment",
+    "test": "TEST-REC-04",
+    "task": "T-REC-04",
+    "section": "D/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-01",
+    "title": "Exact send amount pricing",
+    "ui": "/send",
+    "operation": "createQuote",
+    "tables": [
+      "quotes"
+    ],
+    "function": "buildQuote",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "500 USD fixture yields exact 28710 PHP and 503.99 USD total",
+    "test": "TEST-QUOTE-01",
+    "task": "T-QUOTE-01",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-02",
+    "title": "Exact recipient inverse solver",
+    "ui": "/send",
+    "operation": "createQuote",
+    "tables": [
+      "quotes"
+    ],
+    "function": "solveReceive",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "JPY and USD inversion deliver requested minor amount exactly",
+    "test": "TEST-QUOTE-02",
+    "task": "T-QUOTE-02",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-03",
+    "title": "Tier fees surcharges tax policies",
+    "ui": "/send",
+    "operation": "createQuote",
+    "tables": [
+      "policies",
+      "quotes"
+    ],
+    "function": "priceFees",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Tier boundary discount and tax totals are exact",
+    "test": "TEST-QUOTE-03",
+    "task": "T-QUOTE-03",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-04",
+    "title": "Fresh executable FX and source outage",
+    "ui": "/send",
+    "operation": "createQuote",
+    "tables": [
+      "quotes",
+      "evidence"
+    ],
+    "function": "validateRate",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Stale quote unavailable; no cached execution fallback",
+    "test": "TEST-QUOTE-04",
+    "task": "T-QUOTE-04",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-05",
+    "title": "Expiry policy version and recipient binding",
+    "ui": "/send/review",
+    "operation": "acceptTransfer",
+    "tables": [
+      "quotes",
+      "transfers"
+    ],
+    "function": "acceptQuote",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Expiry equality or recipient change produces conflict",
+    "test": "TEST-QUOTE-05",
+    "task": "T-QUOTE-05",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-06",
+    "title": "Binding rate through funding delay",
+    "ui": "/transfers/[id]",
+    "operation": "getTransfer",
+    "tables": [
+      "quotes",
+      "liquidity_reservations"
+    ],
+    "function": "reserveFxExposure",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Wholesale deterioration changes corporate cost not customer promise",
+    "test": "TEST-QUOTE-06",
+    "task": "T-QUOTE-06",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-07",
+    "title": "Public midmarket vs execution disclosure",
+    "ui": "/send/review",
+    "operation": "createQuote",
+    "tables": [
+      "quotes",
+      "consents"
+    ],
+    "function": "renderQuoteTerms",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Display rounding never changes execution arithmetic",
+    "test": "TEST-QUOTE-07",
+    "task": "T-QUOTE-07",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-QUOTE-08",
+    "title": "Draft resume multi-device concurrency",
+    "ui": "/send",
+    "operation": "updateDraft",
+    "tables": [
+      "drafts"
+    ],
+    "function": "saveDraft",
+    "module": "quotes",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Stale draft version cannot overwrite newer recipient/amount",
+    "test": "TEST-QUOTE-08",
+    "task": "T-QUOTE-08",
+    "section": "G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-01",
+    "title": "Idempotent transfer acceptance",
+    "ui": "/send/review",
+    "operation": "acceptTransfer",
+    "tables": [
+      "command_keys",
+      "transfers"
+    ],
+    "function": "acceptTransfer",
+    "module": "transfers",
+    "worker": "acceptTransferWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Double tap and different keys on one quote create one transfer",
+    "test": "TEST-TX-01",
+    "task": "T-TX-01",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-02",
+    "title": "Independent states/timeline/SSE",
+    "ui": "/transfers/[id]",
+    "operation": "streamTransferEvents",
+    "tables": [
+      "transfer_events",
+      "provider_attempts"
+    ],
+    "function": "deriveCustomerStatus",
+    "module": "transfers",
+    "worker": "deriveCustomerStatusWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Late return preserves paid history",
+    "test": "TEST-TX-02",
+    "task": "T-TX-02",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-03",
+    "title": "History search and pagination",
+    "ui": "/activity",
+    "operation": "listTransfers",
+    "tables": [
+      "transfers"
+    ],
+    "function": "listTransfers",
+    "module": "transfers",
+    "worker": "listTransfersWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Stable cursor cannot expose another customer records",
+    "test": "TEST-TX-03",
+    "task": "T-TX-03",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-04",
+    "title": "Immutable disclosure/receipt",
+    "ui": "/transfers/[id]",
+    "operation": "getReceipt",
+    "tables": [
+      "receipts",
+      "documents",
+      "consents"
+    ],
+    "function": "renderReceipt",
+    "module": "transfers",
+    "worker": "renderReceiptWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Old receipt unchanged after pricing update",
+    "test": "TEST-TX-04",
+    "task": "T-TX-04",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-05",
+    "title": "Customer cancellation and race",
+    "ui": "/transfers/[id]",
+    "operation": "requestCancellation",
+    "tables": [
+      "cases",
+      "holds"
+    ],
+    "function": "requestCancellation",
+    "module": "transfers",
+    "worker": "requestCancellationWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Receipt timestamp and actual delivery determine eligible remedy",
+    "test": "TEST-TX-05",
+    "task": "T-TX-05",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-06",
+    "title": "Partial/full refund lifecycle",
+    "ui": "/transfers/[id]",
+    "operation": "requestRefund",
+    "tables": [
+      "refund_obligations",
+      "refund_allocations"
+    ],
+    "function": "authorizeRefund",
+    "module": "transfers",
+    "worker": "authorizeRefundWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Concurrent partial refunds cannot exceed entitlement",
+    "test": "TEST-TX-06",
+    "task": "T-TX-06",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-07",
+    "title": "Error claims and complaint deadlines",
+    "ui": "/support",
+    "operation": "createErrorClaim",
+    "tables": [
+      "cases",
+      "documents"
+    ],
+    "function": "openErrorClaim",
+    "module": "transfers",
+    "worker": "openErrorClaimWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Support handoff never resets original statutory clock",
+    "test": "TEST-TX-07",
+    "task": "T-TX-07",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-08",
+    "title": "Secure support messages",
+    "ui": "/support",
+    "operation": "createSupportMessage",
+    "tables": [
+      "cases",
+      "documents"
+    ],
+    "function": "appendSupportMessage",
+    "module": "transfers",
+    "worker": "appendSupportMessageWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Wrong account cannot read or attach case evidence",
+    "test": "TEST-TX-08",
+    "task": "T-TX-08",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-09",
+    "title": "Provider RFI and neutral customer action",
+    "ui": "/transfers/[id]",
+    "operation": "respondCase",
+    "tables": [
+      "cases",
+      "documents"
+    ],
+    "function": "respondToRfi",
+    "module": "transfers",
+    "worker": "respondToRfiWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Confidential risk details absent from public projection",
+    "test": "TEST-TX-09",
+    "task": "T-TX-09",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-TX-10",
+    "title": "Schedule/reminder and recurring mandate",
+    "ui": "/schedules",
+    "operation": "createSchedule",
+    "tables": [
+      "schedules",
+      "schedule_runs"
+    ],
+    "function": "executeOccurrence",
+    "module": "transfers",
+    "worker": "executeOccurrenceWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "DST retry produces one authorized occurrence",
+    "test": "TEST-TX-10",
+    "task": "T-TX-10",
+    "section": "F/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-01",
+    "title": "Hosted instrument and mandate",
+    "ui": "/profile/funding",
+    "operation": "createFundingInstrumentSession",
+    "tables": [
+      "consents",
+      "evidence"
+    ],
+    "function": "createInstrumentSession",
+    "module": "funding",
+    "worker": "createInstrumentSessionWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "No raw PAN/CVV in app server logs or DB",
+    "test": "TEST-FUND-01",
+    "task": "T-FUND-01",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-02",
+    "title": "ACH collect/settle availability",
+    "ui": "/send/funding",
+    "operation": "createFundingSession",
+    "tables": [
+      "provider_attempts",
+      "journals"
+    ],
+    "function": "applyAchSettlement",
+    "module": "funding",
+    "worker": "applyAchSettlementWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Initiation alone cannot authorize payout",
+    "test": "TEST-FUND-02",
+    "task": "T-FUND-02",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-03",
+    "title": "Debit authorize/capture/settle",
+    "ui": "/send/funding",
+    "operation": "createFundingSession",
+    "tables": [
+      "provider_attempts",
+      "journals"
+    ],
+    "function": "applyCardEvidence",
+    "module": "funding",
+    "worker": "applyCardEvidenceWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Authorization posts no cash and capture remains receivable",
+    "test": "TEST-FUND-03",
+    "task": "T-FUND-03",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-04",
+    "title": "Credit and Apple/Google Pay capabilities",
+    "ui": "/send/funding",
+    "operation": "createFundingSession",
+    "tables": [
+      "capabilities",
+      "provider_attempts"
+    ],
+    "function": "validateFundingCapability",
+    "module": "funding",
+    "worker": "validateFundingCapabilityWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Unapproved method fails closed",
+    "test": "TEST-FUND-04",
+    "task": "T-FUND-04",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-05",
+    "title": "Funding unknown/recovery",
+    "ui": "/transfers/[id]",
+    "operation": "getOperation",
+    "tables": [
+      "provider_attempts",
+      "inbox"
+    ],
+    "function": "recoverFunding",
+    "module": "funding",
+    "worker": "recoverFundingWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Timeout after debit never creates second charge",
+    "test": "TEST-FUND-05",
+    "task": "T-FUND-05",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-06",
+    "title": "ACH return and chargeback after payout",
+    "ui": "admin/disputes",
+    "operation": "createDisputeResponse",
+    "tables": [
+      "disputes",
+      "journals"
+    ],
+    "function": "applyFundingReturn",
+    "module": "funding",
+    "worker": "applyFundingReturnWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Paid PHP persists with separate loss/recovery",
+    "test": "TEST-FUND-06",
+    "task": "T-FUND-06",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FUND-07",
+    "title": "Unmatched or late inbound funding",
+    "ui": "admin/reconciliation",
+    "operation": "resolveBreak",
+    "tables": [
+      "reconciliation_breaks",
+      "journals"
+    ],
+    "function": "attributeIncomingCash",
+    "module": "funding",
+    "worker": "attributeIncomingCashWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Unowned cash remains suspense not revenue",
+    "test": "TEST-FUND-07",
+    "task": "T-FUND-07",
+    "section": "E/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PAY-01",
+    "title": "Primary/secondary safe routing",
+    "ui": "admin/routes",
+    "operation": "requestReroute",
+    "tables": [
+      "provider_attempts",
+      "liquidity_reservations"
+    ],
+    "function": "selectRoute",
+    "module": "payouts",
+    "worker": "selectRouteWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Unknown first provider blocks second payout",
+    "test": "TEST-PAY-01",
+    "task": "T-PAY-01",
+    "section": "G/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PAY-02",
+    "title": "PHP bank InstaPay/PESONet route calendars",
+    "ui": "/send",
+    "operation": "listPayoutOptions",
+    "tables": [
+      "capabilities",
+      "policies"
+    ],
+    "function": "resolveBankRoute",
+    "module": "payouts",
+    "worker": "resolveBankRouteWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Cutoff/holiday and amount cannot be bypassed by splitting",
+    "test": "TEST-PAY-02",
+    "task": "T-PAY-02",
+    "section": "G/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PAY-03",
+    "title": "GCash/Maya actual delivery",
+    "ui": "/transfers/[id]",
+    "operation": "getTransfer",
+    "tables": [
+      "provider_attempts",
+      "evidence"
+    ],
+    "function": "applyWalletPayout",
+    "module": "payouts",
+    "worker": "applyWalletPayoutWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Accepted request is not recipient credited",
+    "test": "TEST-PAY-03",
+    "task": "T-PAY-03",
+    "section": "G/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PAY-04",
+    "title": "Cash pickup collection/expiry",
+    "ui": "/transfers/[id]",
+    "operation": "getPickupInstructions",
+    "tables": [
+      "provider_attempts",
+      "documents"
+    ],
+    "function": "applyCashPickup",
+    "module": "payouts",
+    "worker": "applyCashPickupWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Available and collected differ; expiry alone never fabricates return",
+    "test": "TEST-PAY-04",
+    "task": "T-PAY-04",
+    "section": "G/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PAY-05",
+    "title": "Payout rejected/returned/partially returned",
+    "ui": "admin/transfers",
+    "operation": "inquireAttempt",
+    "tables": [
+      "provider_attempts",
+      "refund_obligations"
+    ],
+    "function": "applyPayoutReturn",
+    "module": "payouts",
+    "worker": "applyPayoutReturnWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Returned amount capped and original delivered timestamp preserved",
+    "test": "TEST-PAY-05",
+    "task": "T-PAY-05",
+    "section": "G/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PAY-06",
+    "title": "Bills catalog/validation/posting/proof",
+    "ui": "/bills",
+    "operation": "createBillPayment",
+    "tables": [
+      "bill_payments",
+      "transfers"
+    ],
+    "function": "applyBillPosting",
+    "module": "payouts",
+    "worker": "applyBillPostingWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Aggregator accepted does not mark bill paid",
+    "test": "TEST-PAY-06",
+    "task": "T-PAY-06",
+    "section": "G/H",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-WAL-01",
+    "title": "Multi-currency available pending reserved",
+    "ui": "/wallet",
+    "operation": "listWallets",
+    "tables": [
+      "ledger_accounts",
+      "account_balances"
+    ],
+    "function": "getWalletBalances",
+    "module": "wallets",
+    "worker": "getWalletBalancesWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Projection and ledger agree per currency",
+    "test": "TEST-WAL-01",
+    "task": "T-WAL-01",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-WAL-02",
+    "title": "Real top-up and funding return",
+    "ui": "/wallet",
+    "operation": "createWalletTopup",
+    "tables": [
+      "provider_attempts",
+      "journals"
+    ],
+    "function": "creditWalletFromEvidence",
+    "module": "wallets",
+    "worker": "creditWalletFromEvidenceWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "No funds credited without real settlement/approved risk evidence",
+    "test": "TEST-WAL-02",
+    "task": "T-WAL-02",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-WAL-03",
+    "title": "Atomic wallet remittance debit",
+    "ui": "/send",
+    "operation": "acceptTransfer",
+    "tables": [
+      "journals",
+      "liquidity_reservations"
+    ],
+    "function": "reserveWallet",
+    "module": "wallets",
+    "worker": "reserveWalletWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Two simultaneous spends cannot overdraw",
+    "test": "TEST-WAL-03",
+    "task": "T-WAL-03",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-WAL-04",
+    "title": "Quoted wallet conversion",
+    "ui": "/wallet/convert",
+    "operation": "createWalletConversion",
+    "tables": [
+      "quotes",
+      "journals"
+    ],
+    "function": "convertWallet",
+    "module": "wallets",
+    "worker": "convertWalletWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Four currency legs balance and exact target obligation is funded",
+    "test": "TEST-WAL-04",
+    "task": "T-WAL-04",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-WAL-05",
+    "title": "Wallet withdrawal/redemption/closure",
+    "ui": "/wallet",
+    "operation": "createWithdrawal",
+    "tables": [
+      "refund_obligations",
+      "provider_attempts"
+    ],
+    "function": "withdrawWallet",
+    "module": "wallets",
+    "worker": "withdrawWalletWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Failed refund retains obligation; closure cannot lose remaining funds",
+    "test": "TEST-WAL-05",
+    "task": "T-WAL-05",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-WAL-06",
+    "title": "Same-book wallet P2P",
+    "ui": "/wallet/send",
+    "operation": "createWalletTransfer",
+    "tables": [
+      "journals",
+      "screenings"
+    ],
+    "function": "transferWallet",
+    "module": "wallets",
+    "worker": "transferWalletWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Both parties screened; cross-book unsupported without settlement policy",
+    "test": "TEST-WAL-06",
+    "task": "T-WAL-06",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-01",
+    "title": "Points earn/vest/reverse",
+    "ui": "/rewards",
+    "operation": "getPoints",
+    "tables": [
+      "point_lots",
+      "point_events"
+    ],
+    "function": "vestPoints",
+    "module": "rewards",
+    "worker": "vestPointsWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Duplicate payout callback awards once",
+    "test": "TEST-GROW-01",
+    "task": "T-GROW-01",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-02",
+    "title": "Points FIFO reserve/redeem/expiry",
+    "ui": "/rewards",
+    "operation": "reservePoints",
+    "tables": [
+      "point_events",
+      "reward_reservations"
+    ],
+    "function": "reservePoints",
+    "module": "rewards",
+    "worker": "reservePointsWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Concurrent redemption/expiry cannot overspend lot",
+    "test": "TEST-GROW-02",
+    "task": "T-GROW-02",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-03",
+    "title": "Promo budget and eligibility",
+    "ui": "/send",
+    "operation": "validatePromotion",
+    "tables": [
+      "campaigns",
+      "reward_reservations"
+    ],
+    "function": "reservePromotion",
+    "module": "rewards",
+    "worker": "reservePromotionWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Last budget unit reserved by one transfer only",
+    "test": "TEST-GROW-03",
+    "task": "T-GROW-03",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-04",
+    "title": "Referral antiabuse qualified reward",
+    "ui": "/referrals",
+    "operation": "createReferral",
+    "tables": [
+      "referrals",
+      "point_lots"
+    ],
+    "function": "qualifyReferral",
+    "module": "rewards",
+    "worker": "qualifyReferralWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Self-referral blocked and household signal reviewed",
+    "test": "TEST-GROW-04",
+    "task": "T-GROW-04",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-05",
+    "title": "Rate alert threshold/cooldown",
+    "ui": "/alerts",
+    "operation": "createRateAlert",
+    "tables": [
+      "rate_alerts",
+      "notifications"
+    ],
+    "function": "evaluateAlerts",
+    "module": "rewards",
+    "worker": "evaluateAlertsWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Oscillating or stale rate does not spam or execute money",
+    "test": "TEST-GROW-05",
+    "task": "T-GROW-05",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-06",
+    "title": "Explicit auto-conversion mandate",
+    "ui": "/auto-conversions",
+    "operation": "createAutoConversion",
+    "tables": [
+      "schedules",
+      "schedule_runs"
+    ],
+    "function": "executeAutoConversion",
+    "module": "rewards",
+    "worker": "executeAutoConversionWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Revocation race serializes before conversion reservation",
+    "test": "TEST-GROW-06",
+    "task": "T-GROW-06",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-07",
+    "title": "Push/email/SMS service notifications",
+    "ui": "/profile/notifications",
+    "operation": "updateNotificationPreferences",
+    "tables": [
+      "notifications",
+      "outbox"
+    ],
+    "function": "sendNotification",
+    "module": "rewards",
+    "worker": "sendNotificationWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Duplicate event gives one intended message per channel",
+    "test": "TEST-GROW-07",
+    "task": "T-GROW-07",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-08",
+    "title": "Consent/quiet hours/unsubscribe",
+    "ui": "/profile/notifications",
+    "operation": "updateNotificationPreferences",
+    "tables": [
+      "consents",
+      "notifications"
+    ],
+    "function": "applyCommunicationConsent",
+    "module": "rewards",
+    "worker": "applyCommunicationConsentWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Marketing opt-out suppresses campaign but preserves necessary service notices",
+    "test": "TEST-GROW-08",
+    "task": "T-GROW-08",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-GROW-09",
+    "title": "Reward statements and unit economics",
+    "ui": "/rewards",
+    "operation": "listRewardEvents",
+    "tables": [
+      "point_events",
+      "journals"
+    ],
+    "function": "reportRewardLiability",
+    "module": "rewards",
+    "worker": "reportRewardLiabilityWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Issued/vested/redeemed/expired totals reconcile to provision",
+    "test": "TEST-GROW-09",
+    "task": "T-GROW-09",
+    "section": "E/G",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-01",
+    "title": "Workforce SSO granular scoped access",
+    "ui": "admin/login",
+    "operation": "createAdminSession",
+    "tables": [
+      "staff_people",
+      "staff_grants"
+    ],
+    "function": "authorizeStaff",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Customer token and unrelated entity denied",
+    "test": "TEST-ADM-01",
+    "task": "T-ADM-01",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-02",
+    "title": "Real-time queues filters assignment",
+    "ui": "admin/transfers",
+    "operation": "listAdminTransfers",
+    "tables": [
+      "transfers",
+      "cases"
+    ],
+    "function": "queryOpsQueue",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Paginated queue shows deadlines and freshness",
+    "test": "TEST-ADM-02",
+    "task": "T-ADM-02",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-03",
+    "title": "Safe hold/resume",
+    "ui": "admin/transfers",
+    "operation": "createHold",
+    "tables": [
+      "holds",
+      "transfer_events"
+    ],
+    "function": "setHold",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Hold before dispatch wins; after dispatch recorded in-flight",
+    "test": "TEST-ADM-03",
+    "task": "T-ADM-03",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-04",
+    "title": "Manual KYC/AML review/RFI",
+    "ui": "admin/compliance",
+    "operation": "decideCase",
+    "tables": [
+      "cases",
+      "identity_decisions"
+    ],
+    "function": "decideCase",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Unqualified role cannot override blocked-property restriction",
+    "test": "TEST-ADM-04",
+    "task": "T-ADM-04",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-05",
+    "title": "Person-level maker-checker and expiry",
+    "ui": "admin/approvals",
+    "operation": "decideApproval",
+    "tables": [
+      "approvals",
+      "approval_decisions"
+    ],
+    "function": "decideApproval",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Second login of same person cannot approve",
+    "test": "TEST-ADM-05",
+    "task": "T-ADM-05",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-06",
+    "title": "Refund/reroute/adjustment requests",
+    "ui": "admin/transfers",
+    "operation": "createAdjustmentRequest",
+    "tables": [
+      "approvals",
+      "journals"
+    ],
+    "function": "requestAdjustment",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Stale payload and unauthorized accounts fail",
+    "test": "TEST-ADM-06",
+    "task": "T-ADM-06",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-07",
+    "title": "Evidence-only manual completion",
+    "ui": "admin/transfers",
+    "operation": "submitProviderEvidence",
+    "tables": [
+      "evidence",
+      "provider_attempts"
+    ],
+    "function": "ingestManualEvidence",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "No manual paid result without verified evidence and reviewer",
+    "test": "TEST-ADM-07",
+    "task": "T-ADM-07",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-08",
+    "title": "Pricing/routing/limit campaign releases",
+    "ui": "admin/configuration",
+    "operation": "createConfigRelease",
+    "tables": [
+      "policies",
+      "approvals"
+    ],
+    "function": "releasePolicy",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Existing quote unchanged and new quote uses approved effective version",
+    "test": "TEST-ADM-08",
+    "task": "T-ADM-08",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-09",
+    "title": "PII reveal/export permission",
+    "ui": "admin/customers",
+    "operation": "requestPiiReveal",
+    "tables": [
+      "audit_events",
+      "documents"
+    ],
+    "function": "revealPii",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Reveal step-up/reason/audit and expiry enforced",
+    "test": "TEST-ADM-09",
+    "task": "T-ADM-09",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-10",
+    "title": "Staff grant/revoke/access reviews",
+    "ui": "admin/access",
+    "operation": "requestAccessChange",
+    "tables": [
+      "staff_grants",
+      "approvals"
+    ],
+    "function": "changeAccess",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Revoked approver cannot execute queued request",
+    "test": "TEST-ADM-10",
+    "task": "T-ADM-10",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-11",
+    "title": "Tamper-evident audit/WORM",
+    "ui": "admin/audit",
+    "operation": "listAuditEvents",
+    "tables": [
+      "audit_events"
+    ],
+    "function": "archiveAudit",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Concurrent hash anchors verified against independent archive",
+    "test": "TEST-ADM-11",
+    "task": "T-ADM-11",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-ADM-12",
+    "title": "Emergency route/intake stops",
+    "ui": "admin/routes",
+    "operation": "pauseRoute",
+    "tables": [
+      "capabilities",
+      "holds"
+    ],
+    "function": "pauseRoute",
+    "module": "admin",
+    "worker": "domain event outbox / projections",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "New commands stop but inquiries and legal remedies continue",
+    "test": "TEST-ADM-12",
+    "task": "T-ADM-12",
+    "section": "I",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-01",
+    "title": "In-house immutable balanced ledger",
+    "ui": "admin/ledger",
+    "operation": "getJournal",
+    "tables": [
+      "journals",
+      "journal_lines"
+    ],
+    "function": "postBusinessEvent",
+    "module": "ledger",
+    "worker": "postBusinessEventWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Empty/unbalanced/cross-currency/edited journal rejected",
+    "test": "TEST-FIN-01",
+    "task": "T-FIN-01",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-02",
+    "title": "Full/partial reversal allocation",
+    "ui": "admin/ledger",
+    "operation": "createAdjustmentRequest",
+    "tables": [
+      "journals",
+      "refund_allocations"
+    ],
+    "function": "allocateCorrection",
+    "module": "ledger",
+    "worker": "allocateCorrectionWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Cumulative partial fees sum exactly on final refund",
+    "test": "TEST-FIN-02",
+    "task": "T-FIN-02",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-03",
+    "title": "Three-way statement reconciliation",
+    "ui": "admin/reconciliation",
+    "operation": "importStatement",
+    "tables": [
+      "statement_files",
+      "statement_lines",
+      "reconciliation_matches"
+    ],
+    "function": "reconcileStatements",
+    "module": "ledger",
+    "worker": "reconcileStatementsWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Missing/duplicate/fee/FX/timing breaks classified",
+    "test": "TEST-FIN-03",
+    "task": "T-FIN-03",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-04",
+    "title": "Break owner resolution/suspense",
+    "ui": "admin/reconciliation",
+    "operation": "resolveBreak",
+    "tables": [
+      "reconciliation_breaks",
+      "cases"
+    ],
+    "function": "resolveBreak",
+    "module": "ledger",
+    "worker": "resolveBreakWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Force match impossible; correction links approved journal",
+    "test": "TEST-FIN-04",
+    "task": "T-FIN-04",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-05",
+    "title": "Liquidity reservation/prefund forecast",
+    "ui": "admin/treasury",
+    "operation": "getTreasuryPositions",
+    "tables": [
+      "liquidity_reservations",
+      "account_balances"
+    ],
+    "function": "reserveLiquidity",
+    "module": "ledger",
+    "worker": "reserveLiquidityWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Concurrent transfers cannot spend same last prefund",
+    "test": "TEST-FIN-05",
+    "task": "T-FIN-05",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-06",
+    "title": "FX execution/netting/revaluation",
+    "ui": "admin/treasury",
+    "operation": "requestTreasuryMovement",
+    "tables": [
+      "treasury_movements",
+      "journals"
+    ],
+    "function": "allocateFxTrade",
+    "module": "ledger",
+    "worker": "allocateFxTradeWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Trade allocations equal actual cost and no customer terms drift",
+    "test": "TEST-FIN-06",
+    "task": "T-FIN-06",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-07",
+    "title": "Safeguarding/close/GL/regulatory exports",
+    "ui": "admin/reports",
+    "operation": "createReportExport",
+    "tables": [
+      "journals",
+      "documents"
+    ],
+    "function": "closePeriod",
+    "module": "ledger",
+    "worker": "closePeriodWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "Closed period cannot receive unauthorized backdated posting",
+    "test": "TEST-FIN-07",
+    "task": "T-FIN-07",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-FIN-08",
+    "title": "Refund/dispute overlap recovery",
+    "ui": "admin/disputes",
+    "operation": "createDisputeResponse",
+    "tables": [
+      "disputes",
+      "refund_allocations"
+    ],
+    "function": "resolveCreditOverlap",
+    "module": "ledger",
+    "worker": "resolveCreditOverlapWorker",
+    "admin": "scoped Finance case/evidence view; I permissions",
+    "invariant": "No second automatic customer credit for same entitlement",
+    "test": "TEST-FIN-08",
+    "task": "T-FIN-08",
+    "section": "E/J",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-01",
+    "title": "Monorepo versions/contract freeze",
+    "ui": "engineering",
+    "operation": "internal",
+    "tables": [
+      "none"
+    ],
+    "function": "validateBuildBaseline",
+    "module": "platform",
+    "worker": "validateBuildBaselineWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Exact patched locks and no server secrets in client bundle",
+    "test": "TEST-PLAT-01",
+    "task": "T-PLAT-01",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-02",
+    "title": "PostgreSQL migration from MySQL sandbox",
+    "ui": "engineering",
+    "operation": "internal",
+    "tables": [
+      "all core tables"
+    ],
+    "function": "migrateCore",
+    "module": "platform",
+    "worker": "migrateCoreWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Fresh install works and sandbox balances never become live cash",
+    "test": "TEST-PLAT-02",
+    "task": "T-PLAT-02",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-03",
+    "title": "Outbox/inbox idempotent durable workers",
+    "ui": "operations",
+    "operation": "internal",
+    "tables": [
+      "outbox",
+      "inbox",
+      "consumer_inbox"
+    ],
+    "function": "applyEvent",
+    "module": "platform",
+    "worker": "applyEventWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Crash at every commit/send/ack boundary preserves one economic effect",
+    "test": "TEST-PLAT-03",
+    "task": "T-PLAT-03",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-04",
+    "title": "Provider webhook authentication/replay",
+    "ui": "provider ingress",
+    "operation": "receiveWebhook",
+    "tables": [
+      "inbox",
+      "evidence"
+    ],
+    "function": "receiveWebhook",
+    "module": "platform",
+    "worker": "receiveWebhookWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Same ID changed body quarantined; invalid signature cannot post",
+    "test": "TEST-PLAT-04",
+    "task": "T-PLAT-04",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-05",
+    "title": "Timers/DLQ/manual replay",
+    "ui": "admin/exceptions",
+    "operation": "replayDeadLetter",
+    "tables": [
+      "timers",
+      "outbox"
+    ],
+    "function": "replayTask",
+    "module": "platform",
+    "worker": "replayTaskWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Restart preserves deadlines and replay preserves original key",
+    "test": "TEST-PLAT-05",
+    "task": "T-PLAT-05",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-06",
+    "title": "Monitoring SLOs tracing/redaction",
+    "ui": "operations",
+    "operation": "internal",
+    "tables": [
+      "audit_events"
+    ],
+    "function": "observeFinancialHealth",
+    "module": "platform",
+    "worker": "observeFinancialHealthWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Alerts reach named on-call without PII leaks",
+    "test": "TEST-PLAT-06",
+    "task": "T-PLAT-06",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-07",
+    "title": "Infrastructure/IaC/secrets/isolation",
+    "ui": "engineering",
+    "operation": "internal",
+    "tables": [
+      "books",
+      "provider_accounts"
+    ],
+    "function": "validateEnvironment",
+    "module": "platform",
+    "worker": "validateEnvironmentWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Production fails startup on sandbox capability or fixture adapter",
+    "test": "TEST-PLAT-07",
+    "task": "T-PLAT-07",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-08",
+    "title": "Backup/DR/fencing/reconciliation",
+    "ui": "operations",
+    "operation": "internal",
+    "tables": [
+      "all financial tables"
+    ],
+    "function": "recoverFinancialAuthority",
+    "module": "platform",
+    "worker": "recoverFinancialAuthorityWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Old writer fenced and uncertain external payments reconciled before reopen",
+    "test": "TEST-PLAT-08",
+    "task": "T-PLAT-08",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-09",
+    "title": "Privacy retention/legal holds",
+    "ui": "/profile/privacy",
+    "operation": "requestPrivacyAction",
+    "tables": [
+      "documents",
+      "cases"
+    ],
+    "function": "applyRetention",
+    "module": "platform",
+    "worker": "applyRetentionWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Legal hold preserves required records; deletable PII removed",
+    "test": "TEST-PLAT-09",
+    "task": "T-PLAT-09",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-PLAT-10",
+    "title": "Security/load/accessibility release gates",
+    "ui": "engineering",
+    "operation": "internal",
+    "tables": [
+      "none"
+    ],
+    "function": "evaluateReleaseGates",
+    "module": "platform",
+    "worker": "evaluateReleaseGatesWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "No critical gap or unexplained financial break at launch",
+    "test": "TEST-PLAT-10",
+    "task": "T-PLAT-10",
+    "section": "A/K/L",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-EXT-01",
+    "title": "US CA UK EU/EEA JP SG AU country policy",
+    "ui": "/locations",
+    "operation": "listCorridors",
+    "tables": [
+      "capabilities",
+      "policies"
+    ],
+    "function": "evaluateMarketPermission",
+    "module": "extensions",
+    "worker": "evaluateMarketPermissionWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Unapproved country/state/product remains disabled",
+    "test": "TEST-EXT-01",
+    "task": "T-EXT-01",
+    "section": "G/N",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-EXT-02",
+    "title": "Institutional stablecoin treasury",
+    "ui": "admin/treasury",
+    "operation": "requestTreasuryMovement",
+    "tables": [
+      "treasury_movements",
+      "journals"
+    ],
+    "function": "settleCustodyLeg",
+    "module": "extensions",
+    "worker": "settleCustodyLegWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Wrong network/depeg/reorg cannot produce available PHP cash",
+    "test": "TEST-EXT-02",
+    "task": "T-EXT-02",
+    "section": "G/N",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-EXT-03",
+    "title": "Business KYB and signatories",
+    "ui": "/business",
+    "operation": "createBusinessProfile",
+    "tables": [
+      "business_profiles",
+      "cases"
+    ],
+    "function": "verifyBusiness",
+    "module": "extensions",
+    "worker": "verifyBusinessWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Individual KYC alone cannot authorize business payout",
+    "test": "TEST-EXT-03",
+    "task": "T-EXT-03",
+    "section": "G/N",
+    "status": "planned; external enablement gated"
+  },
+  {
+    "id": "KITA-EXT-04",
+    "title": "Item-level batch payout approvals",
+    "ui": "/business/batches",
+    "operation": "createBatch",
+    "tables": [
+      "batches",
+      "batch_items",
+      "transfers"
+    ],
+    "function": "executeBatch",
+    "module": "extensions",
+    "worker": "executeBatchWorker",
+    "admin": "scoped Operations case/evidence view; I permissions",
+    "invariant": "Partial batch preserves paid items and no retry duplicates them",
+    "test": "TEST-EXT-04",
+    "task": "T-EXT-04",
+    "section": "G/N",
+    "status": "planned; external enablement gated"
+  }
+]

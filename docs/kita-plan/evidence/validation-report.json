@@ -1,0 +1,255 @@
+{
+  "as_of": "2026-11-09",
+  "checked_at": "2026-11-09T20:58:55.719128+00:00",
+  "scope": "Static artifact consistency and independent planning arithmetic only; not full OpenAPI schema validation, SQL runtime execution, application tests or provider certification.",
+  "checks": [
+    {
+      "check": "required files",
+      "status": "PASS",
+      "detail": {
+        "required": 19,
+        "found": 19
+      }
+    },
+    {
+      "check": "YAML and OpenAPI version",
+      "status": "PASS",
+      "detail": "3.1.0"
+    },
+    {
+      "check": "all local contract references resolve",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "required schema properties and regexes",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "unique operation IDs",
+      "status": "PASS",
+      "detail": {
+        "operations": 114,
+        "paths": 108,
+        "duplicates": [],
+        "schemas": 121
+      }
+    },
+    {
+      "check": "path parameters complete",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "security scheme references and admin/ingress boundary",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "mutation idempotency parameter",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "feature operations resolve",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "all feature IDs in traceability",
+      "status": "PASS",
+      "detail": {
+        "count": 104,
+        "missing": []
+      }
+    },
+    {
+      "check": "all feature IDs in tests",
+      "status": "PASS",
+      "detail": {
+        "count": 104,
+        "missing": []
+      }
+    },
+    {
+      "check": "all feature IDs in backlog",
+      "status": "PASS",
+      "detail": {
+        "count": 104,
+        "missing": []
+      }
+    },
+    {
+      "check": "all feature IDs in completeness",
+      "status": "PASS",
+      "detail": {
+        "count": 104,
+        "missing": []
+      }
+    },
+    {
+      "check": "feature test IDs and task IDs resolve",
+      "status": "PASS",
+      "detail": {
+        "tests": [],
+        "tasks": []
+      }
+    },
+    {
+      "check": "every archive feature ID crosswalk",
+      "status": "PASS",
+      "detail": {
+        "source_ids": 39,
+        "mapped": 39,
+        "unmapped": []
+      }
+    },
+    {
+      "check": "every physical app file mapped with unchanged hash",
+      "status": "PASS",
+      "detail": {
+        "physical": 142,
+        "mapped": 142,
+        "missing": [],
+        "changed": []
+      }
+    },
+    {
+      "check": "every file disposition rendered",
+      "status": "PASS",
+      "detail": 142
+    },
+    {
+      "check": "source inventory unchanged",
+      "status": "PASS",
+      "detail": {
+        "sources": 153,
+        "changed": []
+      }
+    },
+    {
+      "check": "feature table names exist in core",
+      "status": "PASS",
+      "detail": {
+        "tables": 75,
+        "missing": []
+      }
+    },
+    {
+      "check": "static SQL reference targets exist",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "static SQL delimiters and migration transaction",
+      "status": "PASS",
+      "detail": {
+        "parenthesis_balance": 0,
+        "dollar_pairs": 8
+      }
+    },
+    {
+      "check": "core financial guard declarations",
+      "status": "PASS",
+      "detail": "Declaration presence only; runtime untested"
+    },
+    {
+      "check": "worked journals balanced by currency",
+      "status": "PASS",
+      "detail": {
+        "journals": 42,
+        "errors": []
+      }
+    },
+    {
+      "check": "successful transfer residual trial balance",
+      "status": "PASS",
+      "detail": {
+        "USD:cash": 899,
+        "USD:fee_revenue": -399,
+        "USD:fx_revenue": -500
+      }
+    },
+    {
+      "check": "send inverse fee unwind and net-settlement arithmetic",
+      "status": "PASS",
+      "detail": {
+        "receive_php_minor": 2871000,
+        "inverse_usd_minor": 1742,
+        "partial_fee_minor": 160,
+        "unwind57_usd_minor": 50368,
+        "unwind59_usd_minor": 48661
+      }
+    },
+    {
+      "check": "independent cumulative partial-fee oracle",
+      "status": "PASS",
+      "detail": {
+        "partitions": 10000,
+        "seed": 20261109,
+        "failures": 0
+      }
+    },
+    {
+      "check": "documented acceptance example shape",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "local Markdown target files exist",
+      "status": "PASS",
+      "detail": []
+    },
+    {
+      "check": "M01-M104 scenario definitions",
+      "status": "PASS",
+      "detail": 104
+    },
+    {
+      "check": "snapshot unchanged during checks",
+      "status": "PASS",
+      "detail": "Rerun if any reviewed artifact changes"
+    }
+  ],
+  "status": "PASS",
+  "counts": {
+    "features": 104,
+    "archive_feature_ids": 39,
+    "app_files": 142,
+    "source_files": 153,
+    "operations": 114,
+    "paths": 108,
+    "schemas": 121,
+    "tables": 75,
+    "scenario_definitions": 104,
+    "journal_fixtures": 42
+  },
+  "pending": [
+    "DEP-00 original user specification sections 1-13 and original feature IDs unavailable",
+    "DEP-15 PostgreSQL runtime; binaries absent and package-registry DNS EAI_AGAIN",
+    "Full OpenAPI3.1 validator and generated client compilation",
+    "Domain implementation and all application/provider/production gates"
+  ],
+  "artifact_sha256": {
+    "README.md": "98d414e25dd7bda8103d65cb6cc0f9286c33a05a8c6b3bbac679030f6b602d26",
+    "COMPLETENESS-PASS.md": "4ba993c285e1ed41e6bf2d951ccae81d96794c5e1e5eb40f79fb55df9d3d430c",
+    "openapi/kita-v1.yaml": "f8f98d45c4c09098412da2504ed140211471859b3dee2be1d27be724d65eb49c",
+    "sql/001_core.sql": "da4b3e0e9ea259d3389298411603c2a0b026e90fd8fdb56066c5d74e6ef92123",
+    "sql/002_core_smoke.sql": "336d944e7aab09c1355f9021150df9aa52012c07325431b954f637c97d896703",
+    "01-architecture.md": "0c3fd299eb294deebe973bdc90b3c12b53818302274c087117ffeec2e7f40ad4",
+    "02-traceability-matrix.md": "e1a9bf6ec7e816fc37759d9296c5ecc165d3a633c3eea2c76d196b0c8d7e7c5e",
+    "03-migration-map.md": "4bf00142d641ad52290d4e6cb9ba19ff638aef5eb9af4e1fc6954710235c04da",
+    "04-ux-design.md": "ba20a472fbead2c43343bb9e97c6bfe7ac53a09674c961802d6d51f42df4eb49",
+    "05-data-ledger.md": "09855e04b6909da4c27baa698e5883ae24d881da3e12c81d8cb54f2cea7cfe3d",
+    "06-api-contracts.md": "50eebb64bcf93051b243d38567adc612925eb023e79971ad80a05fe40a10b416",
+    "07-algorithms.md": "d7447327c2e1c8c5711382d65a51614b5bc43b35b7818a648601a2ebb2f176c5",
+    "08-providers.md": "c8075212e879539ca939173e817bdc88625668c0b682e23c2a8257cbf4f8403c",
+    "09-admin-security.md": "0516097e8460989a3f8fb1f7b1475f37df393d521967705faaa5f9cc6c07a33f",
+    "10-finance-ops.md": "f2dcbce84761b088d2027d83b86119a772b988c45f1efb3acf2532cf52131148",
+    "11-infrastructure.md": "62bcb3816faeeec0ff527db2838eb933015053cb69a22490865b30dd044f3de3",
+    "12-tests-gates.md": "0de29850bf4205d45580bf11c62b696e99be9bf6d992594e0afa5d675a86ffae",
+    "13-backlog.md": "18a390bd509f4e30816bc648342542af9eb84fa52ab9657b96815d4ceda54eea",
+    "14-external-deps.md": "f557059927dadb43c74fe30147c23c77a91e7e251c2b31f9a941ff5d8b23fc76"
+  }
+}
