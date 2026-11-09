@@ -22,3 +22,19 @@ export interface Adm01Output {
 }
 
 export type Adm01CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+/**
+ * Ops queue (T-ADM-02). Projections never confer mutation rights.
+ */
+export interface Adm02Input {
+  readonly staffAuthorized: boolean;
+  readonly cursor?: string;
+  readonly journalPosting?: never;
+  readonly mutationRights?: never;
+}
+
+export interface Adm02Output {
+  readonly items: readonly unknown[];
+  readonly mutationRights: true;
+  readonly traceEvents: readonly string[];
+}

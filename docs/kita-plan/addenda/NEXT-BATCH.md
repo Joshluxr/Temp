@@ -1,21 +1,22 @@
 BATCH-OK
 
-Authorize only T-ADM-01: the pure authorizeStaff checker described below.
+Authorize only T-ADM-02: queryOpsQueue as a PURE checker.
 
-T-ADAPTER-01 landed: submit/inquire Unknown; unsigned webhook quarantined. TEST 4 passed.
-
-Holds remain: T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01, T-REWARD-01.
-
-Allowed implementation files only:
-- packages/domain/admin/authorize-staff.ts
-- tests/features/test-adm-01.spec.ts
-- packages/contracts/src/admin.ts (new additive Adm01 types only)
+Files permitted for this batch:
+- packages/domain/admin/query-ops-queue.ts
+- tests/features/test-adm-02.spec.ts
+- packages/contracts/src/admin.ts — additive Adm02 types only.
 
 Required behavior:
-- Never return ok:true and never issue a staff session that can mutate money.
-- audience === 'customer' => unauthorized, HTTP 403. Customer tokens are denied.
-- unrelatedEntity === true => unauthorized, HTTP 403. Unrelated entities are denied.
-- Otherwise => dependency_unavailable, HTTP 503, because workforce SSO/OIDC is not implemented.
-- Default-deny. No owner auto-admin.
+- No DB access, money operations, or executeCommand.
+- Never return ok: true and never attach mutation rights to a projection.
+- staffAuthorized === false => unauthorized, HTTP 403.
+- Otherwise => dependency_unavailable, HTTP 503, because the live ops queue/T-TX-02 is not implemented.
+- Do not invent transfer rows.
 
-Keep the checker pure: no DB, no money operations, no executeCommand. Tests must cover these denial branches and the absence of any successful authorization path. No other implementation scope is authorized; any required expansion remains HOLD.
+Landed: T-ADM-01 returns 403 for customer/unrelated; otherwise 503. TEST-ADM-01: 4 passed.
+
+HOLD: T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01, T-REWARD-01.
+T-ADM-03: HOLD if it would mutate transfers/money.
+
+Only the exact checker above is authorized. Any work outside this scope is HOLD.
