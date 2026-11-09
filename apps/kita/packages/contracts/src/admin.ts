@@ -72,3 +72,19 @@ export interface Adm05Output {
   readonly commandAuthorityGranted: true;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Manual evidence (T-ADM-07). Cannot set paid without verified evidence and reviewer.
+ */
+export interface Adm07Input {
+  readonly missingVerifiedEvidence: boolean;
+  readonly missingReviewer: boolean;
+  readonly journalPosting?: never;
+  readonly markPaid?: never;
+}
+
+export interface Adm07Output {
+  readonly paid: true;
+  readonly evidenceId: UUID;
+  readonly traceEvents: readonly string[];
+}
