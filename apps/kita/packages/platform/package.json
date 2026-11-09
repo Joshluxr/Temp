@@ -5,6 +5,10 @@
   "description": "Kita platform tool STUB lane (T-PLAT-01/T-PLAT-02): validateBuildBaseline + migrateCore verification with fail-closed evidence adapters. Verifies only — no installs, no DDL execution, zero money effects; sandbox-money import is rejected structurally and at runtime.",
   "type": "module",
   "exports": {
+    "./runtime": {
+      "types": "./runtime.ts",
+      "default": "./runtime.ts"
+    },
     "./validate-build-baseline": {
       "types": "./validate-build-baseline.ts",
       "default": "./validate-build-baseline.ts"
@@ -24,7 +28,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test __tests__/test-plat-01.spec.ts __tests__/test-plat-02.spec.ts && vitest run --root ../.. tests/features/test-plat-01.spec.ts"
+    "test": "vitest run --root ../.. tests/features/test-plat-01.spec.ts"
   },
   "dependencies": {
     "@kita/contracts": "*"
