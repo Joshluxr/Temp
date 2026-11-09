@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    // Source-file (.ts) import specifiers are the kita slice convention (Node
+    // type-stripping runs .ts directly; every package does this). Required for
+    // the relative cross-package imports in src/bootstrap.ts. noEmit makes it safe.
+    "allowImportingTsExtensions": true
   },
   "include": ["src"]
 }

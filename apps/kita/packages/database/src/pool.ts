@@ -47,6 +47,13 @@ export interface PoolDriver {
   createPool(config: PoolConfigInput): PoolLike;
 }
 
+/** Minimal structural driver shape accepted by createPool. Deliberately looser than
+ * PoolDriver (config parameter may be typed `unknown`, return may be a promise) so test
+ * recording doubles satisfy it without importing this module's types. */
+export interface AcceptablePoolDriver {
+  createPool(config: any): unknown | PromiseLike<unknown>;
+}
+
 export interface ManagedPool extends PoolLike {
   readonly config: Readonly<PoolConfigInput>;
   acquire(): Promise<PoolClientLike>;
@@ -68,26 +75,28 @@ function resolveConfig(bindings: DatabaseBindings): PoolConfigInput {
     // Never echo the URL itself: it may carry credentials. Names the field, not the value.
     throw new PoolError("pool config: databaseUrl must be a non-empty string");
   }
-  const resolved: Record<string, unknown> = { connectionString: bindings.databaseUrl };
+  const numeric: Partial<Record<(typeof LIMIT_KEYS)[number][1], number>> = {};
   for (const [bindingKey, configKey] of LIMIT_KEYS) {
     const value = bindings[bindingKey];
     if (value === undefined) continue;
     if (!Number.isInteger(value) || value <= 0) {
       throw new PoolError(`pool config: ${bindingKey} must be a positive finite integer`);
     }
-    resolved[configKey] = value;
+    numeric[configKey] = value;
   }
-  return Object.freeze(resolved) as PoolConfigInput;
+  return Object.freeze({ connectionString: bindings.databaseUrl, ...numeric }) as PoolConfigInput;
 }
 
 let defaultDriver: PoolDriver | undefined;
 
+interface PgPoolLike {
+  connect(): Promise<PoolClientLike>;
+  query(sql: string, params?: readonly unknown[]): Promise<unknown>;
+  end(): Promise<void>;
+}
+
 interface PgPoolCtor {
-  new (config: unknown): {
-    connect(): Promise<PoolClientLike>;
-    query(sql: string, params?: readonly unknown[]): Promise<unknown>;
-    end(): Promise<void>;
-  };
+  new (config: unknown): PgPoolLike;
 }
 
 async function loadPgPoolCtor(): Promise<PgPoolCtor> {
@@ -105,22 +114,19 @@ function pgDriver(): PoolDriver {
   if (defaultDriver === undefined) {
     defaultDriver = {
       createPool(config: PoolConfigInput): PoolLike {
-        let inner: Awaited<ReturnType<PgPoolCtor["prototype"]["connect"]>> extends never ? never : any;
-        let pending: Promise<any> | undefined;
-        const ensure = (): Promise<any> => {
+        let inner: PgPoolLike | undefined;
+        let pending: Promise<PgPoolLike> | undefined;
+        const ensure = (): Promise<PgPoolLike> => {
           if (inner !== undefined) return Promise.resolve(inner);
           if (pending === undefined) {
-            pending = loadPgPoolCtor().then((Pool) => {
-              inner = new Pool(config);
-              return inner;
-            });
+            pending = loadPgPoolCtor().then((Pool) => (inner = new Pool(config)));
           }
           return pending;
         };
         return {
-          connect: () => ensure().then((p: any) => p.connect()),
-          query: (sql, params) => ensure().then((p: any) => p.query(sql, params)),
-          end: () => ensure().then((p: any) => p.end()),
+          connect: () => ensure().then((p) => p.connect()),
+          query: (sql, params) => ensure().then((p) => p.query(sql, params)),
+          end: () => ensure().then((p) => p.end()),
         };
       },
     };
@@ -133,8 +139,8 @@ function pgDriver(): PoolDriver {
 export function sanitizeDatabaseUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    if (parsed.username !== "") parsed.username = "***";
     if (parsed.password !== "") parsed.password = "***";
+    // Username is host-identifying rather than secret material; only the password is masked.
     return parsed.toString();
   } catch {
     // Unparseable: assume it may still embed secrets and redact aggressively.
@@ -144,13 +150,19 @@ export function sanitizeDatabaseUrl(url: string): string {
 
 export function createPool(
   bindings: DatabaseBindings,
-  options?: { driver?: PoolDriver },
+  options?: { driver?: PoolDriver | AcceptablePoolDriver },
 ): ManagedPool {
   const config = resolveConfig(bindings);
   const driver = options?.driver ?? pgDriver();
   // Per-instance state only: nothing is registered in any module-level table, so
   // instances cannot observe or mutate each other's pools or configs.
-  const pool = driver.createPool(config);
+  let poolPromise: Promise<PoolLike> | undefined;
+  const getPool = (): Promise<PoolLike> => {
+    if (poolPromise === undefined) {
+      poolPromise = Promise.resolve(driver.createPool(config) as PoolLike);
+    }
+    return poolPromise;
+  };
   let closed = false;
 
   const assertOpen = (what: string): void => {
@@ -166,20 +178,20 @@ export function createPool(
     },
     acquire(): Promise<PoolClientLike> {
       assertOpen("acquire");
-      return pool.connect();
+      return getPool().then((p) => p.connect());
     },
     connect(): Promise<PoolClientLike> {
       assertOpen("connect");
-      return pool.connect();
+      return getPool().then((p) => p.connect());
     },
     query(sql: string, params?: readonly unknown[]): Promise<unknown> {
       assertOpen("query");
-      return pool.query(sql, params);
+      return getPool().then((p) => p.query(sql, params));
     },
     async close(): Promise<void> {
       if (closed) return; // idempotent shutdown
       closed = true;
-      await pool.end();
+      await (await getPool()).end();
     },
     end(): Promise<void> {
       return this.close();

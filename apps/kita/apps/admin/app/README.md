@@ -13,3 +13,9 @@ There are no buttons that mutate anything, no API imports, and no tRPC wiring.
 Status: pending Sol re-review before any second-batch work. Role-based access
 control and any real admin operations (the T-ADM tasks) are out of batch-1
 scope and must not be added here until approved.
+
+Planned page/route → frozen-API/permission mapping for batch 2 lives in
+`docs/kita-plan/evidence/ADMIN-PAGES-API-MAP.md`. Nothing in this app may call
+outcome-manufacturing endpoints (`complete`, `fail`, `mark_paid_out`,
+`addSandboxFunds`, `simulatePartnerCompletion`) at any time; every page is
+default-deny until scoped RBAC exists.
