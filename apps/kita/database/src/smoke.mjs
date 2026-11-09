@@ -14,7 +14,7 @@
  *     apps/kita/database/scripts/provision-cluster.sh.
  *   - The 002 fixture is self-contained: it wraps everything in BEGIN ... ROLLBACK,
  *     so even inside the test DB it leaves no residue. It assumes 001_core.sql
- *     has already been applied (see apps/kita/database/scripts/migrate.mjs, owned
+ *     has already been applied (see apps/kita/database/src/migrate.mjs, owned
  *     by coder-07; or `psql -f 001_core.sql` against the same cluster).
  *
  * Usage:

@@ -1,0 +1,155 @@
+# Kita slice CI — T-PLAT-01 (docs/kita-plan/13-backlog.md "### T-PLAT-01")
+#
+# This workflow lives INSIDE apps/kita on purpose. The repository root security
+# product (.github/workflows/ci.yml) is the ONLY production target of this repo
+# and must never be touched by Kita work (WORKSPACE.md "Kita slice" bullet).
+# Likewise, this workflow:
+#   * runs only for changes under apps/kita/**,
+#   * installs/builds exclusively with `cd apps/kita` (independent npm workspace),
+#   * has NO deploy job, NO environment, NO secrets, NO OIDC role assumption,
+#     and cannot publish artifacts anywhere.
+#
+# Batch-1 hard constraints (docs/kita-plan/SOL-REVIEW.md): no real money, no
+# fake KYC, no outcome-manufacturing paths in any production-reachable source.
+name: Kita CI (apps/kita only — never production)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/kita/**"
+  push:
+    branches:
+      - main
+    tags:
+      - "kita-v*"
+    paths:
+      - "apps/kita/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kita-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  kita:
+    name: Kita workspace checks (T-PLAT-01 / TEST-PLAT-01)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Everything below runs against the isolated test topology only
+      # (kita_core_test, loopback port 54339 per WORKSPACE.md). No live host
+      # variable exists or is referenced anywhere in this workflow.
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: apps/kita
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/kita/package-lock.json
+
+      # Independent workspace rule: NEVER install from the repo root.
+      - name: Install (apps/kita only)
+        run: npm ci
+
+      # ---------------------------------------------------------------
+      # Fail-closed guard 1 — prohibited_runtime_reference_count
+      # (observability metric named by T-MIG-01, docs/kita-plan/13-backlog.md).
+      # Outcome-manufacturing identifiers may appear ONLY in comments/docs
+      # (they are cited there deliberately by apps/kita/docs/FORBIDDEN.md and
+      # apps/kita/apps/admin/app/page.tsx); a match on any executable line is
+      # a ported forbidden call and fails the job. Excludes node_modules,
+      # __tests__ and .md files.
+      # ---------------------------------------------------------------
+      - name: "Guard: no outcome-manufacturing calls (FORBIDDEN-PATHS F-01..F-05)"
+        run: |
+          set -euo pipefail
+          pattern='addSandboxFunds|simulatePartnerCompletion|mark_paid_out'
+          if matches=$(grep -RInE "$pattern" \
+              --include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' --include='*.cjs' \
+              --exclude-dir=node_modules --exclude=__tests__ \
+              apps packages tests database sql 2>/dev/null \
+              | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(\*|//|/\*)'); then
+            echo "::error::Forbidden outcome-manufacturing identifier found on an executable line."
+            echo "Register: apps/kita/docs/FORBIDDEN-PATHS.md and docs/FORBIDDEN-PRODUCTION-ENDPOINTS.md."
+            printf '%s\n' "$matches"
+            exit 1
+          fi
+          echo "OK: no addSandboxFunds / simulatePartnerCompletion / admin complete-fail-mint calls."
+
+      # ---------------------------------------------------------------
+      # Fail-closed guard 2 — no production database host/DSN in kita code.
+      # The only permitted PostgreSQL coordinates are the isolated test
+      # cluster (127.0.0.1:54339/kita_core_test). Any cloud/managed-DB
+      # hostname, or a postgres:// / postgresql:// DSN whose host is not the
+      # loopback test host on port 54339, fails the build.
+      # ---------------------------------------------------------------
+      - name: "Guard: no production database host or DSN referenced"
+        run: |
+          set -euo pipefail
+          status=0
+          include_args=(--include='*.ts' --include='*.tsx' --include='*.js' --include='*.mjs' \
+                        --include='*.cjs' --include='*.json' --include='*.yml' --include='*.yaml' \
+                        --include='*.sql')
+          echo "== Cloud/managed database hostnames =="
+          if grep -RInE '(rds\.amazonaws\.com|\.neon\.tech|supabase\.(co|in)|render\.com|flysql|database\.azure\.com)' \
+              "${include_args[@]}" --exclude-dir=node_modules .; then
+            echo "::error::Kita source references a non-test database host; only kita_core_test@127.0.0.1:54339 is permitted."
+            status=1
+          else
+            echo "OK: no cloud/managed DB hostnames."
+          fi
+          echo "== postgres DSNs pointing outside the isolated test cluster =="
+          # Strip userinfo (user:pass@) so credentials never print, then flag any
+          # DSN whose host is not loopback-with-port-54339.
+          if grep -RIhoE 'postgres(ql)?://[A-Za-z0-9._%+@!$&*()=;/?#-]+' \
+              "${include_args[@]}" --exclude-dir=node_modules . \
+              | sed -E 's#^(postgres(ql)?://)[^/@]*@#\1#' \
+              | grep -vE '^postgres(ql)?://(127\.0\.0\.1|localhost|host\.docker\.internal):54339(/|$)'; then
+            echo "::error::A postgres DSN targets something other than the isolated test cluster (loopback:54339). Kita batch 1 has NO production database (TEST-PLAT-02)."
+            status=1
+          else
+            echo "OK: every postgres DSN in-tree points at kita_core_test on the loopback test port."
+          fi
+          exit $status
+
+      # ---------------------------------------------------------------
+      # Fail-closed guard 3 — this workflow must never gain deploy powers.
+      # Asserts the root security-product CI does not invoke this workflow
+      # and that kita-ci.yml itself declares no environment/OIDC/secrets usage.
+      # ---------------------------------------------------------------
+      - name: "Guard: kita is not wired into any production deploy"
+        run: |
+          set -euo pipefail
+          status=0
+          if grep -n 'kita' ../../.github/workflows/*.yml; then
+            echo "::error::A root workflow references Kita — apps/kita must stay out of the security product's production CI."
+            status=1
+          else
+            echo "OK: root security-product CI is Kita-free."
+          fi
+          if grep -nE '^[[:space:]]*(environment|id-token: write|packages: write)[[:space:]:]' \
+              .github/workflows/kita-ci.yml; then
+            echo "::error::Kita workflow requests deploy-adjacent permissions (environment / id-token / packages write)."
+            status=1
+          else
+            echo "OK: no environment, no OIDC role assumption, no package registry write."
+          fi
+          exit $status
+
+      # Existing workspace fan-out scripts (apps/kita/package.json): each runs
+      # `npm run --workspaces --if-present <script>` over apps/* and packages/*.
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Test
+        run: npm test

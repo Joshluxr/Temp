@@ -15,7 +15,8 @@
  */
 
 module.exports = {
-  root: true,
+  // NOTE: `root: true` is intentionally omitted — a shareable config must not
+  // force the consuming project's root status; set it in each consumer config.
   env: {
     es2022: true,
     node: true,
@@ -56,7 +57,10 @@ module.exports = {
     'no-debugger': 'error',
     'no-dupe-class-members': 'error',
     'no-dupe-keys': 'error',
-    'no-undef': 'error',
+    // no-undef is off: TypeScript's compiler already catches undefined
+    // identifiers, and the core rule false-positives on TS globals/type names
+    // without eslint-plugin-typescript (which this config forbids by design).
+    'no-undef': 'off',
     'no-unreachable': 'error',
     'no-unsafe-negation': 'error',
     'no-shadow-restricted-names': 'error',
