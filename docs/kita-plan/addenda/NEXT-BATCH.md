@@ -1,29 +1,26 @@
 BATCH-OK
 
-Authorize only T-REC-04: a PURE repeatTransfer checker.
+Authorize only T-ADAPTER-01: PURE fail-closed transport checker.
 
-Heartbeat (operator supplied): Codex logged in, GPU disk 41%, astra gone. Plan A-N complete.
-T-REC-03 landed: VERSION_CONFLICT -> 409; else -> 503. TEST-REC-03: 2 passed.
+T-REC-04 landed: reuseOldPayment => 409; otherwise => 503.
+TEST-REC-04: 2 passed.
 
-Holds remain: T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01.
+HOLD: T-CORE-02, T-PLAT-08, T-EXT-02, T-EXT-04, T-QUOTE-01.
+T-REWARD-01: HOLD (ledger).
 
-Allowed implementation files only:
-- packages/domain/recipients/repeat-transfer.ts
-- tests/features/test-rec-04.spec.ts
-- packages/contracts/src/recipients.ts (additive Rec04 types only)
+Only permitted files:
+- packages/providers/transport.ts — submit and inquire only.
+- packages/providers/evidence.ts — verifyWebhook only.
+- tests/providers/outcome-contract.spec.ts — focused outcome-contract checks.
 
 Required behavior:
-- Reuse Rec01CommandContext; do not introduce a replacement context.
-- Never return ok:true. Never replay an old payment or reuse its command, quote, or provider reference.
-- reuseOldPayment === true: reject with CAPABILITY_UNAVAILABLE or RECIPIENT_VERSION_CHANGED, HTTP 409, retryable:false. Explain that repeat must obtain a new quote and never replay the old payment.
-- reuseOldPayment === false: return HTTP 503 dependency_unavailable because T-QUOTE-08/draft store is not implemented. Do not create a live draft that can pay.
-- Keep the checker pure: no DB, no money movement, no executeCommand, no quote acquisition, no draft persistence, and no payment/provider execution. Every path must fail closed.
+- submit and inquire return Unknown, or an equivalent explicit problem outcome, because transport is unimplemented. Never guess Confirmed or Rejected. No unsigned success.
+- verifyWebhook returns a VerificationResult that is not verified / is rejected for unsigned input or a missing signature. Never treat an unsigned body as success.
 
-Acceptance:
-- TEST-REC-04 covers the true-path 409 non-retryable rejection and the false-path 503 dependency_unavailable rejection.
-- Verify neither path returns ok:true, reuses an old payment reference, or creates a payable draft.
-- Preserve existing contracts; only additive Rec04 types are allowed in recipients.ts.
-- Re-run TEST-REC-03 and TEST-REC-04 plus applicable existing type checks; report actual results.
-- Review the diff for the exact three-file scope and absence of side effects. Any required scope expansion is HOLD.
+Checker acceptance:
+- Focused tests prove submit and inquire fail closed without implemented transport.
+- Focused tests prove unsigned webhook input and missing signatures cannot produce a verified result.
+- No HTTP, DB, money operations, executeCommand, real provider calls, or persistence.
+- Keep the checker pure and changes confined to the three permitted files. All listed holds remain in force.
 
-Routing: GPU gpu-fqaf Qoder CLI Efficient swarm implements; VM Codex gpt-6.1-sol max reviews. Failed review returns to Qoder as a fix batch within this scope. No other task is authorized by this batch.
+Use the established Qoder Efficient coding / Sol max review workflow. No broader implementation is authorized.
