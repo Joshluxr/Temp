@@ -67,3 +67,16 @@ export interface Tx07Output {
   readonly claimId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Tx02Input {
+  readonly lateReturnErasesPaidHistory: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx02Output {
+  readonly moneyAuthorizedByProjection: true;
+  readonly paidHistoryErased: true;
+  readonly transferId: UUID;
+  readonly traceEvents: readonly string[];
+}
