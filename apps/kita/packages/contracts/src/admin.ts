@@ -88,3 +88,21 @@ export interface Adm07Output {
   readonly evidenceId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * PII reveal (T-ADM-09). Step-up, reason, and expiry required. Never return unmasked PII.
+ */
+export interface Adm09Input {
+  readonly missingStepUp: boolean;
+  readonly missingReason: boolean;
+  readonly expired: boolean;
+  readonly piiSample?: string;
+  readonly journalPosting?: never;
+  readonly unmaskedReveal?: never;
+}
+
+export interface Adm09Output {
+  readonly unmaskedPii: string;
+  readonly exportUrl: string;
+  readonly traceEvents: readonly string[];
+}
