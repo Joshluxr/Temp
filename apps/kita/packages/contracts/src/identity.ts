@@ -18,3 +18,16 @@ export interface Auth01Output {
   readonly customerId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Auth02Input {
+  readonly tokenRevoked: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Auth02Output {
+  readonly financialCommandContinued: true;
+  readonly sessionIssued: true;
+  readonly customerId: UUID;
+  readonly traceEvents: readonly string[];
+}
