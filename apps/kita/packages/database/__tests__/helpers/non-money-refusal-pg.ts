@@ -195,7 +195,11 @@ async function endOwnerClient(
     const late = await observeLate(ending, 1_000);
     const raw = { first: err, late, ledger };
     if (err && typeof err === "object") {
-      (err as { closeLedger?: CloseLedger }).closeLedger = ledger;
+      try {
+        Object.defineProperty(err, "closeLedger", { value: ledger, enumerable: false, configurable: true });
+      } catch {
+        hideSecondary(err, ledger);
+      }
       hideSecondary(err, raw);
     }
     return { account: closeAccount("owner-client.end", err, connected), raw };
@@ -524,7 +528,10 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         return pool;
       },
       async close(): Promise<void> {
-        if (closeWork) return closeWork;
+        if (closeWork) {
+          await closeWork;
+          if (pools.size === 0) return;
+        }
         closeWork = (async () => {
           const owned = [...pools.entries()];
           const ledgers = owned.map(([url, pool]) => {
@@ -544,7 +551,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
           if (rejected.length === 0) return;
           const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
           const error = cleanupError(accounts, rejected.map((result) => result.reason));
-          (error as { closeLedgers?: CloseLedger[] }).closeLedgers = ledgers.map((item) => item.ledger);
+          hideSecondary(error, ledgers.map((item) => item.ledger));
           throw error;
         })();
         return closeWork;
