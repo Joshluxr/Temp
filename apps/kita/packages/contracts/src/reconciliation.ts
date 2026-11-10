@@ -19,3 +19,17 @@ export interface Fin03Output {
   readonly reconciliationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Fin04CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Fin04Input {
+  readonly forceMatchWithoutApprovedJournal: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fin04Output {
+  readonly forceMatched: true;
+  readonly breakId: UUID;
+  readonly traceEvents: readonly string[];
+}
