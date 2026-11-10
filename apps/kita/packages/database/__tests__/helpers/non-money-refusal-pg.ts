@@ -116,6 +116,21 @@ type LateOutcome =
   | { readonly status: "pending" }
   | { readonly status: "sync"; readonly reason: unknown };
 
+type CloseLedger = { current: LateOutcome; readonly work: Promise<unknown> };
+
+function watchUntilSettled(work: Promise<unknown>): CloseLedger {
+  const ledger: CloseLedger = { current: { status: "pending" }, work };
+  void work.then(
+    (value) => {
+      ledger.current = { status: "fulfilled", value };
+    },
+    (reason: unknown) => {
+      ledger.current = { status: "rejected", reason, reasonDefined: reason !== undefined };
+    },
+  );
+  return ledger;
+}
+
 async function observeLate(work: Promise<unknown>, ms: number): Promise<LateOutcome> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -176,9 +191,13 @@ async function endOwnerClient(
     await bounded("owner-client.end", ending);
     return {};
   } catch (err) {
+    const ledger = watchUntilSettled(ending);
     const late = await observeLate(ending, 1_000);
-    const raw = { first: err, late };
-    if (err && typeof err === "object") hideSecondary(err, late);
+    const raw = { first: err, late, ledger };
+    if (err && typeof err === "object") {
+      (err as { closeLedger?: CloseLedger }).closeLedger = ledger;
+      hideSecondary(err, raw);
+    }
     return { account: closeAccount("owner-client.end", err, connected), raw };
   }
 }
@@ -483,6 +502,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     const loginUnbound = await makeLogin(`kita_refusal_test_unbound_${suffix}`, null, null);
 
     const pools = new Map<string, ManagedPool>();
+    let closeWork: Promise<void> | undefined;
     return {
       ownerUrl,
       bookA: bookAId,
@@ -504,20 +524,30 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         return pool;
       },
       async close(): Promise<void> {
-        const closing = [...pools.values()].map((pool) => {
-          try {
-            return bounded("pool.close", Promise.resolve(pool.close()));
-          } catch (sync) {
-            return Promise.reject({ status: "sync" as const, reason: sync });
-          }
-        });
-        pools.clear();
-        const results = await Promise.allSettled(closing);
-        const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-        if (rejected.length === 0) return;
-        const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
-        const error = cleanupError(accounts, rejected.map((result) => result.reason));
-        throw error;
+        if (closeWork) return closeWork;
+        closeWork = (async () => {
+          const owned = [...pools.entries()];
+          const ledgers = owned.map(([url, pool]) => {
+            let work: Promise<void>;
+            try {
+              work = Promise.resolve(pool.close());
+            } catch (sync) {
+              work = Promise.reject({ status: "sync" as const, reason: sync });
+            }
+            return { url, work, ledger: watchUntilSettled(work) };
+          });
+          const observed = await Promise.allSettled(ledgers.map((item) => bounded("pool.close", item.work)));
+          void Promise.allSettled(ledgers.map((item) => item.work)).then(() => {
+            for (const item of ledgers) pools.delete(item.url);
+          });
+          const rejected = observed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+          if (rejected.length === 0) return;
+          const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
+          const error = cleanupError(accounts, rejected.map((result) => result.reason));
+          (error as { closeLedgers?: CloseLedger[] }).closeLedgers = ledgers.map((item) => item.ledger);
+          throw error;
+        })();
+        return closeWork;
       },
     };
   } catch (err) {
