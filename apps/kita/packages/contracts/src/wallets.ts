@@ -63,3 +63,17 @@ export interface Wal04Output {
   readonly conversionId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Wal05CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Wal05Input {
+  readonly failedRefundDropsObligationOrClosureLosesFunds: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Wal05Output {
+  readonly remainingFundsLost: true;
+  readonly withdrawalId: UUID;
+  readonly traceEvents: readonly string[];
+}
