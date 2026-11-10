@@ -1,116 +1,78 @@
 BATCH-OK
 
-Money closed. Never ok:true. executeCommand and money_operations access remain HOLD. No financial execution, session minting, identity/KYC success, provider calls, live traffic, deployment, pilot, launch or G1-G6 closure is authorized.
+Next batch: refusal-record client-crash and lost-COMMIT recovery tests, confined to two existing test files. This advances the recovery evidence for the implemented non-money persistence slice. It adds no supplied-evidence checker, readiness Boolean, persistence operation or application behavior.
 
-Baseline: 651ef51d5f3018c08c53b37e73ca182f402c551a (651ef51, PR #127). The operator reports that 005_non_money_refusal.sql now applies. The ownership-transfer repair is present; the earlier failed-transfer/rolled-back installation state is superseded. Installation does not establish runtime acceptance.
+Money closed. Never ok:true. No executeCommand or money_operations access. Session bind, bindSession activation, session minting, identity/KYC success, financial execution, provider calls, runtime activation, live traffic, deployment, pilot, launch and G1-G6 closure remain HOLD.
 
-The operator reports that restricted recorder logins with WITH INHERIT TRUE membership still receive KRF01/unauthorized, with v_oid unresolved. The entry point currently selects a.oid through an unnecessary join to pg_catalog.pg_authid, which its non-superuser SECURITY DEFINER owner cannot read. pg_catalog.pg_roles already supplies the login OID and every checked role attribute. Remove the protected-catalog dependency; do not grant catalog access or weaken authorization checks. Preserve raw database SQLSTATE evidence separately from the application's unauthorized mapping.
+Baseline: 849120558ec3282c5dc25764f6b6a82abbb80290 (8491205), branch cursor/kita-core02-refusal-pg-evidence-05a3, [PR #128](https://github.com/Joshluxr/Temp/pull/128). The refusal-record slice and pg_roles.oid repair are implemented. PR #128 reports PostgreSQL 18.6 evidence: 11 passing tests, comprising three unit cases and eight PostgreSQL cases covering record/replay, changed-tag 409, actor/book isolation, unbound 403, denied command_keys SELECT, 100 contenders converging on one reserved row, independent rr1 hashing and denied SET ROLE to the definer. Those are reported baseline results; this documentation turn does not rerun or extend them. Crash/lost-COMMIT evidence is still open. The previous catalog-repair batch is superseded in full and must not be repeated.
 
-This document replaces NEXT-BATCH.md entirely and freezes one subsequent implementation change. BATCH-OK is a scope decision, not an implementation PASS, PostgreSQL result, runtime activation, refusal-slice acceptance or merge permission. This documentation turn edits only docs/kita-plan/addenda/NEXT-BATCH.md. No migration, application code, test, helper, configuration or generated file is edited or applied now.
+BATCH-OK freezes only the subsequent test scope below. It is not a test PASS, full refusal-slice acceptance, production-readiness decision or merge permission. This turn rewrites only docs/kita-plan/addenda/NEXT-BATCH.md. It changes no application code, SQL, test, helper or configuration and performs no database mutation.
 
-Exactly one existing implementation file may change in the subsequent batch:
+The complete subsequent implementation allowlist is:
 
-| File | Only permitted change |
+| Existing file | Permitted change |
 |---|---|
-| apps/kita/packages/database/migrations/005_non_money_refusal.sql | Replace the exact role-lookup block below: select r.oid directly from pg_catalog.pg_roles and remove the pg_authid join. |
+| apps/kita/packages/database/__tests__/non-money-refusal-store.spec.ts | Add deterministic tests of COMMIT ordering, unconfirmed persistence results, bounded attempts and cleanup at the refusal-store boundary. Keep fault adapters local to this file. |
+| apps/kita/packages/database/__tests__/non-money-refusal-postgres.spec.ts | Add exact-target preflight, real PostgreSQL client-process loss and lost-COMMIT recovery cases, scoped row observers, inline child-process support and cleanup for resources owned by the new cases. |
 
-No new file, glob or other edit is authorized. Preserve application code, tests, helpers, runners, migration ledgers, dependencies, configuration, public contracts, historical evidence and all pre-existing tracked/untracked work. The currently modified PostgreSQL test/helper files are outside this batch and supply no reviewed acceptance evidence here. Preserve every other byte of 005 and every other implementation file, including all 001 copies, 004 and apps/kita/sql/CHECKSUMS.txt. That manifest covers legacy SQL copies; do not regenerate it or add 005.
+No other file or new file is allowed. In particular, preserve __tests__/helpers/non-money-refusal-pg.ts, helpers/fake-pg.ts, src/non-money-refusal-store.ts, src/transaction.ts, src/pool.ts, all migrations, all 001 copies, apps/kita/sql/CHECKSUMS.txt, migration ledgers, manifests, lockfiles, dependencies, test configuration, public contracts, exports, routes, workers, evidence checkers and historical reviews byte for byte. Preserve all pre-existing tracked and untracked work. No generated helper, child script, snapshot or evidence file may be written into the repository. Small child programs may be embedded in the allowlisted PostgreSQL spec and executed in memory using the existing Node and pg dependencies.
 
-In kita.record_non_money_refusal(text, text), replace exactly this existing block once:
+Retain all existing refusal tests and their assertions. Do not weaken failures, change expected results, reduce contention, turn required cases into skips, change the existing fixture helper's authority or use unrelated application operations as probes. If a required fix needs another path, stop that dependent work with BATCH-HOLD and return a concrete defect and proposed scope; this batch does not authorize that fix.
 
-~~~sql
-  SELECT a.oid, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls, r.rolinherit
-    INTO v_oid, v_super, v_createdb, v_createrole, v_replication, v_bypass, v_inherit
-  FROM pg_catalog.pg_roles r
-  JOIN pg_catalog.pg_authid a ON a.rolname = r.rolname
-  WHERE r.rolname = v_login;
+Every runtime call remains recordNonMoneyRefusal(pool, input) or its existing SQL entry point kita.record_non_money_refusal(text,text), under independently authenticated restricted recorder logins bound to disabled test books. Use only recordNonMoneyRefusal.v1. No owner connection followed by SET ROLE counts as runtime evidence. The migration owner may provision the existing bounded fixtures and observe only their bindings, book status and scoped reserved rows; it must not invoke the runtime entry point as a substitute for a restricted login. Read-only PostgreSQL catalog/session inspection is permitted. No financial or identity data query is authorized.
+
+The stored and returned committed refusal remains exactly:
+
+~~~json
+{"ok":false,"error":{"code":"CAPABILITY_UNAVAILABLE","status":503,"retryable":false,"detail":"Command execution is unavailable."}}
 ~~~
 
-with exactly:
+When persistence is unconfirmed, the unchanged application must return exactly:
 
-~~~sql
-  SELECT r.oid, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls, r.rolinherit
-    INTO v_oid, v_super, v_createdb, v_createrole, v_replication, v_bypass, v_inherit
-  FROM pg_catalog.pg_roles r
-  WHERE r.rolname = v_login;
+~~~json
+{"ok":false,"error":{"code":"dependency_unavailable","status":503,"retryable":true,"detail":"Refusal persistence is unconfirmed; retry the same key."}}
 ~~~
 
-Preserve the surrounding blank lines, indentation, LF endings and final LF. This changes a.oid to r.oid and deletes only the pg_authid JOIN line. No fallback lookup, exception swallowing, alternative identity source, dynamic SQL or additional catalog grant is authorized.
+The committed row must retain state rejected, resource_id NULL and the independent rr1 SHA-256 over the UTF-8 bytes {"requestTag":"<tag>","schemaVersion":1}. No response may report business acceptance. Preserve the changed-tag IDEMPOTENCY_MISMATCH 409 result and all other frozen errors. No response or retry may invent a different key, actor, book or operation.
 
-The subsequent membership lookup remains exactly as follows; this is unchanged context, not another replacement:
+The new PostgreSQL cases must establish these observations:
 
-~~~sql
-  SELECT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_auth_members m
-    JOIN pg_catalog.pg_roles g ON g.oid = m.roleid
-    WHERE m.member = v_oid
-      AND g.rolname = 'kita_refusal_recorder'
-      AND m.admin_option = false
-  ) INTO v_member;
-~~~
+| Case | Required fault and observation |
+|---|---|
+| Client process dies before COMMIT | A test-owned child authenticates as a restricted fixture login, begins a real SERIALIZABLE transaction and calls the real SQL entry point with a fresh valid key/tag. It reports a checkpoint only after the function returns the exact frozen refusal, then waits without sending COMMIT. The parent kills that exact child with SIGKILL, awaits its exit and verifies its database backend has gone away. An independent observer then sees zero rows for that scope/key. A fresh restricted connection retries the same key/tag, commits one rejected row and replays that row without duplication. |
+| Client process dies after acknowledged COMMIT | A separate child uses a fresh key/tag and reports its checkpoint only after the real COMMIT resolves. Capture the committed row through an independent observer, kill only that child, then start a new restricted client process. Same-scope/key/tag replay must recover the original refusal and preserve the complete row. This demonstrates recovery across client process loss and restart. |
+| COMMIT completes but its result does not reach the application | Call the unchanged recordNonMoneyRefusal through a test-local PoolLike adapter backed by a real restricted PostgreSQL connection. Forward BEGIN and the function call. For COMMIT, first await the real driver's successful COMMIT; withhold that completion from the application, close only this dedicated connection and raise an explicitly identified injected transport failure. The application must return the exact unconfirmed envelope, perform no hidden resubmission and discard the unusable checkout. An independent observer must see exactly one committed rejected row. Retry through a fresh unwrapped restricted connection with the same key/tag; recover the stored refusal and preserve the complete original row. A later changed-tag call returns 409 and also preserves it. |
 
-Thus pg_auth_members.member is compared to the same v_oid obtained from pg_roles.oid for v_login. Keep v_login initialized from session_user. Do not substitute current_user, a role name comparison, a caller-supplied value or a transitive-membership shortcut. Preserve the existing restricted-attribute, inheritance, membership, binding OID/name and disabled-book checks, including their failure behavior. This batch does not add or remove membership-option predicates.
+For every committed case, compare independent observations of id, book_id, actor_id, operation, key, request_hash, state, resource_id, response and created_at before and after replay. Count rows using the full book/actor/operation/key identity. A fixed returned refusal alone does not prove persistence or preservation. Compute the expected rr1 digest independently in the test. Use distinct keys per new scenario so test order cannot supply the expected result.
 
-Preserve RETURNS jsonb, LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = pg_catalog, pg_temp, the kita_refusal_definer owner, the fixed refusal response, all validation and SQLSTATEs, binding scope, canonical hash, idempotency, reserved-row constraints and immutability triggers. No new data access, write path, success-capable response or change to another function is authorized.
+Use explicit IPC/deferred checkpoints rather than timing sleeps to place faults. Bound all waits and fail on timeout, premature exit, unexpected SQLSTATE or an unreached checkpoint. A bounded observer poll may establish backend disappearance; elapsed time alone is not evidence. Track the exact spawned PID and database backend PID. Never signal the test runner, any process not created and tracked by that case, a PostgreSQL backend or the server. Children must receive only their restricted fixture credentials through IPC, with inherited owner/PG credential variables removed; do not put credentials in source, argv, output or committed artifacts. Reap each child and close every new client/pool in finally cleanup, including assertion-failure paths.
 
-Keep the ownership-transfer sequence byte for byte:
+The lost-COMMIT adapter must still execute the real SQL and COMMIT against PostgreSQL. It may observe query order, delay delivery of the real result and break its own connection; it may not fabricate a database response or committed row. Label the injected transport failure separately from actual driver errors and raw PostgreSQL SQLSTATEs. This establishes lost acknowledgment at the application boundary. It does not establish packet loss, PostgreSQL server crash/restart, power-loss recovery, storage durability under a server crash or failover. Those remain unclaimed.
 
-~~~sql
-GRANT kita_refusal_definer TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
-GRANT CREATE ON SCHEMA kita TO kita_refusal_definer;
-ALTER FUNCTION kita.record_non_money_refusal(text, text) OWNER TO kita_refusal_definer;
-REVOKE CREATE ON SCHEMA kita FROM kita_refusal_definer;
-~~~
+In the unit spec, exercise the unchanged store through local PoolLike adapters. Hold COMMIT pending after the function returns its stored body and assert that the application promise has not settled. Resolve COMMIT and require the exact committed refusal. Separately fail before COMMIT is sent and after a simulated COMMIT completion; both must produce the exact unconfirmed envelope, never the stored refusal. Assert one checkout/attempt for transport uncertainty, one release, rollback cleanup and release-with-error when rollback cannot confirm connection usability. Cleanup errors must not replace the primary failure. These tests establish application ordering and cleanup only; their simulated failures supply no PostgreSQL crash or durability evidence. Preserve the existing automatic retry policy of at most three attempts for structured 40001/40P01 only.
 
-Keep all existing ACL statements and their ordering byte for byte: PUBLIC function revoke, recorder EXECUTE, recorder/definer schema USAGE, and the existing bounded column SELECT/INSERT grants. Preserve both CREATE ROLE definitions and the final REVOKE kita_refusal_definer FROM CURRENT_USER after the ACL work and before the sole COMMIT. Preserve BEGIN/COMMIT and every other comment, statement and whitespace byte. Do not change the owner to a superuser, use SET ROLE/SET SESSION AUTHORIZATION, grant access to pg_authid, transfer table/schema ownership, add persistent schema CREATE or leave temporary transfer authority behind.
+Database execution is limited to the already provisioned dedicated PostgreSQL 18.6 target at 127.0.0.1:54339/kita_core_test, migration owner kita_test, supplied explicitly through KITA_REFUSAL_TEST_OWNER_URL without default credentials. The existing helper pins the URL and checks PostgreSQL 18 generally. Add the stricter read-only preflight inside the allowlisted PostgreSQL spec, before provisionRefusalFixtures performs any mutation: require server_version_num 180006, actual database kita_core_test, session_user/current_user kita_test, expected schema ownership, required existing fixture-provisioning authority and the reviewed installed refusal objects/ACLs. Verify restricted runtime identities on their own connections. Record and require fsync=on, full_page_writes=on and each writer's synchronous_commit=on without changing server/session durability settings.
 
-The following SHA-256 values were computed from the baseline bytes and this single replacement in memory. No SQL file was written or applied in this documentation turn. The baseline is 8,367 bytes; the required implementation is 8,312 bytes.
+Use the installed 001 + 004 + 005 state recognized by the existing evidence. 005 is create-only and already installed; do not reapply it. This batch authorizes no migration, CREATE OR REPLACE FUNCTION, schema reset, database drop, service provisioning, ACL/role escalation, new extension, server setting change or migration-ledger manipulation. Apart from the existing helper's disabled books, immutable bindings and ephemeral restricted login fixtures, the only data mutation is the existing reserved refusal INSERT. Keep generated fixture credentials in memory. Do not delete immutable history or disable its guards for cleanup. An absent, mismatched, unrecognized or unavailable target leaves database execution HOLD; it cannot be repaired by silently switching targets or broadening this allowlist.
 
-| File | Baseline SHA-256 at 651ef51 | Required implementation SHA-256 |
-|---|---|---|
-| apps/kita/packages/database/migrations/005_non_money_refusal.sql | d51ea63bba358c8e06bf29c4cf90a3c55d0d0041490aba3c4862c4d82a3015c1 | 1a6b1f45f9fe5d6b29dee3a7bb58146dcc58154530ac9145b7da37c11ac55e07 |
-
-Protected files must retain these hashes:
-
-~~~text
-6fa76837f31962ca7865572caed50de8845b05614eacef5dec30c40befcd8e22  apps/kita/packages/database/migrations/001_core.sql
-adc3c403feb2e98c5d808a7c28ebfada2048615f44590c64e838a952ad87ce05  apps/kita/packages/database/migrations/004_identity_access.sql
-d977da22f83f7a8e6c0b299a5740ef1815ac2d3eb3131468cf61259cf75910d2  apps/kita/sql/001_core.sql
-d977da22f83f7a8e6c0b299a5740ef1815ac2d3eb3131468cf61259cf75910d2  docs/kita-plan/sql/001_core.sql
-0cc9d574f2f9b716a9c90f6a3e5e83053c47a45f49609b93d72b12bfbefee2fd  apps/kita/sql/CHECKSUMS.txt
-~~~
-
-Review must identify the approved documentation head and exact implementation base/head, show the complete one-file implementation diff and verify the required 005 hash. Confirm that no pg_authid reference remains in 005, the membership predicate still reads m.member = v_oid, and every byte outside the one replacement is unchanged. Verify all protected hashes and byte identity of the planning/legacy 001 pair. Run from the repository root:
+Run the following future validation from the repository root after the dedicated target and owner URL have been verified:
 
 ~~~sh
+npm --prefix apps/kita run typecheck --workspace @kita/database
+KITA_PG_TEST=0 KITA_REFUSAL_PG_TEST=0 npm --prefix apps/kita run test --workspace @kita/database -- __tests__/non-money-refusal-store.spec.ts
+KITA_PG_TEST=0 KITA_REFUSAL_PG_TEST=1 npm --prefix apps/kita run test --workspace @kita/database -- --fileParallelism=false __tests__/non-money-refusal-postgres.spec.ts
+KITA_PG_TEST=0 KITA_REFUSAL_PG_TEST=0 npm --prefix apps/kita run test --workspace @kita/database
 (cd apps/kita/sql && sha256sum -c CHECKSUMS.txt)
 node --test apps/kita/database/tests/checksums.test.mjs
 git diff --check
 ~~~
 
-Static checks establish only conformance to this repair. They do not establish installation, successful role lookup or refusal persistence. Preserve original-freeze obligations that this narrow fix does not address; this document certifies no unrelated grants, constraints, retry behavior or harness changes.
+The selected PostgreSQL run must execute all existing and new cases. Missing configuration, unavailable IPC/fault support, failure to reach a checkpoint or an unavailable required case must fail, never skip or substitute a mock. Ordinary runs with the PostgreSQL suite unselected may visibly skip it and supply no database evidence. Record exact commands, exit statuses, case counts, failures and skips. Compare diagnostics against the unchanged baseline; do not waive new failures or edit unrelated files to clear existing ones.
 
-PostgreSQL validation remains limited to the explicitly configured dedicated PostgreSQL 18.6 target at 127.0.0.1:54339/kita_core_test, authenticated migration owner kita_test, using KITA_REFUSAL_TEST_OWNER_URL with no default credentials. Verify the configured URL and actual server version, database, session_user, current_user, CREATEROLE authority and schema ownership before any mutation. Record identities, exact file hashes, commands, exit statuses and raw SQLSTATEs without credentials. Do not substitute a target, provision a service, elevate a role or reset/drop an existing database to manufacture evidence.
+Review must identify the approved documentation commit, exact implementation base/head and tested head; show a complete diff confined to the two-file allowlist; verify protected files against 8491205; and retain credential-free runtime identities, checkpoint/exit observations, real COMMIT completion, injected-failure provenance, scoped row comparisons and cleanup outcomes. The approved 005 bytes remain SHA-256 1a6b1f45f9fe5d6b29dee3a7bb58146dcc58154530ac9145b7da37c11ac55e07. Tests that only assert a supplied Boolean or manufacture a stored response cannot pass this review. Failed assertions are defects to report, not permission to alter application behavior in this batch.
 
-005 is reported installed at 651ef51. Do not rerun this create-only migration over its existing roles, tables, functions or constraints, and do not treat the old fully-rolled-back retry state as current. Editing the migration file does not update an installed function. No ad hoc CREATE OR REPLACE FUNCTION, out-of-band ACL/catalog grant, manual deployed-function patch, ledger manipulation or destructive cleanup is authorized by this freeze.
+Subsequent work follows the operator roles: Astra/xhigh planning within this freeze, Sol/max direction and independent review, GPU gpu-fqaf Qoder Efficient coding, coordinator GitHub handling. This documentation turn dispatches no batch script, coding swarm, database work or GitHub mutation. Any later authorized merge requires the applicable review, test and exact-head merge gates against the final head; this document grants no merge permission.
 
-Installation evidence for the patched file requires a separately provisioned, recognized clean state on the pinned dedicated target, with absent refusal roles and new objects. Apply complete unchanged package 001, unchanged repaired package 004 and patched package 005 in order; a separately verified pre-005 state may receive the complete patched 005 once. Use psql -X with ON_ERROR_STOP=1 and VERBOSITY=verbose, applying the checked-in bytes directly without filtering or rewriting and without either migration ledger. Unknown/partial state, collisions or failed statements require BATCH-HOLD for database work. Record rollback and the exact file/statement/SQLSTATE on failure. If no recognized state is available, leave PostgreSQL evidence open; do not reset the reported installation.
+Preserve [T-CORE-02-BATCH.md](T-CORE-02-BATCH.md), [the identity review](../SOL-IDENTITY-REVIEW.md), [the public OpenAPI freeze](OPENAPI-FREEZE.md) and all prior bounded holds. Passing this batch may close only the demonstrated client-loss, application COMMIT-ordering and same-key recovery cases. It does not close the full refusal slice, the original requirement for 100 independently connected contenders behind a barrier, real 40001/40P01 recovery/exhaustion, remaining grant/immutability/spoofing/migration evidence or server-crash durability. Full T-CORE-01/T-CORE-02 acceptance, session bind, identity, money, ledger, posting, rewards, integration, certification, pilot and launch remain unclosed, as do CP-00-11, PACK/REQ-SC/TEST and DEP-00-15 obligations. No G1-G6 PASS or production approval is granted.
 
-After a valid patched installation, demonstrate the repaired path using independently authenticated restricted recorder LOGIN connections, not an owner session followed by SET ROLE. Fixture provisioning must stay within the original refusal-test authorization at git show e3b2b15:docs/kita-plan/addenda/NEXT-BATCH.md, use disabled test books only and create no financial/customer/session data. Do not edit the tests/helpers or broaden their fixture authority in this batch.
-
-For an authorized fixture login, record its session_user/current_user outside the definer, pg_roles.oid and restricted attributes, its direct recorder membership with INHERIT TRUE and no ADMIN/SET authority, and its matching immutable login_oid/login_name binding. Observe that the patched entry point resolves that OID under its unchanged non-superuser definer and reaches the bound disabled-book path without the catalog-permission failure. A first valid call must commit exactly one scoped recordNonMoneyRefusal.v1 row in state rejected, resource_id NULL, with the exact frozen ok:false CAPABILITY_UNAVAILABLE response. An independent same-key/same-tag replay must preserve the row; a changed tag must retain KRF02 behavior without overwriting it. This records a refusal, never business success.
-
-Unbound/revoked logins, mismatched OID/name bindings, elevated login attributes and non-disabled books must continue to refuse without a new row or another scope's disclosure. Invalid input still yields 22023. Observe direct restricted-login denials for table mutation and role/session escalation; catalog checks alone do not replace runtime evidence. Preserve existing cross-scope and immutability requirements. Do not query financial/identity data or invoke financial functions/providers as probes.
-
-Inspect final ownership, search_path, role attributes, schema/table/function ACLs and memberships against the pre-install snapshot. The entry point must remain owned by kita_refusal_definer with SECURITY DEFINER, PUBLIC execution revoked and the recorder limited to its existing entry-point EXECUTE/schema USAGE authority. No pg_authid SELECT, persistent schema CREATE, new table ownership, extra column grant or new authority for kita_api, kita_worker, kita_posting, kita_auditor or PUBLIC is permitted.
-
-Transfer cleanup evidence must include pg_auth_members grantor, admin_option, inherit_option and set_option. Require the temporary migration-owner self-grant to be absent and no remaining effective SET/inherited access from kita_test to kita_refusal_definer. Distinguish the existing automatic bootstrap ADMIN-only grants created by non-superuser CREATEROLE from the temporary self-grant; do not claim zero membership rows or alter those bootstrap grants. Preserve the existing immediate schema CREATE revocation and membership revocation before COMMIT. Unexpected residual authority requires BATCH-HOLD.
-
-Full refusal-slice PostgreSQL acceptance remains open: real runtime-role, cross-scope, contention, retry, crash/recovery, durability, immutability and grant evidence are still required by the original freeze at git show e3b2b15:docs/kita-plan/addenda/NEXT-BATCH.md. Neither successful installation nor a repaired lookup closes them. Existing modified tests/helpers require their own authorized review and are not incorporated into this one-file repair. The original five-file implementation allowlist is not reopened.
-
-Subsequent implementation follows the operator roles: Astra/xhigh planning, Sol/max direction and independent review, GPU gpu-fqaf Qoder Efficient coding, coordinator GitHub handling. No batch script, swarm, implementation, database connection or GitHub action is dispatched in this documentation-only turn. Any later separately authorized merge must rerun applicable review, test and exact-head merge gates; this document grants no merge permission.
-
-Preserve [T-CORE-02-BATCH.md](T-CORE-02-BATCH.md), [the identity review](../SOL-IDENTITY-REVIEW.md), [the public contract freeze](OPENAPI-FREEZE.md) and all prior bounded holds. Full T-CORE-02, T-CORE-01 runtime/migration acceptance, identity, money, ledger, posting, rewards, integration, certification, pilot and launch remain unclosed, as do CP-00-11, PACK/REQ-SC/TEST and DEP-00-15 obligations. No G1-G6 PASS is granted. Money closed. Never ok:true.
-
-Checks in this documentation turn cover the first-line decision, exact one-file allowlist and SQL replacement, in-memory implementation SHA-256, protected-file hashes, local references, whitespace and preservation of all other workspace files. No application build, typecheck, unit test, PostgreSQL installation or runtime acceptance result is asserted.
+Checks in this documentation turn cover the current-head reference, exact two-file future allowlist, local links, whitespace, protected-file hashes and a working-tree diff confined to NEXT-BATCH.md. No build, typecheck, unit test, PostgreSQL fault test or new acceptance result is claimed. Money closed. Never ok:true.
