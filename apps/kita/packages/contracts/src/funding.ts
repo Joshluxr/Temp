@@ -56,3 +56,16 @@ export interface Fund06Output {
   readonly disputeId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Fund04Input {
+  readonly unapprovedMethod: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fund04Output {
+  readonly unapprovedMethodEnabled: true;
+  readonly fundsCollected: true;
+  readonly capabilityId: UUID;
+  readonly traceEvents: readonly string[];
+}
