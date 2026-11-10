@@ -82,32 +82,41 @@ function closeAccount(stage: string, err: unknown, connected: boolean): CloseAcc
   return { stage, code, connected };
 }
 
-function cleanupError(accounts: readonly CloseAccount[], cause: unknown): Error {
+const hiddenSecondaries = new WeakMap<object, unknown[]>();
+
+function hideSecondary(owner: object, err: unknown): void {
+  const prior = hiddenSecondaries.get(owner) ?? [];
+  prior.push(err);
+  hiddenSecondaries.set(owner, prior);
+}
+
+function cleanupError(accounts: readonly CloseAccount[], raw: unknown): Error {
   const summary = accounts.map((a) => `${a.stage}:${a.code}:connected=${a.connected}`).join(";");
   const error = new Error(`cleanup failed ${summary}`);
   (error as { closeAccounts?: readonly CloseAccount[] }).closeAccounts = accounts;
-  (error as { cause?: unknown }).cause = cause;
+  hideSecondary(error, raw);
   return error;
 }
 
-function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], cause: unknown): T {
+function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: unknown): T {
   if (primary && typeof primary === "object") {
-    const bag = primary as { closeAccounts?: CloseAccount[]; secondaryClose?: unknown };
+    const bag = primary as { closeAccounts?: CloseAccount[] };
     bag.closeAccounts = [...(bag.closeAccounts ?? []), ...accounts];
-    bag.secondaryClose = cause;
+    hideSecondary(primary, raw);
     return primary;
   }
-  const error = cleanupError(accounts, cause);
-  (error as { primary?: unknown }).primary = primary;
-  throw error;
+  throw cleanupError(accounts, raw);
 }
 
-async function endOwnerClient(client: pg.Client, connected: boolean): Promise<CloseAccount | undefined> {
+async function endOwnerClient(
+  client: pg.Client,
+  connected: boolean,
+): Promise<{ account?: CloseAccount; raw?: unknown }> {
   try {
     await client.end();
-    return undefined;
+    return {};
   } catch (err) {
-    return closeAccount("owner-client.end", err, connected);
+    return { account: closeAccount("owner-client.end", err, connected), raw: err };
   }
 }
 
@@ -131,12 +140,12 @@ async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => P
     primary = err;
     throw err;
   } finally {
-    const account = await endOwnerClient(client, connected);
-    if (account) {
+    const ended = await endOwnerClient(client, connected);
+    if (ended.account) {
       if (primary !== undefined) {
-        retainCleanup(primary, [account], account);
+        retainCleanup(primary, [ended.account], ended.raw);
       } else {
-        throw cleanupError([account], account);
+        throw cleanupError([ended.account], ended.raw);
       }
     }
   }
@@ -280,10 +289,19 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
   const provisioned = {
-    books: 0,
-    logins: 0,
-    principals: 0,
-    grants: 0,
+    booksAttempted: 0,
+    booksAcknowledged: 0,
+    booksUncertain: 0,
+    loginsAttempted: 0,
+    loginsAcknowledged: 0,
+    loginsUncertain: 0,
+    grantsAttempted: 0,
+    grantsAcknowledged: 0,
+    principalsAttempted: 0,
+    principalsAcknowledged: 0,
+    retainedBookIds: [] as string[],
+    retainedLoginNames: [] as string[],
+    retainedLoginOids: [] as string[],
   };
   let connected = false;
   let primary: unknown;
@@ -295,19 +313,31 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       throw new Error(`expected PostgreSQL 18, got ${version.rows[0]?.version ?? "unknown"}`);
     }
     const suffix = randomBytes(4).toString("hex");
-    const bookA = await client.query<{ id: string }>(
-      `INSERT INTO kita.books (legal_entity, functional_currency, status)
-       VALUES ($1, 'USD', 'disabled') RETURNING id`,
-      [`refusal-a-${suffix}`],
-    );
-    const bookC = await client.query<{ id: string }>(
-      `INSERT INTO kita.books (legal_entity, functional_currency, status)
-       VALUES ($1, 'USD', 'disabled') RETURNING id`,
-      [`refusal-c-${suffix}`],
-    );
-    const bookAId = bookA.rows[0].id;
-    const bookCId = bookC.rows[0].id;
-    provisioned.books = 2;
+    async function insertDisabledBook(legalEntity: string): Promise<string> {
+      provisioned.booksAttempted += 1;
+      try {
+        const inserted = await client.query<{ id: string }>(
+          `INSERT INTO kita.books (legal_entity, functional_currency, status)
+           VALUES ($1, 'USD', 'disabled') RETURNING id`,
+          [legalEntity],
+        );
+        const id = inserted.rows[0]?.id;
+        if (!id) {
+          provisioned.booksUncertain += 1;
+          throw new Error("HOLD: book insert returned no id");
+        }
+        provisioned.booksAcknowledged += 1;
+        provisioned.retainedBookIds.push(id);
+        return id;
+      } catch (err) {
+        if (!provisioned.retainedBookIds.length || provisioned.booksAcknowledged < provisioned.booksAttempted) {
+          provisioned.booksUncertain += 1;
+        }
+        throw err;
+      }
+    }
+    const bookAId = await insertDisabledBook(`refusal-a-${suffix}`);
+    const bookCId = await insertDisabledBook(`refusal-c-${suffix}`);
 
     async function makeLogin(
       name: string,
@@ -315,6 +345,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       bookId: string | null,
     ): Promise<RestrictedLogin> {
       const secret = password();
+      provisioned.loginsAttempted += 1;
       const createSql = await client.query<{ sql: string }>(
         `SELECT format(
            'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS',
@@ -323,14 +354,22 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         [name, secret],
       );
       await client.query(createSql.rows[0].sql);
-      provisioned.logins += 1;
+      provisioned.loginsAcknowledged += 1;
+      provisioned.retainedLoginNames.push(name);
+      const oidRow = await client.query<{ oid: string }>(
+        `SELECT oid::text AS oid FROM pg_catalog.pg_roles WHERE rolname = $1`,
+        [name],
+      );
+      if (oidRow.rows[0]?.oid) provisioned.retainedLoginOids.push(oidRow.rows[0].oid);
+      provisioned.grantsAttempted += 1;
       const grantSql = await client.query<{ sql: string }>(
         `SELECT format('GRANT kita_refusal_recorder TO %I WITH INHERIT TRUE, SET FALSE', $1::text) AS sql`,
         [name],
       );
       await client.query(grantSql.rows[0].sql);
-      provisioned.grants += 1;
+      provisioned.grantsAcknowledged += 1;
       if (actorId !== null && bookId !== null) {
+        provisioned.principalsAttempted += 1;
         await client.query(
           `INSERT INTO kita.non_money_refusal_principals (login_oid, login_name, book_id, actor_id)
            SELECT r.oid, r.rolname, $1::uuid, $2
@@ -338,7 +377,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
            WHERE r.rolname = $3`,
           [bookId, actorId, name],
         );
-        provisioned.principals += 1;
+        provisioned.principalsAcknowledged += 1;
       }
       return { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
     }
@@ -376,8 +415,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
         if (rejected.length === 0) return;
         const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
-        const error = cleanupError(accounts, rejected[0]?.reason);
-        (error as { closeFailures?: unknown[] }).closeFailures = rejected.map((result) => result.reason);
+        const error = cleanupError(accounts, rejected.map((result) => result.reason));
         throw error;
       },
     };
@@ -388,15 +426,15 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     }
     throw err;
   } finally {
-    const account = await endOwnerClient(client, connected);
-    if (account) {
+    const ended = await endOwnerClient(client, connected);
+    if (ended.account) {
       if (primary !== undefined) {
-        retainCleanup(primary, [account], account);
+        retainCleanup(primary, [ended.account], ended.raw);
         if (primary && typeof primary === "object") {
           (primary as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
         }
       } else {
-        const error = cleanupError([account], account);
+        const error = cleanupError([ended.account], ended.raw);
         (error as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
         throw error;
       }

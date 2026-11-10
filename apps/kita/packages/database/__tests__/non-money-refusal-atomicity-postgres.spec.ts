@@ -173,6 +173,9 @@ async function observeIdentity(
             current_setting('deadlock_timeout') AS deadlock_timeout,
             (SELECT oid::text FROM pg_roles WHERE rolname = current_user) AS login_oid,
             (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS rolsuper,
+            (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS rolcreaterole,
+            (SELECT rolreplication FROM pg_roles WHERE rolname = current_user) AS rolreplication,
+            (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS rolbypassrls,
             (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'MEMBER')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
   );
@@ -182,9 +185,15 @@ async function observeIdentity(
   expect(row?.isolation).toBe("serializable");
   expect(row?.synchronous_commit).toBe("on");
   expect(row?.replication_role).toBe("origin");
-  expect(String(row?.statement_timeout).length).toBeGreaterThan(0);
   expect(row?.statement_timeout).not.toBe("0");
+  expect(String(row?.statement_timeout).length).toBeGreaterThan(0);
+  expect(typeof row?.lock_timeout).toBe("string");
+  expect(typeof row?.deadlock_timeout).toBe("string");
+  expect(String(row?.deadlock_timeout).length).toBeGreaterThan(0);
   expect(row?.rolsuper).toBe(false);
+  expect(row?.rolcreaterole).toBe(false);
+  expect(row?.rolreplication).toBe(false);
+  expect(row?.rolbypassrls).toBe(false);
   expect(row?.recorder_member).toBe(true);
   expect(String(row?.login_oid).length).toBeGreaterThan(0);
   return { pid: Number(row?.pid), start: String(row?.start), oid: String(row?.login_oid) };
@@ -202,6 +211,7 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
         rolcreaterole: boolean;
         replication_role: string;
         temp_grant: string;
+        fn_oid: string;
       }>(
         `SELECT current_setting('server_version_num') AS server_version_num,
                 current_database() AS current_database,
@@ -216,7 +226,11 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
                    JOIN pg_roles grantor ON grantor.oid = m.grantor
                   WHERE r.rolname = 'kita_test'
                     AND g.rolname = 'kita_refusal_definer'
-                    AND grantor.rolname = 'kita_test') AS temp_grant`,
+                    AND grantor.rolname = 'kita_test') AS temp_grant,
+                (SELECT p.oid::text
+                   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                  WHERE n.nspname = 'kita' AND p.proname = 'record_non_money_refusal'
+                    AND pg_get_function_identity_arguments(p.oid) = 'p_key text, p_tag text') AS fn_oid`,
       )
     ).rows[0];
     if (!row) throw new Error("HOLD: suite preflight returned no row");
@@ -228,6 +242,24 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
     if (row.rolsuper || !row.rolcreaterole) throw new Error("HOLD: installer attributes unexpected");
     if (row.replication_role !== "origin") throw new Error("HOLD: session_replication_role is not origin");
     if (row.temp_grant !== "0") throw new Error("HOLD: temporary definer membership is present");
+    if (!row.fn_oid) throw new Error("HOLD: installed recorder oid missing");
+    const members = await client.query<{
+      grantor: string;
+      admin_option: boolean;
+      inherit_option: boolean;
+      set_option: boolean;
+    }>(
+      `SELECT grantor.rolname AS grantor, m.admin_option, m.inherit_option, m.set_option
+         FROM pg_auth_members m
+         JOIN pg_roles r ON r.oid = m.member
+         JOIN pg_roles g ON g.oid = m.roleid
+         JOIN pg_roles grantor ON grantor.oid = m.grantor
+        WHERE r.rolname = 'kita_test' AND g.rolname = 'kita_refusal_definer'`,
+    );
+    expect(members.rows.every((m) => m.grantor !== "kita_test")).toBe(true);
+    const bootstrap = members.rows.filter((m) => m.admin_option && !m.set_option);
+    expect(bootstrap.length).toBeGreaterThanOrEqual(0);
+    void row.fn_oid;
   });
 }
 
@@ -243,13 +275,17 @@ async function advisoryNamespace(
       objsubid: string;
       pid: number;
       granted: boolean;
+      start: string | null;
     }>(
-      `SELECT database::text, classid::text, objid::text, objsubid::text, pid, granted
-       FROM pg_locks
-       WHERE locktype = 'advisory'`,
+      `SELECT l.database::text AS database, l.classid::text AS classid, l.objid::text AS objid,
+              l.objsubid::text AS objsubid, l.pid, l.granted,
+              a.backend_start::text AS start
+       FROM pg_locks l
+       LEFT JOIN pg_stat_activity a ON a.pid = l.pid
+       WHERE l.locktype = 'advisory'`,
     );
-    void expected;
-    return result.rows;
+    const allowed = new Set(expected.map((row) => `${row.classid}:${row.objid}`));
+    return result.rows.filter((row) => allowed.has(`${row.classid}:${row.objid}`));
   });
 }
 
@@ -285,7 +321,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const keyB = freshKey();
     const tagA = "atom-a";
     const tagB = "atom-b";
-    const pool = createPool({ databaseUrl: fx.loginA.url, poolMax: 2, statementTimeoutMs: 15_000 });
+    const pool = createPool({
+      databaseUrl: fx.loginA.url,
+      poolMax: 2,
+      statementTimeoutMs: 15_000,
+      connectionTimeoutMs: 10_000,
+      idleTimeoutMs: 15_000,
+    });
     const afterA = timedDeferred("afterA");
     const continueB = timedDeferred("continueB");
     try {
@@ -420,12 +462,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       poolMax: 1,
       statementTimeoutMs: 20_000,
       connectionTimeoutMs: 10_000,
+      idleTimeoutMs: 20_000,
     });
     const poolB = createPool({
       databaseUrl: fx.loginA.url,
       poolMax: 1,
       statementTimeoutMs: 20_000,
       connectionTimeoutMs: 10_000,
+      idleTimeoutMs: 20_000,
     });
     const firstA = timedDeferred("firstA");
     const firstB = timedDeferred("firstB");
@@ -469,22 +513,32 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 const result = await client.query(sql, params);
                 if (sql.startsWith("COMMIT")) seq.push(`commit:${attempt}`);
                 if (sql.startsWith("ROLLBACK")) seq.push(`rollback:${attempt}`);
-                if (sql.includes("record_non_money_refusal") && attempt === 1 && !recorded) {
+                if (sql.includes("pg_advisory_xact_lock") && !recorded) {
+                  seq.push(`lock1:${attempt}`);
+                }
+                if (sql.includes("record_non_money_refusal") && !recorded) {
                   recorded = true;
                   seq.push(`function:${attempt}`);
-                  if (side === "A") firstA.resolve();
-                  else firstB.resolve();
-                  await goSecond.promise;
+                  if (attempt === 1) {
+                    if (side === "A") firstA.resolve();
+                    else firstB.resolve();
+                    await goSecond.promise;
+                  }
                 }
-                if (sql.includes("pg_advisory_xact_lock") && attempt === 1 && recorded) {
+                if (sql.includes("pg_advisory_xact_lock") && recorded) {
                   seq.push(`lock2:${attempt}`);
-                  await victimRolledBack.promise;
-                  await allowSurvivorCommit.promise;
+                  if (attempt === 1) {
+                    await victimRolledBack.promise;
+                    await allowSurvivorCommit.promise;
+                  }
                 }
                 return result;
               } catch (err) {
+                if (sql.includes("pg_advisory_xact_lock") && recorded) {
+                  seq.push(`lock2:${attempt}`);
+                }
                 const code = (err as { code?: string }).code;
-                if (code) codes.push({ side, attempt, code });
+                if (code) codes.push({ side, attempt, code, pid: backends[side]?.pid, start: backends[side]?.start });
                 if (code === "40P01" && attempt === 1) victimSide = side;
                 throw err;
               }
@@ -547,9 +601,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       ]);
       expect(
         leftover.filter(
-          (row) => row.pid === victimBackend.pid,
+          (row) => row.pid === victimBackend.pid && row.start === victimBackend.start,
         ),
       ).toHaveLength(0);
+      for (const lock of leftover) {
+        expect(lock.objsubid).toBe("2");
+        expect(lock.classid === String(lockA) || lock.classid === String(lockB)).toBe(true);
+        expect(lock.objid).toBe("1");
+      }
       allowSurvivorCommit.resolve();
       const settled = await Promise.race([
         runA.then((body) => ({ side: "A" as const, body })),
@@ -593,7 +652,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       } else {
         expect(rowB).toEqual(survivorRow);
       }
-      const replay = createPool({ databaseUrl: fx.loginA.url, poolMax: 2, statementTimeoutMs: 15_000 });
+      const replay = createPool({
+        databaseUrl: fx.loginA.url,
+        poolMax: 2,
+        statementTimeoutMs: 15_000,
+        connectionTimeoutMs: 10_000,
+        idleTimeoutMs: 15_000,
+      });
       try {
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: "dl-a-x" })).resolves.toEqual(
@@ -608,12 +673,27 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       }
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).toEqual(rowA);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
-      expect(seqA.join(",")).toMatch(/begin:1/);
-      expect(seqB.join(",")).toMatch(/begin:1/);
-      expect(seqA.join(",") + seqB.join(",")).toMatch(/rollback:1/);
-      expect(seqA.join(",") + seqB.join(",")).toMatch(/release:1/);
-      expect(seqA.join(",") + seqB.join(",")).toMatch(/commit:1/);
-      expect(seqA.join(",") + seqB.join(",")).toMatch(/commit:1|commit:2/);
+      const victimSeq = victimSide === "A" ? seqA : seqB;
+      const survivorSeq = victimSide === "A" ? seqB : seqA;
+      expect(survivorSeq).toEqual(["begin:1", "lock1:1", "function:1", "lock2:1", "commit:1", "release:1"]);
+      expect(victimSeq).toEqual([
+        "begin:1",
+        "lock1:1",
+        "function:1",
+        "lock2:1",
+        "rollback:1",
+        "release:1",
+        "begin:2",
+        "lock1:2",
+        "function:2",
+        "lock2:2",
+        "commit:2",
+        "release:2",
+      ]);
+      expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
+      expect(codes[0]?.code).toBe("40P01");
+      expect(codes[0]?.attempt).toBe(1);
+      expect(codes[0]?.side).toBe(victimSide);
       const backendA = backends.A;
       const backendB = backends.B;
       if (!backendA || !backendB) throw new Error("missing first-attempt backend identities");
