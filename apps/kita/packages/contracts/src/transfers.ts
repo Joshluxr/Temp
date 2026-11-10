@@ -80,3 +80,17 @@ export interface Tx02Output {
   readonly transferId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Tx01CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Tx01Input {
+  readonly doubleTapOrDifferentKeysWouldCreateSecondTransfer: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx01Output {
+  readonly secondTransferCreated: true;
+  readonly transferId: UUID;
+  readonly traceEvents: readonly string[];
+}
