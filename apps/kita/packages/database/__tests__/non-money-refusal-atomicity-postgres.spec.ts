@@ -313,10 +313,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
   afterAll(async () => {
     const pendingResults = await Promise.allSettled(pending);
     const closeFailures: unknown[] = [];
-    try {
-      await fx?.close();
-    } catch (err) {
-      closeFailures.push(err);
+    if (fx) {
+      const first = fx.close();
+      const concurrent = fx.close();
+      const settled = await Promise.allSettled([first, concurrent]);
+      expect(settled[0]?.status).toBe(settled[1]?.status);
+      for (const result of settled) {
+        if (result.status === "rejected") closeFailures.push(result.reason);
+      }
+      expect(() => fx.poolFor("postgres://kita-refusal-closed/refused")).toThrow(/fixture closing/);
+      const repeated = await Promise.allSettled([fx.close(), fx.close()]);
+      expect(repeated[0]?.status).toBe(settled[0]?.status);
+      expect(repeated[1]?.status).toBe(settled[0]?.status);
     }
     if (closeFailures.length > 0) {
       const error = new Error("fixture close failed after suite");
@@ -328,6 +336,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
 
   it("Atomic refusal rollback on native KRF02", async () => {
     if (!fx) throw new Error("fixtures missing");
+    const fixtures = fx;
+    expect(fixtures.poolFor(fixtures.loginA.url)).toBe(fixtures.poolFor(fixtures.loginA.url));
     const keyA = freshKey();
     const keyB = freshKey();
     const tagA = "atom-a";
@@ -347,7 +357,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         return {
           async query(sql: string, params?: readonly unknown[]) {
             const result = await client.query(sql, params);
-            if (sql.startsWith("BEGIN")) await observeIdentity(client, fx.loginA.name);
+            if (sql.startsWith("BEGIN")) await observeIdentity(client, fixtures.loginA.name);
             return result;
           },
           release(err?: unknown) {

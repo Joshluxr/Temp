@@ -100,8 +100,12 @@ function cleanupError(accounts: readonly CloseAccount[], raw: unknown): Error {
 
 function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: unknown): T {
   if (primary && typeof primary === "object") {
-    const bag = primary as { closeAccounts?: CloseAccount[] };
-    bag.closeAccounts = [...(bag.closeAccounts ?? []), ...accounts];
+    try {
+      const bag = primary as { closeAccounts?: CloseAccount[] };
+      bag.closeAccounts = [...(bag.closeAccounts ?? []), ...accounts];
+    } catch {
+      hideSecondary(primary, accounts);
+    }
     hideSecondary(primary, raw);
     return primary;
   }
@@ -154,21 +158,30 @@ async function observeLate(work: Promise<unknown>, ms: number): Promise<LateOutc
 
 async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutErr = Object.assign(new Error(`timeout:${stage}`), { kitaWatchdog: true as const });
   const timeout = new Promise<T>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timeout:${stage}`)), ms);
+    timer = setTimeout(() => reject(timeoutErr), ms);
   });
   try {
     return await Promise.race([work, timeout]);
   } catch (err) {
     const late = await observeLate(work, 1_000);
-    if (err && typeof err === "object") {
-      hideSecondary(err, late);
-      throw err;
+    const watchdog = err === timeoutErr;
+    if (!watchdog) {
+      if (err && typeof err === "object") {
+        hideSecondary(err, late);
+        throw err;
+      }
+      const boxed = new Error(`close-rejected:${stage}`);
+      hideSecondary(boxed, err);
+      hideSecondary(boxed, late);
+      throw boxed;
     }
-    const boxed = new Error(`timeout:${stage}`);
-    hideSecondary(boxed, err);
-    hideSecondary(boxed, late);
-    throw boxed;
+    if (timeoutErr && typeof timeoutErr === "object") {
+      hideSecondary(timeoutErr, late);
+      throw timeoutErr;
+    }
+    throw timeoutErr;
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -188,18 +201,14 @@ async function endOwnerClient(
     };
   }
   try {
-    await bounded("owner-client.end", ending);
+    await bounded("owner-client.end", ending, 22_000);
     return {};
   } catch (err) {
     const ledger = watchUntilSettled(ending);
     const late = await observeLate(ending, 1_000);
     const raw = { first: err, late, ledger };
     if (err && typeof err === "object") {
-      try {
-        Object.defineProperty(err, "closeLedger", { value: ledger, enumerable: false, configurable: true });
-      } catch {
-        hideSecondary(err, ledger);
-      }
+      hideSecondary(err, ledger);
       hideSecondary(err, raw);
     }
     return { account: closeAccount("owner-client.end", err, connected), raw };
@@ -452,7 +461,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
          ) AS sql`,
         [name, secret],
       );
-      await client.query(createSql.rows[0].sql);
+      const createText = createSql.rows[0]?.sql;
+      if (!createText) throw new Error("HOLD: CREATE ROLE sql missing");
+      await client.query(createText);
       provisioned.loginsAcknowledged += 1;
       provisioned.retainedLoginNames.push(name);
       const oidRow = await client.query<{ oid: string }>(
@@ -467,7 +478,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         `SELECT format('GRANT kita_refusal_recorder TO %I WITH INHERIT TRUE, SET FALSE', $1::text) AS sql`,
         [name],
       );
-      await client.query(grantSql.rows[0].sql);
+      const grantText = grantSql.rows[0]?.sql;
+      if (!grantText) throw new Error("HOLD: GRANT recorder sql missing");
+      await client.query(grantText);
       provisioned.grantsAcknowledged += 1;
       if (actorId !== null && bookId !== null) {
         provisioned.principalsAttempted += 1;
@@ -506,7 +519,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     const loginUnbound = await makeLogin(`kita_refusal_test_unbound_${suffix}`, null, null);
 
     const pools = new Map<string, ManagedPool>();
-    let closeWork: Promise<void> | undefined;
+    const originalCloses = new Map<string, { work: Promise<unknown>; ledger: CloseLedger }>();
+    let closing = false;
+    let closeReport: Promise<void> | undefined;
     return {
       ownerUrl,
       bookA: bookAId,
@@ -516,6 +531,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       loginC,
       loginUnbound,
       poolFor(url: string): ManagedPool {
+        if (closing) {
+          throw new Error("HOLD: fixture closing; pool acquisition refused");
+        }
         const existing = pools.get(url);
         if (existing) return existing;
         const pool = createPool({
@@ -528,25 +546,34 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         return pool;
       },
       async close(): Promise<void> {
-        if (closeWork) {
-          await closeWork;
-          if (pools.size === 0) return;
-        }
-        closeWork = (async () => {
+        closing = true;
+        if (closeReport) return closeReport;
+        closeReport = (async () => {
           const owned = [...pools.entries()];
           const ledgers = owned.map(([url, pool]) => {
+            const prior = originalCloses.get(url);
+            if (prior) return { url, work: prior.work, ledger: prior.ledger };
             let work: Promise<void>;
             try {
               work = Promise.resolve(pool.close());
             } catch (sync) {
               work = Promise.reject({ status: "sync" as const, reason: sync });
             }
-            return { url, work, ledger: watchUntilSettled(work) };
+            const ledger = watchUntilSettled(work);
+            originalCloses.set(url, { work, ledger });
+            void work.then(
+              () => {
+                pools.delete(url);
+              },
+              () => {
+                pools.delete(url);
+              },
+            );
+            return { url, work, ledger };
           });
-          const observed = await Promise.allSettled(ledgers.map((item) => bounded("pool.close", item.work)));
-          void Promise.allSettled(ledgers.map((item) => item.work)).then(() => {
-            for (const item of ledgers) pools.delete(item.url);
-          });
+          const observed = await Promise.allSettled(
+            ledgers.map((item) => bounded("pool.close", item.work, 21_000)),
+          );
           const rejected = observed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
           if (rejected.length === 0) return;
           const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
@@ -554,7 +581,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
           hideSecondary(error, ledgers.map((item) => item.ledger));
           throw error;
         })();
-        return closeWork;
+        return closeReport;
       },
     };
   } catch (err) {
