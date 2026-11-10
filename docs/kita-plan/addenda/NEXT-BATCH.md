@@ -1,23 +1,23 @@
 BATCH-OK
 
-Authorize only T-WAL-03: reserveWallet as a pure checker.
+Authorize only T-WAL-04: convertWallet as a PURE checker.
 
-Recorded landing: T-WAL-02 — creditWithoutSettlementOrApprovedEvidence returns FUNDING_PENDING 409; otherwise 503. TEST-WAL-02: 2 passed.
+T-WAL-03 landed: twoSimultaneousSpendsWouldOverdraw returns INSUFFICIENT_FUNDS 409; otherwise 503. TEST-WAL-03: 2 passed.
 
-Allowed implementation files, relative to apps/kita/:
-- packages/domain/wallets/reserve-wallet.ts
-- tests/features/test-wal-03.spec.ts
-- packages/contracts/src/wallets.ts — additive Wal03 types only; preserve existing contracts.
+Allowed files only:
+- packages/domain/wallets/convert-wallet.ts
+- tests/features/test-wal-04.spec.ts
+- packages/contracts/src/wallets.ts — additive Wal04 types only.
 
 Required behavior:
-- Never return ok: true.
-- If twoSimultaneousSpendsWouldOverdraw === true, return INSUFFICIENT_FUNDS with status 409. Two simultaneous spends cannot overdraw.
-- Otherwise return dependency_unavailable with status 503 because the journals store is not implemented (T-CORE-02 remains HOLD).
-- Reuse Wal02CommandContext, or define a WorkerContext pick named Wal03CommandContext.
-- Pure checking only: no database access, money movement, executeCommand, persistence, reservations, or side effects.
+- No DB access, money movement, or executeCommand.
+- Never return ok:true. Never make the target available from an unconfirmed asset receipt.
+- Four currency legs must balance, and the exact target obligation must be funded.
+- fourCurrencyLegsUnbalancedOrUnconfirmedTarget === true returns INSUFFICIENT_FUNDS with HTTP 409.
+- Otherwise return HTTP 503 with dependency_unavailable because the quotes/journals store is not implemented; T-QUOTE-01 remains HOLD. A false flag does not authorize conversion or establish confirmed funding.
+- Reuse Wal03CommandContext, or use a WorkerContext pick named Wal04CommandContext.
+- TEST-WAL-04 must cover both return branches and confirm neither returns ok:true.
 
-TEST-WAL-03 must cover the overdraw rejection and the otherwise-503 path, and assert neither returns ok: true. Do not claim implemented journal storage or successful reservations.
+HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
 
-HOLD remains unchanged for: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
-
-This authorization covers exactly the checker above in the three allowed files. Any broader work is HOLD.
+No broader conversion implementation or HOLD work is authorized by this batch.
