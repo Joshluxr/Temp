@@ -44,3 +44,16 @@ export interface Pay04Output {
   readonly pickupId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pay05Input {
+  readonly returnExceedsCapOrErasesDeliveredTimestamp: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pay05Output {
+  readonly refundGranted: true;
+  readonly deliveredTimestampErased: true;
+  readonly payoutReturnId: UUID;
+  readonly traceEvents: readonly string[];
+}
