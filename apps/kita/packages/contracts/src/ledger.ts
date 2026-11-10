@@ -32,3 +32,17 @@ export interface Fin08Output {
   readonly overlapId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Fin02CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Fin02Input {
+  readonly cumulativePartialFeesDoNotSumOnFinalRefund: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fin02Output {
+  readonly originalJournalEdited: true;
+  readonly correctionId: UUID;
+  readonly traceEvents: readonly string[];
+}
