@@ -4,8 +4,8 @@ import pg from "pg";
 
 import { createPool } from "../src/pool.js";
 import type { PoolClientLike, PoolLike } from "../src/pool.js";
-import { withSerializable } from "../src/transaction.ts";
-import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.ts";
+import { withSerializable } from "../src/transaction.js";
+import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.js";
 import {
   countReservedRows,
   ownerClient,
@@ -13,7 +13,7 @@ import {
   provisionRefusalFixtures,
   requireRefusalOwnerUrl,
   type RefusalPgFixtures,
-} from "./helpers/non-money-refusal-pg.ts";
+} from "./helpers/non-money-refusal-pg.js";
 
 const selected = postgresSuiteSelected();
 const privateNotes = new WeakMap<object, unknown[]>();
@@ -194,7 +194,7 @@ async function observeIdentity(
             (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS rolcreaterole,
             (SELECT rolreplication FROM pg_roles WHERE rolname = current_user) AS rolreplication,
             (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS rolbypassrls,
-            (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'MEMBER')) AS recorder_member,
+            (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'USAGE')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
   );
   const row = ident.rows[0];
@@ -294,8 +294,11 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
     );
     expect(members.rows.length).toBeGreaterThan(0);
     expect(members.rows.every((m) => m.grantor !== "kita_test")).toBe(true);
+    expect(
+      members.rows.every((m) => m.admin_option && m.inherit_option === false && m.set_option === false),
+    ).toBe(true);
     const bootstrap = members.rows.filter((m) => m.admin_option && !m.set_option && m.inherit_option === false);
-    expect(bootstrap.length).toBeGreaterThan(0);
+    expect(bootstrap.length).toBe(members.rows.length);
     expect(row.fn_oid.length).toBeGreaterThan(0);
   });
 }
@@ -329,7 +332,8 @@ async function advisoryNamespace(
               a.backend_start::text AS start
        FROM pg_locks l
        LEFT JOIN pg_stat_activity a ON a.pid = l.pid
-       WHERE l.locktype = 'advisory'`,
+       WHERE l.locktype = 'advisory'
+         AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
     );
     const allowed = new Set(expected.map((row) => `${row.classid}:${row.objid}`));
     return result.rows.filter(
@@ -604,9 +608,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       side: "A" | "B";
       attempt: number;
       code: string;
-      pid?: number;
-      start?: string;
-      sql?: string;
+      pid?: number | undefined;
+      start?: string | undefined;
+      sql?: string | undefined;
       original?: unknown;
     }> = [];
     let acquiredA = 0;
