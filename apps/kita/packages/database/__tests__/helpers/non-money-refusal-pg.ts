@@ -105,7 +105,23 @@ function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: un
     hideSecondary(primary, raw);
     return primary;
   }
-  throw cleanupError(accounts, raw);
+  const error = cleanupError(accounts, raw);
+  hideSecondary(error, primary);
+  throw error;
+}
+
+async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timeout:${stage}`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 async function endOwnerClient(
@@ -113,7 +129,7 @@ async function endOwnerClient(
   connected: boolean,
 ): Promise<{ account?: CloseAccount; raw?: unknown }> {
   try {
-    await client.end();
+    await bounded("owner-client.end", client.end());
     return {};
   } catch (err) {
     return { account: closeAccount("owner-client.end", err, connected), raw: err };
@@ -297,11 +313,14 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     loginsUncertain: 0,
     grantsAttempted: 0,
     grantsAcknowledged: 0,
+    grantsUncertain: 0,
     principalsAttempted: 0,
     principalsAcknowledged: 0,
+    principalsUncertain: 0,
     retainedBookIds: [] as string[],
     retainedLoginNames: [] as string[],
     retainedLoginOids: [] as string[],
+    retainedBindings: [] as Array<{ loginName: string; loginOid: string; bookId: string; actorId: string }>,
   };
   let connected = false;
   let primary: unknown;
@@ -330,8 +349,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         provisioned.retainedBookIds.push(id);
         return id;
       } catch (err) {
-        if (!provisioned.retainedBookIds.length || provisioned.booksAcknowledged < provisioned.booksAttempted) {
-          provisioned.booksUncertain += 1;
+        if (provisioned.booksAcknowledged < provisioned.booksAttempted) {
+          const last = provisioned.retainedBookIds[provisioned.retainedBookIds.length - 1];
+          if (!last) provisioned.booksUncertain += 1;
         }
         throw err;
       }
@@ -346,6 +366,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     ): Promise<RestrictedLogin> {
       const secret = password();
       provisioned.loginsAttempted += 1;
+      try {
       const createSql = await client.query<{ sql: string }>(
         `SELECT format(
            'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS',
@@ -360,7 +381,12 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         `SELECT oid::text AS oid FROM pg_catalog.pg_roles WHERE rolname = $1`,
         [name],
       );
-      if (oidRow.rows[0]?.oid) provisioned.retainedLoginOids.push(oidRow.rows[0].oid);
+      const loginOid = oidRow.rows[0]?.oid;
+      if (!loginOid) {
+        provisioned.loginsUncertain += 1;
+        throw new Error("HOLD: login oid missing after CREATE ROLE");
+      }
+      provisioned.retainedLoginOids.push(loginOid);
       provisioned.grantsAttempted += 1;
       const grantSql = await client.query<{ sql: string }>(
         `SELECT format('GRANT kita_refusal_recorder TO %I WITH INHERIT TRUE, SET FALSE', $1::text) AS sql`,
@@ -378,8 +404,17 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
           [bookId, actorId, name],
         );
         provisioned.principalsAcknowledged += 1;
+        provisioned.retainedBindings.push({ loginName: name, loginOid, bookId, actorId });
       }
       return { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
+      } catch (err) {
+        if (provisioned.loginsAcknowledged < provisioned.loginsAttempted) provisioned.loginsUncertain += 1;
+        if (provisioned.grantsAcknowledged < provisioned.grantsAttempted) provisioned.grantsUncertain += 1;
+        if (provisioned.principalsAcknowledged < provisioned.principalsAttempted) {
+          provisioned.principalsUncertain += 1;
+        }
+        throw err;
+      }
     }
 
     const loginA = await makeLogin(`kita_refusal_test_a_${suffix}`, `refusal-service:a-${suffix}`, bookAId);
@@ -409,7 +444,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         return pool;
       },
       async close(): Promise<void> {
-        const closing = [...pools.values()].map((pool) => pool.close());
+        const closing = [...pools.values()].map((pool) => bounded("pool.close", pool.close()));
         pools.clear();
         const results = await Promise.allSettled(closing);
         const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");

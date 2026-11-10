@@ -256,17 +256,28 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
          JOIN pg_roles grantor ON grantor.oid = m.grantor
         WHERE r.rolname = 'kita_test' AND g.rolname = 'kita_refusal_definer'`,
     );
+    expect(members.rows.length).toBeGreaterThan(0);
     expect(members.rows.every((m) => m.grantor !== "kita_test")).toBe(true);
     const bootstrap = members.rows.filter((m) => m.admin_option && !m.set_option);
-    expect(bootstrap.length).toBeGreaterThanOrEqual(0);
-    void row.fn_oid;
+    expect(bootstrap.length).toBeGreaterThan(0);
+    expect(row.fn_oid.length).toBeGreaterThan(0);
   });
 }
 
 async function advisoryNamespace(
   ownerUrl: string,
   expected: ReadonlyArray<{ classid: number; objid: number }>,
-): Promise<Array<{ database: string; classid: string; objid: string; objsubid: string; pid: number; granted: boolean }>> {
+): Promise<
+  Array<{
+    database: string;
+    classid: string;
+    objid: string;
+    objsubid: string;
+    pid: number;
+    granted: boolean;
+    start: string | null;
+  }>
+> {
   return withOwnerObserver(ownerUrl, async (client) => {
     const result = await client.query<{
       database: string;
@@ -330,8 +341,25 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     });
     const afterA = timedDeferred("afterA");
     const continueB = timedDeferred("continueB");
+    const observing: PoolLike = {
+      async connect() {
+        const client = await pool.connect();
+        return {
+          async query(sql: string, params?: readonly unknown[]) {
+            const result = await client.query(sql, params);
+            if (sql.startsWith("BEGIN")) await observeIdentity(client, fx.loginA.name);
+            return result;
+          },
+          release(err?: unknown) {
+            client.release(err);
+          },
+        } satisfies PoolClientLike;
+      },
+      query: (sql, params) => pool.query(sql, params),
+      end: () => pool.end(),
+    };
     try {
-      await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyB, requestTag: tagB })).resolves.toEqual(STORED);
+      await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyB, requestTag: tagB })).resolves.toEqual(STORED);
       const rowB = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
         fx.bookA,
@@ -415,7 +443,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(sequence).toEqual(["begin", "function-a", "rollback", "release"]);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
-      await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
+      await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
       const rowA = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
         fx.bookA,
@@ -423,8 +451,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         keyA,
         tagA,
       );
-      await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
-      await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyA, requestTag: "atom-a-other" })).resolves.toEqual(
+      await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
+      await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyA, requestTag: "atom-a-other" })).resolves.toEqual(
         MISMATCH,
       );
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).toEqual(rowA);
@@ -477,7 +505,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const victimRolledBack = timedDeferred("victimRolledBack");
     const allowSurvivorCommit = timedDeferred("allowSurvivorCommit");
     const allowVictimRetry = timedDeferred("allowVictimRetry");
-    const codes: Array<{ side: "A" | "B"; attempt: number; code: string }> = [];
+    const codes: Array<{
+      side: "A" | "B";
+      attempt: number;
+      code: string;
+      pid?: number;
+      start?: string;
+      sql?: string;
+    }> = [];
     let acquiredA = 0;
     let acquiredB = 0;
     let gatedA = 0;
