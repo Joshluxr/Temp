@@ -1,88 +1,79 @@
 BATCH-OK
 
-Money closed. Never ok:true. executeCommand and money_operations access remain HOLD. No financial execution, KYC/identity success, session minting, provider calls, live traffic, pilot, launch, deployment or G1-G6 closure is authorized.
+Money closed. Never ok:true. executeCommand and money_operations access remain HOLD. No financial execution, session minting, identity/KYC success, provider calls, live traffic, deployment, pilot, launch or G1-G6 closure is authorized.
 
-Baseline: fa39f3d59106ae96741c656fd9441ab22266926e (fa39f3d, PR #125). The schedules."authorization" quote is already present in all three 001_core.sql copies. The operator reports that 001 now applies on PostgreSQL 18.6 at 127.0.0.1:54339 and kita.schedules exists. The next reported failure is in 004_identity_access.sql at document_access_grants:
+Baseline: e072555e6a6fd6daa741a17f80eb951de71b818f (e072555, PR #126). The 004 UNIQUE(id,book_id) repair is present. The operator reports that 004 applies on PostgreSQL 18.6 at 127.0.0.1:54339, and that the subsequent 005_non_money_refusal.sql transaction failed at:
 
-~~~text
-ERROR: there is no unique constraint matching given keys for referenced table documents
+~~~sql
+ALTER FUNCTION kita.record_non_money_refusal(text, text) OWNER TO kita_refusal_definer;
 ~~~
 
-The checked-in 001 defines documents.id as PRIMARY KEY and documents.book_id as NOT NULL, but has no UNIQUE(id,book_id). The existing FK references both columns. PostgreSQL requires a suitable unique or primary key, or a non-partial unique index, on the referenced columns; the primary key on id alone does not supply that composite target. See [PostgreSQL 18 foreign-key constraints](https://www.postgresql.org/docs/18/ddl-constraints.html#DDL-CONSTRAINTS-FK).
+~~~text
+ERROR: must be able to SET ROLE kita_refusal_definer
+~~~
 
-Authorize the smallest additive repair in 004 only: expose the already logically unique (id,book_id) pair as a named, non-deferrable unique constraint before creating the dependent table. Keep PRIMARY KEY(id) and the same-book composite FK. This adds no document, access-grant, KYC, session or financial row and changes no permission. The unique constraint creates its supporting unique index; no separate index statement is needed. See [PostgreSQL 18 unique constraints](https://www.postgresql.org/docs/18/ddl-constraints.html#DDL-CONSTRAINTS-UNIQUE).
+The operator reports complete rollback and an absent kita.non_money_refusal_principals table. Treat that as reported installation evidence, with catalog confirmation required before retrying. Do not repeat the superseded 004 failure or claim that 005 installed.
 
-This document replaces NEXT-BATCH.md entirely. It authorizes a subsequent implementation batch, not an implementation PASS, migration-install result, refusal-slice acceptance or merge. This documentation turn edits only docs/kita-plan/addenda/NEXT-BATCH.md and does not connect to or mutate PostgreSQL.
+Authorize only the temporary authority required for this ownership transfer, in 005's existing transaction. The original freeze at `git show e3b2b15:docs/kita-plan/addenda/NEXT-BATCH.md` explicitly requires: "Temporary migration-owner membership/schema privileges needed to transfer function ownership must be removed before commit."
+
+A membership-only edit would encounter another ownership requirement: PostgreSQL 18 also requires the new function owner to have CREATE on the function's schema. Existing 005 grants only USAGE, after the transfer. The exact repair below therefore includes a temporary schema CREATE grant and its immediate revocation, as allowed by that original freeze. No lasting schema CREATE is permitted. See [PostgreSQL 18 ALTER FUNCTION](https://www.postgresql.org/docs/18/sql-alterfunction.html).
+
+This document replaces NEXT-BATCH.md entirely and freezes a subsequent implementation batch. It grants no implementation PASS, installation PASS, runtime activation, refusal-slice acceptance or merge permission. This documentation turn edits only docs/kita-plan/addenda/NEXT-BATCH.md; it does not edit SQL or connect to PostgreSQL.
 
 Exactly one existing implementation file may change:
 
 | File | Only permitted changes |
 |---|---|
-| apps/kita/packages/database/migrations/004_identity_access.sql | Insert the exact ALTER below and replace the exact three-line header comment below. |
+| apps/kita/packages/database/migrations/005_non_money_refusal.sql | The two exact replacements below: temporary ownership-transfer grants, then their revocation before the existing COMMIT. |
 
-There are no globs, new files or other permitted edits. In particular, preserve all three 001_core.sql copies, apps/kita/sql/CHECKSUMS.txt and 005_non_money_refusal.sql byte for byte. The checksum manifest covers the legacy 001/002 copies, not 004; do not add or regenerate entries. Preserve application code, tests, helpers, migration runners, migration ledgers, dependencies, configuration, contracts, historical evidence and existing untracked files.
+No new file, glob or other edit is authorized. Preserve application code, tests, helpers, runners, migration ledgers, dependencies, configuration, public contracts, historical evidence and existing untracked files. Preserve all 001 copies, 004 and apps/kita/sql/CHECKSUMS.txt byte for byte. The checksum manifest covers the legacy SQL copies; do not regenerate it or add 005.
 
-Immediately after the existing `SET search_path = kita, pg_catalog;` and its following blank line, insert exactly these two SQL lines and one trailing blank line, inside 004's existing BEGIN/COMMIT transaction and before section 1:
-
-~~~sql
-ALTER TABLE kita.documents
-  ADD CONSTRAINT documents_id_book_id_key UNIQUE (id, book_id);
-
-~~~
-
-The resulting opening SQL must be:
+In 005, replace exactly this existing single SQL line, leaving its surrounding blank lines intact:
 
 ~~~sql
-BEGIN;
-
-SET search_path = kita, pg_catalog;
-
-ALTER TABLE kita.documents
-  ADD CONSTRAINT documents_id_book_id_key UNIQUE (id, book_id);
-
+ALTER FUNCTION kita.record_non_money_refusal(text, text) OWNER TO kita_refusal_definer;
 ~~~
 
-Replace exactly this existing three-line header comment, so it no longer falsely says that 004 alters nothing:
+with exactly these four lines:
 
 ~~~sql
--- Privileges stay with 001's tail: this file issues NO GRANT/REVOKE, and it ALTERs nothing that
--- already exists — permissions documents.read vs access.grant remain data in the existing
--- approvals/audit_events/staff_grants machinery, not new database roles.
+GRANT kita_refusal_definer TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
+GRANT CREATE ON SCHEMA kita TO kita_refusal_definer;
+ALTER FUNCTION kita.record_non_money_refusal(text, text) OWNER TO kita_refusal_definer;
+REVOKE CREATE ON SCHEMA kita FROM kita_refusal_definer;
 ~~~
 
-with exactly:
+CURRENT_USER must be the authenticated migration owner kita_test, with session_user = current_user throughout installation. SET TRUE permits the ownership transfer; INHERIT TRUE keeps the existing subsequent function ACL statements executable by the migration owner after transfer. No SET ROLE or SET SESSION AUTHORIZATION statement is added. No ADMIN option or grant option is added. Explicit membership options avoid relying on the login's default inheritance attribute. See [PostgreSQL 18 GRANT](https://www.postgresql.org/docs/18/sql-grant.html).
+
+Replace exactly the final `COMMIT;` line with these three lines, preserving the existing preceding blank line and the final LF:
 
 ~~~sql
--- Privileges stay with 001's tail: this file issues NO GRANT/REVOKE. Its only ALTER adds
--- UNIQUE(id,book_id) to kita.documents for the existing same-book FK; permissions documents.read
--- vs access.grant remain data in approvals/audit_events/staff_grants, not new database roles.
+REVOKE kita_refusal_definer FROM CURRENT_USER;
+
+COMMIT;
 ~~~
 
-Preserve every other byte, including whitespace, line endings, defaults, transaction boundaries and all FK clauses. In particular, leave this statement inside document_access_grants unchanged:
+Keep every intervening existing statement unchanged. In particular, the existing PUBLIC revoke, recorder EXECUTE grant, schema USAGE grants and minimum column grants run while the migration owner still has the temporary membership. The schema CREATE privilege is revoked immediately after ownership transfer; the added membership is revoked after all existing ACL work and before COMMIT. Do not move the membership revoke immediately after ALTER FUNCTION, where it could prevent that ACL work.
 
-~~~sql
-  FOREIGN KEY(document_id,book_id) REFERENCES documents(id,book_id),
-~~~
+These are four added SQL statements across two replacements. Preserve every other byte, including comments, whitespace, LF endings, role definitions, function body, SECURITY DEFINER, search_path, constraints, triggers, transaction boundaries and existing grants. No conditional fallback, role reuse, alternate owner, superuser execution, schema ownership transfer, CASCADE, seed data or out-of-band grant is authorized. A collision or error stops the batch.
 
-Do not replace the primary key, reduce the FK to document_id alone, change either column's nullability, add cascading actions, make the unique constraint deferrable, disable validation/triggers, add conditional collision handling, or add data/seed statements. The named constraint and its supporting index must be newly created by the checked-in migration; an existing-name collision or another error stops the batch. No out-of-band ALTER may substitute for implementing and applying the whole file.
-
-These are the required SHA-256 values. The proposed 004 digest was calculated from the two exact replacements in memory; no SQL file was written or applied in this turn.
+The required implementation SHA-256 was computed from those exact replacements in memory. No SQL file was written or applied in this documentation turn.
 
 | File | Baseline SHA-256 | Required implementation SHA-256 |
 |---|---|---|
-| apps/kita/packages/database/migrations/004_identity_access.sql | 8f53bd7c4ea2a561d73e5ea4ad94e957ceed69122da289beec8a7673d9a48208 | adc3c403feb2e98c5d808a7c28ebfada2048615f44590c64e838a952ad87ce05 |
+| apps/kita/packages/database/migrations/005_non_money_refusal.sql | 6a0ba525b4a028bf968cd9834292b0fe48a9e1d497bd197a9c12b4970c136a12 | d51ea63bba358c8e06bf29c4cf90a3c55d0d0041490aba3c4862c4d82a3015c1 |
 
 Protected files must retain these hashes:
 
 ~~~text
 6fa76837f31962ca7865572caed50de8845b05614eacef5dec30c40befcd8e22  apps/kita/packages/database/migrations/001_core.sql
+adc3c403feb2e98c5d808a7c28ebfada2048615f44590c64e838a952ad87ce05  apps/kita/packages/database/migrations/004_identity_access.sql
 d977da22f83f7a8e6c0b299a5740ef1815ac2d3eb3131468cf61259cf75910d2  apps/kita/sql/001_core.sql
 d977da22f83f7a8e6c0b299a5740ef1815ac2d3eb3131468cf61259cf75910d2  docs/kita-plan/sql/001_core.sql
 0cc9d574f2f9b716a9c90f6a3e5e83053c47a45f49609b93d72b12bfbefee2fd  apps/kita/sql/CHECKSUMS.txt
-6a0ba525b4a028bf968cd9834292b0fe48a9e1d497bd197a9c12b4970c136a12  apps/kita/packages/database/migrations/005_non_money_refusal.sql
 ~~~
 
-Review the exact implementation base/head and the complete one-file diff against the approved documentation head. Verify both replacements, the proposed 004 hash, all protected hashes and byte identity of the planning/legacy 001 pair. From the repository root, run:
+Review the exact implementation base/head and complete one-file diff against the approved documentation head. Verify the required 005 hash, both replacements, both revocations before the sole COMMIT, all protected hashes and byte identity of the planning/legacy 001 pair. From the repository root, run:
 
 ~~~sh
 (cd apps/kita/sql && sha256sum -c CHECKSUMS.txt)
@@ -90,24 +81,26 @@ node --test apps/kita/database/tests/checksums.test.mjs
 git diff --check
 ~~~
 
-Then validate installation only on the explicitly configured dedicated test target: PostgreSQL 18.6 at 127.0.0.1:54339/kita_core_test, authenticated migration owner kita_test, using the existing explicit KITA_REFUSAL_TEST_OWNER_URL requirement. Verify the URL and actual server version, database, session_user and schema ownership before mutation; record identities and hashes without credentials. Do not invent credentials, substitute a target, provision a service or change privileges/ownership to bypass a failure.
+Validate installation only on the explicitly configured dedicated target: PostgreSQL 18.6 at 127.0.0.1:54339/kita_core_test, authenticated migration owner kita_test, using the existing explicit KITA_REFUSAL_TEST_OWNER_URL requirement. Verify the URL and actual server version, database, session_user, current_user, CREATEROLE authority and kita schema ownership before mutation. Record identities and file hashes without credentials. Do not substitute a target, invent credentials, provision a service or elevate the owner.
 
-The reported successful 001 installation is an existing test state, not an empty schema. Before continuing there, verify it is the recognized 001-only state, with the failed 004 transaction fully rolled back, no 004/005 objects, no documents_id_book_id_key constraint/index and absent kita_refusal_recorder/kita_refusal_definer roles. If verified, apply the complete patched 004 and then complete unchanged 005, in that order; do not rerun 001 over existing tables. If the state is unknown or partially installed, stop and report it. No reset/drop/cleanup of unknown leftovers is authorized.
+The recognized retry state is the already installed unchanged package 001 plus unchanged repaired 004, with the failed 005 fully rolled back. Confirm the 004 unique constraint and dependent same-book FK remain installed, and all 005 objects, refusal roles and reserved-operation rows are absent. Checking only the principals table is insufficient. If the state is verified, apply the complete patched 005 once; do not rerun 001 or 004 over existing objects. Unknown or partial state requires BATCH-HOLD. No reset, drop or cleanup of unknown leftovers is authorized.
 
-For fresh-install evidence, require a separately provisioned empty recognized test state on the same pinned dedicated target with absent refusal roles, then apply the complete unchanged package 001, patched package 004 and unchanged package 005 in order. Do not clear the current database to manufacture this evidence. If a clean state is unavailable, keep fresh-install validation open.
+Use psql with -X, ON_ERROR_STOP=1 and VERBOSITY=verbose. Apply the checked-in file bytes directly, without filtering, rewriting, skipping statements or invoking either migration ledger. Record command exit status, SQLSTATE on failure and the transaction outcome. If any statement fails, stop, confirm rollback and report the exact file/statement/SQLSTATE as the next blocker; return to BATCH-HOLD without expanding this batch. Do not continue into application or financial functions, providers, fixtures or live traffic.
 
-Use psql with -X and ON_ERROR_STOP=1, with verbose error reporting sufficient to capture SQLSTATE, and stop at the first failure. Apply checked-in file bytes without filtering, rewriting, skipping migrations, substituting legacy SQL copies or using either repository migration ledger. Record command exit status and each migration's COMMIT/ROLLBACK outcome. Existing reviewed reference/config seeds in 001 are unchanged; no additional book, customer, document, access-grant, session, command-key or financial fixtures are authorized. Do not invoke application/financial functions or provider endpoints.
+After COMMIT, inspect pg_catalog to confirm the entry point is owned by kita_refusal_definer with its unchanged SECURITY DEFINER/search_path settings. Confirm the definer has schema USAGE and no effective schema CREATE, owns no existing table, and retains only the existing bounded column privileges. Confirm PUBLIC cannot execute the entry point and the recorder retains only its existing entry-point EXECUTE/schema USAGE authority. Compare unrelated ownership, default privileges, ACLs and role attributes/memberships with the pre-install snapshot; no new privilege or membership for kita_api, kita_worker, kita_posting, kita_auditor or PUBLIC is allowed.
 
-After 004 commits, inspect pg_catalog to verify that documents still has PRIMARY KEY(id); documents_id_book_id_key is validated, non-deferrable UNIQUE(id,book_id); its supporting index is unique, valid and non-partial; and the validated document_access_grants(document_id,book_id) FK references kita.documents(id,book_id) through that index. Verify existing ownership, ACLs, role attributes/memberships and security settings are unchanged across 004. Across 005, review only its existing bounded refusal-role changes; this batch authorizes no additional authority or membership.
+Membership cleanup evidence must distinguish grantors. PostgreSQL 18 automatically grants a non-superuser CREATEROLE creator ADMIN TRUE, SET FALSE, INHERIT FALSE membership in each created role, attributed to the bootstrap superuser. A self-grant adds SET/INHERIT authority; revoking it does not remove the separate bootstrap grant. This is existing CREATE ROLE behavior, not additional authority introduced by this repair. See [PostgreSQL 18 role attributes](https://www.postgresql.org/docs/18/role-attributes.html).
 
-If 004, 005 or any validation fails, record the exact file, statement, SQLSTATE and transaction outcome as the next blocker and return to BATCH-HOLD for that repair. Do not expand this batch. Successful installation establishes only installation on the observed target. It does not establish runtime safety, durable refusal persistence, scope isolation or any full-task acceptance.
+Inspect pg_auth_members, including grantor, admin_option, inherit_option and set_option, for both new roles. Require the added kita_test self-grant to be absent after COMMIT, with no remaining effective SET or inherited access from kita_test to kita_refusal_definer. Only the automatic bootstrap ADMIN-only grants from the unchanged CREATE ROLE statements may remain; do not claim zero membership rows. No superuser removal or change of those bootstrap grants is authorized. An unexpected grantor, extra grant, enabled SET/INHERIT option, failed revocation or residual CREATE privilege requires BATCH-HOLD. Preserve the original requirement that all temporary transfer authority is removed before commit; this document does not certify other original-freeze obligations already missing from 005.
 
-The existing apps/kita/packages/database/__tests__/non-money-refusal-postgres.spec.ts is a placeholder that throws when selected. Do not replace it or count a skipped/failing run as PostgreSQL acceptance. Runtime-role, cross-scope, contention, retry, crash/recovery, immutability and grant evidence remain open. The refusal contract and required PostgreSQL evidence in `git show e3b2b15:docs/kita-plan/addenda/NEXT-BATCH.md` remain required, subject only to the baseline 001 quote and this exact 004 repair; its former five-new-file allowlist is not reopened. The old no-engine claim is superseded by the operator's report, not repeated as a current blocker.
+A successful retry establishes installation only on that observed target. Fresh-install evidence remains open unless a separately provisioned recognized empty state is available on the pinned dedicated target, with absent refusal roles, for complete unchanged package 001, unchanged package 004 and patched package 005 in order. Do not clear the current database to manufacture it.
 
-This narrow exception supersedes the prior byte-preservation hold on 004 only for the exact ALTER and comment correction above. No GRANT/REVOKE, default privilege, role attribute, membership, ownership, search_path or security-boundary change is authorized by the repair. No broadening to recorder, definer, API, worker, posting, auditor or PUBLIC. No executeCommand, money operation, generic executor, KYC/identity success or success-capable response may be introduced or exercised. Never ok:true.
+The existing apps/kita/packages/database/__tests__/non-money-refusal-postgres.spec.ts is a throwing placeholder when selected. Do not edit it or count a skip/failure as PostgreSQL acceptance. Runtime-role, cross-scope, retry, contention, crash/recovery, durability, immutability and full grant evidence remain open. The refusal contract and PostgreSQL acceptance requirements in `git show e3b2b15:docs/kita-plan/addenda/NEXT-BATCH.md` remain required, subject only to the completed 001/004 repairs and this exact ownership-transfer repair. Its former five-file allowlist is not reopened.
 
-Subsequent implementation follows the operator roles: Astra/xhigh planning, Sol/max direction and independent review, GPU gpu-fqaf Qoder Efficient coding, coordinator GitHub handling. No batch script, swarm, implementation or GitHub action is dispatched in this documentation-only turn. Review must check the exact reviewed head and all applicable gates before any separately authorized merge; this document grants no merge permission.
+This narrow exception supersedes the prior byte-preservation hold on 005 only for the exact four additions above. No broader role/ACL change, command executor, money access, session minting, KYC/identity success or success-capable response is authorized. Never ok:true.
+
+Subsequent implementation follows the operator roles: Astra/xhigh planning, Sol/max direction and independent review, GPU gpu-fqaf Qoder Efficient coding, coordinator GitHub handling. No batch script, swarm, implementation or GitHub action is dispatched in this documentation-only turn. Any later separately authorized merge must re-run applicable review, test and exact-head gates; this document grants no merge permission.
 
 Preserve [T-CORE-02-BATCH.md](T-CORE-02-BATCH.md), [the identity review](../SOL-IDENTITY-REVIEW.md), [the public contract freeze](OPENAPI-FREEZE.md) and all prior bounded holds. Full T-CORE-02, T-CORE-01 runtime/migration acceptance, identity, money, ledger, posting, rewards, integration, certification, pilot and launch remain unclosed, as do CP-00-11, PACK/REQ-SC/TEST and DEP-00-15 obligations. No G1-G6 PASS is granted.
 
-Checks in this documentation turn cover the first-line decision, exact allowlist and SQL, in-memory proposed hash, protected-file hashes, local references, whitespace and a diff confined to NEXT-BATCH.md. No application build, unit test, database installation or PostgreSQL acceptance result is asserted.
+Checks in this documentation turn cover the first-line decision, exact allowlist and SQL, in-memory required hash, protected-file hashes, local references, whitespace and a diff confined to NEXT-BATCH.md. No application build, unit test, database installation or PostgreSQL acceptance result is asserted.
