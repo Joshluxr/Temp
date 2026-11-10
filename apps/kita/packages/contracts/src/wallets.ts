@@ -77,3 +77,17 @@ export interface Wal05Output {
   readonly withdrawalId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Wal06CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Wal06Input {
+  readonly unscreenedPartyOrCrossBookWithoutSettlementPolicy: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Wal06Output {
+  readonly unscreenedOrCrossBookTransferred: true;
+  readonly transferId: UUID;
+  readonly traceEvents: readonly string[];
+}
