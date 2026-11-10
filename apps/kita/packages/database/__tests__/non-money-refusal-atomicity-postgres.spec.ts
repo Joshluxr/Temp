@@ -335,6 +335,7 @@ async function fetchReservedRow(
   bookId: string,
   actorId: string,
   key: string,
+  proofOk?: () => boolean,
 ): Promise<ReservedRow | undefined> {
   return withOwnerObserver(ownerUrl, async (client) => {
     const result = await client.query<ReservedRow>(
@@ -344,6 +345,7 @@ async function fetchReservedRow(
        WHERE book_id = $1 AND actor_id = $2 AND operation = 'recordNonMoneyRefusal.v1' AND key = $3`,
       [bookId, actorId, key],
     );
+    if (proofOk && !proofOk()) throw new Error("HOLD: row observed after ambiguous ledger");
     expect(result.rows.length).toBeLessThanOrEqual(1);
     return result.rows[0];
   });
@@ -368,6 +370,7 @@ async function observeIdentity(
   client: PoolClientLike,
   expectedLogin: string,
   expectedOid: string,
+  proofOk?: () => boolean,
 ): Promise<{ pid: number; start: string; oid: string }> {
   const ident = await client.query(
     `SELECT session_user AS session_user, current_user AS current_user,
@@ -389,6 +392,7 @@ async function observeIdentity(
             (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'USAGE')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
   );
+  if (proofOk && !proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
   if (ident.rows.length !== 1) {
     throw new Error("HOLD: authenticated identity cardinality is not one");
   }
@@ -1248,7 +1252,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     throw persistAbort ?? new Error("HOLD: BEGIN result after ambiguous ledger");
                   }
                   if (abortOccurred) throw persistAbort;
-                  const ident = await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA));
+                  const ident = await observeIdentity(
+                    client,
+                    fixtures.loginA.name,
+                    expectedLoginOid(fixtures.loginA),
+                    () => exactOriginalLedger(codes, victimEntry, victimProof),
+                  );
                   if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
                     throw persistAbort ?? new Error("HOLD: identity after ambiguous ledger");
                   }
@@ -1576,7 +1585,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const survivorKey = settled.side === "A" ? keyA : keyB;
       const survivorTag = settled.side === "A" ? tagA : tagB;
       const victimKey = settled.side === "A" ? keyB : keyA;
-      const survivorFetched = await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, survivorKey);
+      const survivorFetched = await fetchReservedRow(
+        fx.ownerUrl,
+        fx.bookA,
+        fx.loginA.actorId,
+        survivorKey,
+        () => exactOriginalLedger(codes, victimEntry, victimProof),
+      );
       expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       const survivorRow = expectRow(
         survivorFetched,
@@ -1602,20 +1617,25 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(codes[0]).toBe(victimEntry);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
       expect(codes.filter((c) => c.code === "40P01")[0]).toBe(victimEntry);
-      const rowA = expectRow(
-        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
+      const fetchedA = await fetchReservedRow(
+        fx.ownerUrl,
         fx.bookA,
         fx.loginA.actorId,
         keyA,
-        tagA,
+        () => exactOriginalLedger(codes, victimEntry, victimProof),
       );
-      const rowB = expectRow(
-        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
+      const rowA = expectRow(fetchedA, fx.bookA, fx.loginA.actorId, keyA, tagA);
+      const fetchedB = await fetchReservedRow(
+        fx.ownerUrl,
         fx.bookA,
         fx.loginA.actorId,
         keyB,
-        tagB,
+        () => exactOriginalLedger(codes, victimEntry, victimProof),
       );
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
+      const rowB = expectRow(fetchedB, fx.bookA, fx.loginA.actorId, keyB, tagB);
       if (settled.side === "A") {
         expect(rowA).toEqual(survivorRow);
       } else {
@@ -1646,25 +1666,40 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         end: () => replayRaw.end(),
       };
       try {
+        expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
+        expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: "dl-a-x" })).resolves.toEqual(
           MISMATCH,
         );
+        expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyB, requestTag: tagB })).resolves.toEqual(STORED);
+        expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyB, requestTag: "dl-b-x" })).resolves.toEqual(
           MISMATCH,
         );
       } finally {
         await replayRaw.close();
       }
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       expect(
         await advisoryNamespace(fx.ownerUrl, [
           { classid: lockA, objid: 1 },
           { classid: lockB, objid: 1 },
         ]),
       ).toHaveLength(0);
-      expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).toEqual(rowA);
-      expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
+      expect(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA, () =>
+          exactOriginalLedger(codes, victimEntry, victimProof),
+        ),
+      ).toEqual(rowA);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
+      expect(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB, () =>
+          exactOriginalLedger(codes, victimEntry, victimProof),
+        ),
+      ).toEqual(rowB);
       const victimSeq = victimSide === "A" ? seqA : seqB;
       const survivorSeq = victimSide === "A" ? seqB : seqA;
       expect(survivorSeq).toEqual(["begin:1", "lock1:1", "function:1", "lock2:1", "commit:1", "release:1"]);

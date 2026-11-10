@@ -502,9 +502,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     throw err;
   }
   const ownerUrl = requireRefusalOwnerUrl();
-  const client = ownerClient(ownerUrl);
-  hideSecondary(lifecycle, client);
-  hideSecondary(client, lifecycleState);
+  let client: pg.Client | undefined;
   const provisioned = {
     booksPrepared: 0,
     booksIssued: 0,
@@ -535,11 +533,15 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   let connected = false;
   let failed = false;
   let primary: unknown;
-  invocationOf(client);
   try {
-    await client.connect();
+    client = ownerClient(ownerUrl);
+    const owned = client;
+    hideSecondary(lifecycle, owned);
+    hideSecondary(owned, lifecycleState);
+    invocationOf(owned);
+    await owned.connect();
     connected = true;
-    const version = await client.query<{ version: string }>("SELECT version()");
+    const version = await owned.query<{ version: string }>("SELECT version()");
     if (!version.rows[0]?.version.includes("PostgreSQL 18.")) {
       throw new Error(`expected PostgreSQL 18, got ${version.rows[0]?.version ?? "unknown"}`);
     }
@@ -563,7 +565,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       try {
         provisioned.booksIssued += 1;
         record.issued = true;
-        const inserted = await client.query<{ id: string }>(
+        const inserted = await owned.query<{ id: string }>(
           `INSERT INTO kita.books (legal_entity, functional_currency, status)
            VALUES ($1, 'USD', 'disabled') RETURNING id`,
           [legalEntity],
@@ -638,7 +640,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       try {
       provisioned.rolesPrepared += 1;
       roleRecord.prepared = true;
-      const createSql = await client.query<{ sql: string }>(
+      const createSql = await owned.query<{ sql: string }>(
         `SELECT format(
            'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS',
            $1::text, $2::text
@@ -649,11 +651,11 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       if (!createText) throw new Error("HOLD: CREATE ROLE sql missing");
       provisioned.rolesIssued += 1;
       roleRecord.issued = true;
-      await client.query(createText);
+      await owned.query(createText);
       provisioned.rolesAcknowledged += 1;
       roleRecord.acknowledged = true;
       provisioned.retainedLoginNames.push(name);
-      const oidRow = await client.query<{ oid: string }>(
+      const oidRow = await owned.query<{ oid: string }>(
         `SELECT oid::text AS oid FROM pg_catalog.pg_roles WHERE rolname = $1`,
         [name],
       );
@@ -669,7 +671,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       provisioned.retainedLoginOids.push(loginOid);
       provisioned.grantsPrepared += 1;
       grantRecord.prepared = true;
-      const grantSql = await client.query<{ sql: string }>(
+      const grantSql = await owned.query<{ sql: string }>(
         `SELECT format('GRANT kita_refusal_recorder TO %I WITH INHERIT TRUE, SET FALSE', $1::text) AS sql`,
         [name],
       );
@@ -677,7 +679,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       if (!grantText) throw new Error("HOLD: GRANT recorder sql missing");
       provisioned.grantsIssued += 1;
       grantRecord.issued = true;
-      await client.query(grantText);
+      await owned.query(grantText);
       provisioned.grantsAcknowledged += 1;
       grantRecord.acknowledged = true;
       grantRecord.outcome = "fulfilled";
@@ -686,7 +688,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         bindingRecord.prepared = true;
         provisioned.bindingsIssued += 1;
         bindingRecord.issued = true;
-        const principalInsert = await client.query(
+        const principalInsert = await owned.query(
           `INSERT INTO kita.non_money_refusal_principals (login_oid, login_name, book_id, actor_id)
            SELECT r.oid, r.rolname, $1::uuid, $2
            FROM pg_catalog.pg_roles r
@@ -755,7 +757,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     const loginC = await makeLogin(`kita_refusal_test_c_${suffix}`, `refusal-service:c-${suffix}`, bookCId);
     const loginUnbound = await makeLogin(`kita_refusal_test_unbound_${suffix}`, null, null);
 
-    const observedBooks = await client.query<{ id: string; status: string }>(
+    const observedBooks = await owned.query<{ id: string; status: string }>(
       `SELECT id::text AS id, status FROM kita.books WHERE id = ANY($1::uuid[]) ORDER BY legal_entity`,
       [[bookAId, bookCId]],
     );
@@ -772,7 +774,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       record.observed = true;
     }
 
-    const observedBindings = await client.query<{
+    const observedBindings = await owned.query<{
       login_name: string;
       login_oid: string;
       book_id: string;
@@ -815,7 +817,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     if (expectedLogins.some((login) => !login.oid)) {
       throw new Error("HOLD: retained login oid missing before grant observation");
     }
-    const observedGrants = await client.query<{
+    const observedGrants = await owned.query<{
       member: string;
       member_oid: string;
       role: string;
@@ -903,27 +905,33 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     primary = err;
     hideSecondary(lifecycle, inventory);
     hideSecondary(lifecycleState, err);
-    hideSecondary(client, inventory);
-    hideSecondary(client, err);
+    if (client) {
+      hideSecondary(client, inventory);
+      hideSecondary(client, err);
+    }
     if ((typeof err === "object" && err !== null) || typeof err === "function") {
       hideSecondary(err as object, inventory);
       hideSecondary(err as object, lifecycleState);
     }
     throw err;
   } finally {
-    const ended = await endOwnerClient(client, connected);
-    hideSecondary(client, ended.ledger);
-    hideSecondary(client, { ...provisioned });
-    if (ended.account) {
-      if (failed) {
-        retainCleanup(client, primary, [ended.account], ended.raw);
-        if ((typeof primary === "object" && primary !== null) || typeof primary === "function") {
-          hideSecondary(primary as object, { ...provisioned });
+    if (!client) {
+      /* construction never produced a client; lifecycle already owns the failure */
+    } else {
+      const ended = await endOwnerClient(client, connected);
+      hideSecondary(client, ended.ledger);
+      hideSecondary(client, { ...provisioned });
+      if (ended.account) {
+        if (failed) {
+          retainCleanup(client, primary, [ended.account], ended.raw);
+          if ((typeof primary === "object" && primary !== null) || typeof primary === "function") {
+            hideSecondary(primary as object, { ...provisioned });
+          }
+        } else {
+          const error = cleanupError([ended.account], ended.raw);
+          hideSecondary(error, { ...provisioned });
+          throw error;
         }
-      } else {
-        const error = cleanupError([ended.account], ended.raw);
-        hideSecondary(error, { ...provisioned });
-        throw error;
       }
     }
   }
