@@ -491,7 +491,16 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   const lifecycle = { kind: "refusal-fixture-lifecycle" as const };
   const lifecycleState = invocationOf(lifecycle);
-  await assertRefusalSecurityPreflight();
+  try {
+    await assertRefusalSecurityPreflight();
+  } catch (err) {
+    hideSecondary(lifecycle, err);
+    hideSecondary(lifecycleState, err);
+    if ((typeof err === "object" && err !== null) || typeof err === "function") {
+      hideSecondary(err as object, lifecycleState);
+    }
+    throw err;
+  }
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
   hideSecondary(lifecycle, client);

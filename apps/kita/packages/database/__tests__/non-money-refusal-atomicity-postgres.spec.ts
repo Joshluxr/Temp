@@ -101,6 +101,7 @@ function expectedLoginOid(login: { readonly name: string }): string {
 
 function proofMatches(entry: FailureEntry, proof: FailureEntry): boolean {
   if (
+    entry.original !== proof.original ||
     entry.code !== proof.code ||
     entry.sql !== proof.sql ||
     entry.side !== proof.side ||
@@ -1171,8 +1172,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             try {
               const value = (original as { code?: unknown }).code;
               if (typeof value === "string") entry.code = value;
-            } catch {
-              /* retain original without code */
+            } catch (snapshotErr) {
+              notePrivate(entry, snapshotErr);
+              if ((typeof original === "object" && original !== null) || typeof original === "function") {
+                notePrivate(original as object, snapshotErr);
+              }
             }
             throw err;
           }
@@ -1203,8 +1207,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               try {
                 const value = (original as { code?: unknown }).code;
                 if (typeof value === "string") entry.code = value;
-              } catch {
-                /* retain original without code */
+              } catch (snapshotErr) {
+                notePrivate(entry, snapshotErr);
+                if ((typeof original === "object" && original !== null) || typeof original === "function") {
+                  notePrivate(original as object, snapshotErr);
+                }
               }
             }
             throw persistAbort;
@@ -1235,6 +1242,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   callOwner.issued = true;
                   const result = await client.query(sql, params);
                   seq.push(`begin:${attempt}`);
+                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                    throw persistAbort ?? new Error("HOLD: BEGIN result after ambiguous ledger");
+                  }
                   if (abortOccurred) throw persistAbort;
                   const ident = await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA));
                   if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
@@ -1258,8 +1268,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   try {
                     const value = (original as { code?: unknown }).code;
                     if (typeof value === "string") entry.code = value;
-                  } catch {
-                    /* retain original without code */
+                  } catch (snapshotErr) {
+                    notePrivate(entry, snapshotErr);
+                    if ((typeof original === "object" && original !== null) || typeof original === "function") {
+                      notePrivate(original as object, snapshotErr);
+                    }
                   }
                   throw err;
                 }
