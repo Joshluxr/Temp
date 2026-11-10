@@ -1256,7 +1256,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     client,
                     fixtures.loginA.name,
                     expectedLoginOid(fixtures.loginA),
-                    () => exactOriginalLedger(codes, victimEntry, victimProof),
+                    attempt === 2 ? () => exactOriginalLedger(codes, victimEntry, victimProof) : undefined,
                   );
                   if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
                     throw persistAbort ?? new Error("HOLD: identity after ambiguous ledger");
@@ -1654,7 +1654,17 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           return {
             async query(sql: string, params?: readonly unknown[]) {
               const result = await client.query(sql, params);
-              if (sql.startsWith("BEGIN")) await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA));
+              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+                throw new Error("HOLD: replay query after ambiguous ledger");
+              }
+              if (sql.startsWith("BEGIN")) {
+                await observeIdentity(
+                  client,
+                  fixtures.loginA.name,
+                  expectedLoginOid(fixtures.loginA),
+                  () => exactOriginalLedger(codes, victimEntry, victimProof),
+                );
+              }
               return result;
             },
             release(err?: unknown) {
@@ -1700,6 +1710,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           exactOriginalLedger(codes, victimEntry, victimProof),
         ),
       ).toEqual(rowB);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       const victimSeq = victimSide === "A" ? seqA : seqB;
       const survivorSeq = victimSide === "A" ? seqB : seqA;
       expect(survivorSeq).toEqual(["begin:1", "lock1:1", "function:1", "lock2:1", "commit:1", "release:1"]);
@@ -1724,6 +1735,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(codes[0]?.side).toBe(victimSide);
       expect(codes[0]?.sql).toBe("SELECT pg_advisory_xact_lock($1, $2)");
       expect(codes[0]?.params).toEqual(opposingForVictim);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       const firstAttemptA = backends.A;
       const firstAttemptB = backends.B;
       if (!firstAttemptA || !firstAttemptB) throw new Error("missing first-attempt backend identities");
