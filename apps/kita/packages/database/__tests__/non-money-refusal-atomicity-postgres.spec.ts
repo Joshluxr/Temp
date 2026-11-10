@@ -886,6 +886,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const seqB: string[] = [];
     const backends: Record<string, { pid: number; start: string }> = {};
     let victimSide: "A" | "B" | undefined;
+    let victimEntry: (typeof codes)[number] | undefined;
     let victimRollbackAck = false;
 
     function wrap(pool: ReturnType<typeof createPool>, side: "A" | "B"): PoolLike {
@@ -951,6 +952,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           let recorderAck = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
+              let forwardedAtCall: unknown[] = [];
+              try {
+                forwardedAtCall = Array.isArray(params) ? [...params] : [];
+              } catch {
+                forwardedAtCall = [];
+              }
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
               if (sql.startsWith("BEGIN")) {
                 try {
@@ -995,20 +1002,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 const recorderParams = side === "A" ? [keyA, tagA] : [keyB, tagB];
                 if (
                   sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
-                  Array.isArray(params) &&
-                  params.length === 2 &&
-                  params[0] === ownFirst[0] &&
-                  params[1] === ownFirst[1]
+                  forwardedAtCall.length === 2 &&
+                  forwardedAtCall[0] === ownFirst[0] &&
+                  forwardedAtCall[1] === ownFirst[1]
                 ) {
                   firstLockAck = true;
                   seq.push(`lock1:${attempt}`);
                 }
                 if (
                   sql === "SELECT kita.record_non_money_refusal($1,$2) AS body" &&
-                  Array.isArray(params) &&
-                  params.length === 2 &&
-                  params[0] === recorderParams[0] &&
-                  params[1] === recorderParams[1] &&
+                  forwardedAtCall.length === 2 &&
+                  forwardedAtCall[0] === recorderParams[0] &&
+                  forwardedAtCall[1] === recorderParams[1] &&
                   firstLockAck
                 ) {
                   recorded = true;
@@ -1048,10 +1053,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   original,
                 };
                 codes.push(entry);
-                let forwardedParams: unknown[] = [];
                 try {
-                  forwardedParams = Array.isArray(params) ? [...params] : [];
-                  entry.params = forwardedParams;
+                  entry.params = forwardedAtCall;
                   const value = (original as { code?: unknown }).code;
                   if (typeof value === "string") entry.code = value;
                 } catch (snapshotErr) {
@@ -1065,20 +1068,21 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 if (
                   !driverAcked &&
                   original !== persistAbort &&
-                  victimSide === undefined &&
+                  victimEntry === undefined &&
                   entry.code === "40P01" &&
                   attempt === 1 &&
                   firstLockAck &&
                   recorderAck &&
                   sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
-                  forwardedParams.length === 2 &&
-                  forwardedParams[0] === opposing[0] &&
-                  forwardedParams[1] === opposing[1] &&
+                  forwardedAtCall.length === 2 &&
+                  forwardedAtCall[0] === opposing[0] &&
+                  forwardedAtCall[1] === opposing[1] &&
                   backends[side]?.pid !== undefined &&
                   backends[side]?.start !== undefined
                 ) {
                   seq.push(`lock2:${attempt}`);
                   victimSide = side;
+                  victimEntry = entry;
                 } else if (sql === "SELECT pg_advisory_xact_lock($1, $2)" && recorded && !driverAcked) {
                   seq.push(`lock2:${attempt}`);
                 }
@@ -1171,25 +1175,21 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       ).toBe(true);
       goSecond.resolve();
       const deadline = Date.now() + 15_000;
-      while (victimSide === undefined && Date.now() < deadline) {
+      while (victimEntry === undefined && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 25));
       }
       expect(victimSide === "A" || victimSide === "B").toBe(true);
-      const opposingForVictim = victimSide === "A" ? [lockB, 1] : [lockA, 1];
-      const victimEntry = codes.find(
-        (c) =>
-          c.side === victimSide &&
-          c.attempt === 1 &&
-          c.code === "40P01" &&
-          c.sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
-          Array.isArray(c.params) &&
-          c.params[0] === opposingForVictim[0] &&
-          c.params[1] === opposingForVictim[1] &&
-          c.pid === backends[victimSide]?.pid &&
-          c.start === backends[victimSide]?.start,
-      );
       expect(victimEntry).toBeDefined();
-      expect(codes.filter((c) => c === victimEntry)).toHaveLength(1);
+      const opposingForVictim = victimSide === "A" ? [lockB, 1] : [lockA, 1];
+      expect(victimEntry?.side).toBe(victimSide);
+      expect(victimEntry?.attempt).toBe(1);
+      expect(victimEntry?.code).toBe("40P01");
+      expect(victimEntry?.sql).toBe("SELECT pg_advisory_xact_lock($1, $2)");
+      expect(victimEntry?.params).toEqual(opposingForVictim);
+      expect(victimEntry?.pid).toBe(backends[victimSide!]?.pid);
+      expect(victimEntry?.start).toBe(backends[victimSide!]?.start);
+      expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
+      expect(codes.filter((c) => c.code === "40P01")[0]).toBe(victimEntry);
       await victimRolledBack.promise;
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
@@ -1242,7 +1242,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(gatedB).toBe(acquiredB);
       expect(Math.max(acquiredA, acquiredB)).toBe(2);
       expect(Math.min(acquiredA, acquiredB)).toBe(1);
-      expect(codes.filter((c) => c === victimEntry)).toHaveLength(1);
+      expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
+      expect(codes.filter((c) => c.code === "40P01")[0]).toBe(victimEntry);
       const rowA = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
         fx.bookA,
