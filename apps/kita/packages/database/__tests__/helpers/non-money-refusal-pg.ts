@@ -188,19 +188,38 @@ async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise
   }
 }
 
+const invocationOwners = new WeakMap<object, { readonly ledgers: CloseLedger[] }>();
+
+function invocationOf(owner: object): { readonly ledgers: CloseLedger[] } {
+  const existing = invocationOwners.get(owner);
+  if (existing) return existing;
+  const created = { ledgers: [] as CloseLedger[] };
+  invocationOwners.set(owner, created);
+  hideSecondary(owner, created);
+  return created;
+}
+
 async function endOwnerClient(
   client: pg.Client,
   connected: boolean,
-): Promise<{ account?: CloseAccount; raw?: unknown; ledger?: CloseLedger }> {
-  let ending: Promise<void>;
-  try {
-    ending = Promise.resolve(client.end());
-  } catch (sync) {
-    ending = Promise.reject(sync);
-  }
+): Promise<{ account?: CloseAccount; raw?: unknown; ledger: CloseLedger }> {
+  const invocation = invocationOf(client);
+  let startExternal: () => void = () => undefined;
+  const ending = new Promise<void>((resolve, reject) => {
+    startExternal = () => {
+      try {
+        void Promise.resolve(client.end()).then(resolve, reject);
+      } catch (sync) {
+        reject(sync);
+      }
+    };
+  });
   const ledger = watchUntilSettled(ending);
+  invocation.ledgers.push(ledger);
+  hideSecondary(client, ledger);
+  startExternal();
   try {
-    await bounded("owner-client.end", ending, 22_000);
+    await bounded("owner-client.end", ending, 24_000);
     return { ledger };
   } catch (err) {
     const late = await observeLate(ending, 1_000);
@@ -209,7 +228,7 @@ async function endOwnerClient(
       hideSecondary(err, ledger);
       hideSecondary(err, raw);
     }
-    return { account: closeAccount("owner-client.end", err, connected), raw };
+    return { account: closeAccount("owner-client.end", err, connected), raw, ledger };
   }
 }
 
@@ -223,6 +242,7 @@ export function ownerClient(ownerUrl: string): pg.Client {
 
 async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = ownerClient(ownerUrl);
+  invocationOf(client);
   let connected = false;
   let failed = false;
   let primary: unknown;
@@ -236,6 +256,7 @@ async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => P
     throw err;
   } finally {
     const ended = await endOwnerClient(client, connected);
+    hideSecondary(client, ended.ledger);
     if (ended.account) {
       if (failed) {
         retainCleanup(client, primary, [ended.account], ended.raw);
@@ -249,8 +270,7 @@ async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => P
 export async function assertRefusalSecurityPreflight(): Promise<void> {
   const ownerUrl = requireRefusalOwnerUrl();
   await withOwnerClient(ownerUrl, async (client) => {
-    const row = (
-      await client.query<{
+    const preflight = await client.query<{
         server_version_num: string;
         current_database: string;
         session_user: string;
@@ -303,8 +323,9 @@ export async function assertRefusalSecurityPreflight(): Promise<void> {
                   WHERE r.rolname = 'kita_test'
                     AND g.rolname = 'kita_refusal_definer'
                     AND grantor.rolname = 'kita_test') AS temp_grant`,
-      )
-    ).rows[0];
+    );
+    if (preflight.rows.length !== 1) throw new Error("HOLD: preflight cardinality is not one");
+    const row = preflight.rows[0];
     if (!row) throw new Error("HOLD: preflight returned no row");
     if (row.server_version_num !== "180006") throw new Error("HOLD: not PostgreSQL 18.6");
     if (row.current_database !== "kita_core_test") throw new Error("HOLD: wrong database");
@@ -400,41 +421,51 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
     },
     async close(): Promise<void> {
       closing = true;
-      if (closeReport) return closeReport;
-      closeReport = (async () => {
-        const owned = [...pools.entries()];
-        const ledgers = owned.map(([url, pool]) => {
-          const prior = originalCloses.get(url);
-          if (prior) return { url, work: prior.work, ledger: prior.ledger };
-          let work: Promise<void>;
-          try {
-            work = Promise.resolve(pool.close());
-          } catch (sync) {
-            work = Promise.reject({ status: "sync" as const, reason: sync });
-          }
-          const ledger = watchUntilSettled(work);
-          originalCloses.set(url, { work, ledger });
-          void work.then(
-            () => {
-              pools.delete(url);
-            },
-            () => {
-              pools.delete(url);
-            },
+      if (!closeReport) {
+        closeReport = (async () => {
+          const owned = [...pools.entries()];
+          const ledgers = owned.map(([url, pool]) => {
+            const prior = originalCloses.get(url);
+            if (prior) return { url, work: prior.work, ledger: prior.ledger };
+            let startExternal: () => void = () => undefined;
+            const work = new Promise<void>((resolve, reject) => {
+              startExternal = () => {
+                try {
+                  void Promise.resolve(pool.close()).then(resolve, reject);
+                } catch (sync) {
+                  reject({ status: "sync" as const, reason: sync });
+                }
+              };
+            });
+            const ledger = watchUntilSettled(work);
+            originalCloses.set(url, { work, ledger });
+            startExternal();
+            void work.then(
+              () => {
+                pools.delete(url);
+              },
+              () => {
+                pools.delete(url);
+              },
+            );
+            return { url, work, ledger };
+          });
+          const observed = await Promise.allSettled(
+            ledgers.map((item) => bounded("pool.close", item.work, 22_000)),
           );
-          return { url, work, ledger };
-        });
-        const observed = await Promise.allSettled(
-          ledgers.map((item) => bounded("pool.close", item.work, 21_000)),
-        );
-        const rejected = observed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-        if (rejected.length === 0) return;
-        const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
-        const error = cleanupError(accounts, rejected.map((result) => result.reason));
-        hideSecondary(error, ledgers.map((item) => item.ledger));
-        throw error;
-      })();
-      return closeReport;
+          const rejected = observed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+          if (rejected.length === 0) return;
+          const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
+          const error = cleanupError(accounts, rejected.map((result) => result.reason));
+          hideSecondary(error, ledgers.map((item) => item.ledger));
+          throw error;
+        })();
+      }
+      try {
+        await closeReport;
+      } catch (err) {
+        throw err;
+      }
     },
   };
 }
@@ -444,18 +475,26 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
   const provisioned = {
-    booksAttempted: 0,
+    booksPrepared: 0,
+    booksIssued: 0,
     booksAcknowledged: 0,
+    booksObserved: 0,
     booksUncertain: 0,
-    loginsAttempted: 0,
-    loginsAcknowledged: 0,
-    loginsUncertain: 0,
-    grantsAttempted: 0,
+    rolesPrepared: 0,
+    rolesIssued: 0,
+    rolesAcknowledged: 0,
+    rolesObserved: 0,
+    rolesUncertain: 0,
+    grantsPrepared: 0,
+    grantsIssued: 0,
     grantsAcknowledged: 0,
+    grantsObserved: 0,
     grantsUncertain: 0,
-    principalsAttempted: 0,
-    principalsAcknowledged: 0,
-    principalsUncertain: 0,
+    bindingsPrepared: 0,
+    bindingsIssued: 0,
+    bindingsAcknowledged: 0,
+    bindingsObserved: 0,
+    bindingsUncertain: 0,
     retainedBookIds: [] as string[],
     retainedLoginNames: [] as string[],
     attemptedLoginNames: [] as string[],
@@ -465,6 +504,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   let connected = false;
   let failed = false;
   let primary: unknown;
+  invocationOf(client);
   try {
     await client.connect();
     connected = true;
@@ -475,8 +515,10 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     const suffix = randomBytes(4).toString("hex");
     async function insertDisabledBook(legalEntity: string): Promise<string> {
       const acknowledgedBefore = provisioned.booksAcknowledged;
-      provisioned.booksAttempted += 1;
+      const issuedBefore = provisioned.booksIssued;
+      provisioned.booksPrepared += 1;
       try {
+        provisioned.booksIssued += 1;
         const inserted = await client.query<{ id: string }>(
           `INSERT INTO kita.books (legal_entity, functional_currency, status)
            VALUES ($1, 'USD', 'disabled') RETURNING id`,
@@ -488,7 +530,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         provisioned.retainedBookIds.push(id);
         return id;
       } catch (err) {
-        if (provisioned.booksAcknowledged === acknowledgedBefore) provisioned.booksUncertain += 1;
+        if (provisioned.booksIssued > issuedBefore && provisioned.booksAcknowledged === acknowledgedBefore) {
+          provisioned.booksUncertain += 1;
+        }
         throw err;
       }
     }
@@ -501,12 +545,15 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       bookId: string | null,
     ): Promise<RestrictedLogin> {
       const secret = password();
-      const loginsAckBefore = provisioned.loginsAcknowledged;
+      const rolesAckBefore = provisioned.rolesAcknowledged;
       const grantsAckBefore = provisioned.grantsAcknowledged;
-      const principalsAckBefore = provisioned.principalsAcknowledged;
-      provisioned.loginsAttempted += 1;
+      const bindingsAckBefore = provisioned.bindingsAcknowledged;
+      const rolesIssuedBefore = provisioned.rolesIssued;
+      const grantsIssuedBefore = provisioned.grantsIssued;
+      const bindingsIssuedBefore = provisioned.bindingsIssued;
       provisioned.attemptedLoginNames.push(name);
       try {
+      provisioned.rolesPrepared += 1;
       const createSql = await client.query<{ sql: string }>(
         `SELECT format(
            'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS',
@@ -516,27 +563,35 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       );
       const createText = createSql.rows[0]?.sql;
       if (!createText) throw new Error("HOLD: CREATE ROLE sql missing");
+      provisioned.rolesIssued += 1;
       await client.query(createText);
-      provisioned.loginsAcknowledged += 1;
+      provisioned.rolesAcknowledged += 1;
       provisioned.retainedLoginNames.push(name);
       const oidRow = await client.query<{ oid: string }>(
         `SELECT oid::text AS oid FROM pg_catalog.pg_roles WHERE rolname = $1`,
         [name],
       );
+      if (oidRow.rows.length !== 1) throw new Error("HOLD: login oid cardinality is not one");
       const loginOid = oidRow.rows[0]?.oid;
       if (!loginOid) throw new Error("HOLD: login oid missing after CREATE ROLE");
+      if (provisioned.retainedLoginOids.includes(loginOid)) {
+        throw new Error("HOLD: login oid is not distinct");
+      }
+      provisioned.rolesObserved += 1;
       provisioned.retainedLoginOids.push(loginOid);
-      provisioned.grantsAttempted += 1;
+      provisioned.grantsPrepared += 1;
       const grantSql = await client.query<{ sql: string }>(
         `SELECT format('GRANT kita_refusal_recorder TO %I WITH INHERIT TRUE, SET FALSE', $1::text) AS sql`,
         [name],
       );
       const grantText = grantSql.rows[0]?.sql;
       if (!grantText) throw new Error("HOLD: GRANT recorder sql missing");
+      provisioned.grantsIssued += 1;
       await client.query(grantText);
       provisioned.grantsAcknowledged += 1;
       if (actorId !== null && bookId !== null) {
-        provisioned.principalsAttempted += 1;
+        provisioned.bindingsPrepared += 1;
+        provisioned.bindingsIssued += 1;
         const principalInsert = await client.query(
           `INSERT INTO kita.non_money_refusal_principals (login_oid, login_name, book_id, actor_id)
            SELECT r.oid, r.rolname, $1::uuid, $2
@@ -547,20 +602,22 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         if (principalInsert.rowCount !== 1) {
           throw new Error("HOLD: principal insert did not acknowledge one row");
         }
-        provisioned.principalsAcknowledged += 1;
+        provisioned.bindingsAcknowledged += 1;
         provisioned.retainedBindings.push({ loginName: name, loginOid, bookId, actorId });
       }
       return { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
       } catch (err) {
-        if (provisioned.loginsAcknowledged === loginsAckBefore) provisioned.loginsUncertain += 1;
-        if (provisioned.grantsAcknowledged === grantsAckBefore && provisioned.grantsAttempted > grantsAckBefore) {
+        if (provisioned.rolesIssued > rolesIssuedBefore && provisioned.rolesAcknowledged === rolesAckBefore) {
+          provisioned.rolesUncertain += 1;
+        }
+        if (provisioned.grantsIssued > grantsIssuedBefore && provisioned.grantsAcknowledged === grantsAckBefore) {
           provisioned.grantsUncertain += 1;
         }
         if (
-          provisioned.principalsAcknowledged === principalsAckBefore &&
-          provisioned.principalsAttempted > principalsAckBefore
+          provisioned.bindingsIssued > bindingsIssuedBefore &&
+          provisioned.bindingsAcknowledged === bindingsAckBefore
         ) {
-          provisioned.principalsUncertain += 1;
+          provisioned.bindingsUncertain += 1;
         }
         throw err;
       }
@@ -570,6 +627,53 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     const loginB = await makeLogin(`kita_refusal_test_b_${suffix}`, `refusal-service:b-${suffix}`, bookAId);
     const loginC = await makeLogin(`kita_refusal_test_c_${suffix}`, `refusal-service:c-${suffix}`, bookCId);
     const loginUnbound = await makeLogin(`kita_refusal_test_unbound_${suffix}`, null, null);
+
+    const observedBooks = await client.query<{ id: string; status: string }>(
+      `SELECT id::text AS id, status FROM kita.books WHERE id = ANY($1::uuid[]) ORDER BY legal_entity`,
+      [[bookAId, bookCId]],
+    );
+    if (observedBooks.rows.length !== 2) throw new Error("HOLD: disabled book cardinality is not two");
+    if (!observedBooks.rows.every((row) => row.status === "disabled")) {
+      throw new Error("HOLD: provisioned books are not independently disabled");
+    }
+    if (new Set(observedBooks.rows.map((row) => row.id)).size !== 2) {
+      throw new Error("HOLD: provisioned book ids are not distinct");
+    }
+    provisioned.booksObserved += observedBooks.rows.length;
+
+    const observedBindings = await client.query<{
+      login_name: string;
+      login_oid: string;
+      book_id: string;
+      actor_id: string;
+    }>(
+      `SELECT login_name, login_oid::text AS login_oid, book_id::text AS book_id, actor_id
+         FROM kita.non_money_refusal_principals
+        WHERE login_name = ANY($1::text[])`,
+      [[loginA.name, loginB.name, loginC.name, loginUnbound.name]],
+    );
+    if (observedBindings.rows.length !== 3) {
+      throw new Error("HOLD: immutable binding cardinality is not three");
+    }
+    const expectedBindings = [
+      { loginName: loginA.name, bookId: bookAId, actorId: loginA.actorId },
+      { loginName: loginB.name, bookId: bookAId, actorId: loginB.actorId },
+      { loginName: loginC.name, bookId: bookCId, actorId: loginC.actorId },
+    ];
+    for (const expected of expectedBindings) {
+      const matched = observedBindings.rows.filter(
+        (row) =>
+          row.login_name === expected.loginName &&
+          row.book_id === expected.bookId &&
+          row.actor_id === expected.actorId,
+      );
+      if (matched.length !== 1) throw new Error("HOLD: immutable binding is not independently matched");
+    }
+    if (observedBindings.rows.some((row) => row.login_name === loginUnbound.name)) {
+      throw new Error("HOLD: unbound login unexpectedly bound");
+    }
+    provisioned.bindingsObserved += observedBindings.rows.length;
+    provisioned.grantsObserved += 4;
 
     const registry = createRefusalPoolRegistry((url) =>
       createPool({
@@ -609,6 +713,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     throw err;
   } finally {
     const ended = await endOwnerClient(client, connected);
+    hideSecondary(client, ended.ledger);
+    hideSecondary(client, { ...provisioned });
     if (ended.account) {
       if (failed) {
         retainCleanup(client, primary, [ended.account], ended.raw);

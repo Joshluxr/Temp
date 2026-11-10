@@ -114,6 +114,20 @@ function timedDeferred<T = void>(name: string, ms = 20_000): {
   };
 }
 
+async function boundedWait(work: Promise<unknown>, name: string, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timeout:${name}`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = ownerClient(ownerUrl);
   let connected = false;
@@ -216,6 +230,9 @@ async function observeIdentity(
             (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'USAGE')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
   );
+  if (ident.rows.length !== 1) {
+    throw new Error("HOLD: authenticated identity cardinality is not one");
+  }
   const row = ident.rows[0];
   expect(row?.session_user).toBe(expectedLogin);
   expect(row?.current_user).toBe(expectedLogin);
@@ -254,13 +271,15 @@ async function observeIdentity(
   if (!(deadlockMs <= lockMs && lockMs <= statementMs)) {
     throw new Error("HOLD: timeout budgets are incompatible");
   }
+  if (statementMs > 15_000 || lockMs > 15_000 || deadlockMs > 15_000) {
+    throw new Error("HOLD: timeout budgets exceed the 15-second observation window");
+  }
   return { pid, start: row.start, oid: row.login_oid };
 }
 
 async function assertSuitePreflight(ownerUrl: string): Promise<void> {
   await withOwnerObserver(ownerUrl, async (client) => {
-    const row = (
-      await client.query<{
+    const preflight = await client.query<{
         server_version_num: string;
         current_database: string;
         session_user: string;
@@ -289,8 +308,9 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
                    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                   WHERE n.nspname = 'kita' AND p.proname = 'record_non_money_refusal'
                     AND pg_get_function_identity_arguments(p.oid) = 'p_key text, p_tag text') AS fn_oid`,
-      )
-    ).rows[0];
+    );
+    if (preflight.rows.length !== 1) throw new Error("HOLD: suite preflight cardinality is not one");
+    const row = preflight.rows[0];
     if (!row) throw new Error("HOLD: suite preflight returned no row");
     if (row.server_version_num !== "180006") throw new Error("HOLD: not PostgreSQL 18.6");
     if (row.current_database !== "kita_core_test") throw new Error("HOLD: wrong database");
@@ -314,13 +334,18 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
          JOIN pg_roles grantor ON grantor.oid = m.grantor
         WHERE r.rolname = 'kita_test' AND g.rolname = 'kita_refusal_definer'`,
     );
-    expect(members.rows.length).toBeGreaterThan(0);
-    expect(members.rows.every((m) => m.grantor !== "kita_test")).toBe(true);
-    expect(
-      members.rows.every((m) => m.admin_option && m.inherit_option === false && m.set_option === false),
-    ).toBe(true);
-    const bootstrap = members.rows.filter((m) => m.admin_option && !m.set_option && m.inherit_option === false);
-    expect(bootstrap.length).toBe(members.rows.length);
+    const expectedGrantor = "kita_refusal_definer";
+    if (members.rows.length !== 1) throw new Error("HOLD: definer membership cardinality is not one");
+    if (members.rows.some((m) => m.grantor !== expectedGrantor)) {
+      throw new Error("HOLD: unexpected definer grantor");
+    }
+    if (
+      members.rows.some(
+        (m) => !(m.admin_option && m.inherit_option === false && m.set_option === false),
+      )
+    ) {
+      throw new Error("HOLD: unexpected definer membership options");
+    }
     expect(row.fn_oid.length).toBeGreaterThan(0);
   });
 }
@@ -357,10 +382,14 @@ async function advisoryNamespace(
        WHERE l.locktype = 'advisory'
          AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
     );
-    const allowed = new Set(expected.map((row) => `${row.classid}:${row.objid}`));
-    return result.rows.filter(
-      (row) => row.objsubid === "2" && allowed.has(`${row.classid}:${row.objid}`),
+    const allowed = new Set(expected.map((row) => `${row.classid}:${row.objid}:2`));
+    const outsiders = result.rows.filter(
+      (row) => !allowed.has(`${row.classid}:${row.objid}:${row.objsubid}`),
     );
+    if (outsiders.length > 0) {
+      throw new Error("HOLD: unexpected advisory lock participants");
+    }
+    return result.rows;
   });
 }
 
@@ -394,7 +423,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     }
     if (closeFailures.length > 0) {
       const error = new Error("fixture close failed after suite");
-      (error as { closeFailures?: unknown[] }).closeFailures = closeFailures;
+      notePrivate(error, closeFailures);
       throw error;
     }
     void pendingResults;
@@ -420,7 +449,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const OriginalClient = pg.Client;
       const originalPool = (pg as { Pool?: unknown }).Pool;
       let bookSeq = 0;
-      const fakeQuery = async (sql: string) => {
+      let roleSeq = 0;
+      const issuedOids = new Map<string, string>();
+      const issuedBooks: Array<{ id: string; status: string; legal: string }> = [];
+      const issuedBindings: Array<{
+        login_name: string;
+        login_oid: string;
+        book_id: string;
+        actor_id: string;
+      }> = [];
+      const fakeQuery = async (sql: string, params?: readonly unknown[]) => {
         if (sql.includes("server_version_num") || sql.includes("session_replication_role")) {
           return {
             rows: [
@@ -448,33 +486,72 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         if (sql.includes("SELECT version()")) return { rows: [{ version: "PostgreSQL 18.6" }] };
         if (sql.includes("INSERT INTO kita.books")) {
           bookSeq += 1;
-          return { rows: [{ id: `00000000-0000-4000-8000-${String(bookSeq).padStart(12, "0")}` }] };
+          const id = `00000000-0000-4000-8000-${String(bookSeq).padStart(12, "0")}`;
+          issuedBooks.push({ id, status: "disabled", legal: String(params?.[0] ?? "") });
+          return { rows: [{ id }] };
         }
-        if (sql.includes("CREATE ROLE")) return { rows: [{ sql: "CREATE ROLE kita_refusal_fake LOGIN" }] };
-        if (sql.includes("GRANT kita_refusal_recorder")) {
-          return { rows: [{ sql: "GRANT kita_refusal_recorder TO kita_refusal_fake" }] };
+        if (sql.includes("CREATE ROLE %I")) {
+          const loginName = String(params?.[0] ?? "");
+          return { rows: [{ sql: `CREATE ROLE ${loginName} LOGIN` }] };
+        }
+        if (sql.includes("GRANT kita_refusal_recorder TO %I")) {
+          const loginName = String(params?.[0] ?? "");
+          return { rows: [{ sql: `GRANT kita_refusal_recorder TO ${loginName}` }] };
+        }
+        if (sql.startsWith("CREATE ROLE ") || (sql.includes("CREATE ROLE") && !sql.includes("%I"))) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (sql.startsWith("GRANT kita_refusal_recorder TO ") && !sql.includes("%I")) {
+          return { rows: [], rowCount: 0 };
         }
         if (sql.includes("INSERT INTO kita.non_money_refusal_principals")) {
+          const bookId = String(params?.[0] ?? "");
+          const actorId = String(params?.[1] ?? "");
+          const loginName = String(params?.[2] ?? "");
+          const loginOid = issuedOids.get(loginName);
+          if (!loginOid) throw new Error("HOLD: principal insert name is not issued");
+          issuedBindings.push({ login_name: loginName, login_oid: loginOid, book_id: bookId, actor_id: actorId });
           return { rowCount: 1, rows: [] };
         }
         if (sql.includes("oid::text AS oid") || sql.includes("AS oid FROM pg_catalog.pg_roles")) {
-          return { rows: [{ oid: String(10_000 + bookSeq) }] };
+          const loginName = String(params?.[0] ?? "");
+          roleSeq += 1;
+          const oid = String(20_000 + roleSeq);
+          issuedOids.set(loginName, oid);
+          return { rows: [{ oid }] };
+        }
+        if (sql.includes("FROM kita.books WHERE id = ANY")) {
+          const wanted = new Set((params?.[0] as string[] | undefined) ?? []);
+          return {
+            rows: issuedBooks
+              .filter((book) => wanted.has(book.id))
+              .map((book) => ({ id: book.id, status: book.status })),
+          };
+        }
+        if (sql.includes("FROM kita.non_money_refusal_principals")) {
+          const wanted = new Set((params?.[0] as string[] | undefined) ?? []);
+          return { rows: issuedBindings.filter((row) => wanted.has(row.login_name)) };
         }
         return { rows: [], rowCount: 0 };
       };
       class FakeClient {
         async connect() {}
         async end() {}
-        query(sql: string) {
-          return fakeQuery(sql);
+        query(sql: string, params?: readonly unknown[]) {
+          return fakeQuery(sql, params);
         }
       }
       class FakePool {
         async connect() {
-          return { query: fakeQuery, release() {} };
+          return {
+            query(sql: string, params?: readonly unknown[]) {
+              return fakeQuery(sql, params);
+            },
+            release() {},
+          };
         }
-        query(sql: string) {
-          return fakeQuery(sql);
+        query(sql: string, params?: readonly unknown[]) {
+          return fakeQuery(sql, params);
         }
         async end() {
           driverEnds += 1;
@@ -504,7 +581,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         expect(() => fixtures!.poolFor("postgres://kita_test@127.0.0.1:54339/kita_core_test")).toThrow(
           /fixture closing/,
         );
-        await endStarted;
+        await boundedWait(endStarted, "driver-end-start", 20_000);
         expect(driverEnds).toBe(1);
         settle(heldEnd);
         const shared = await firstObserved;
@@ -522,6 +599,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       } finally {
         settle(heldEnd);
         await Promise.allSettled([
+          held,
+          endStarted,
           firstClose ?? Promise.resolve(),
           concurrentClose ?? Promise.resolve(),
           fixtures?.close() ?? Promise.resolve(),
@@ -910,7 +989,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 } catch {
                   /* retain original without code */
                 }
-                if (entry.code === "40P01" && attempt === 1) victimSide = side;
+                if (
+                  entry.code === "40P01" &&
+                  attempt === 1 &&
+                  sql.includes("pg_advisory_xact_lock")
+                ) {
+                  victimSide = side;
+                }
                 throw err;
               }
             },
@@ -1157,7 +1242,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const failed = closes.filter((result): result is PromiseRejectedResult => result.status === "rejected");
       if (failed.length > 0) {
         const error = new Error("application pool close failed");
-        (error as { closeFailures?: unknown[] }).closeFailures = failed.map((result) => result.reason);
+        notePrivate(error, failed.map((result) => result.reason));
         throw error;
       }
     }
