@@ -171,3 +171,18 @@ export interface Adm12Output {
   readonly newCommandsStoppedInProduction: true;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Adjustment request (T-ADM-06). Stale bound approval payload and unauthorized
+ * accounts never grant command authority. Persistence is T-CORE-02 HOLD.
+ */
+export interface Adm06Input {
+  readonly stalePayload: boolean;
+  readonly unauthorizedAccounts: boolean;
+  readonly journalPosting?: never;
+  readonly commandAuthority?: never;
+}
+
+export type Adm06Output = never;
+
+export type Adm06CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
