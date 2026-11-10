@@ -57,3 +57,16 @@ export interface Pay05Output {
   readonly payoutReturnId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pay02Input {
+  readonly splitBypassesCutoffHolidayOrAmount: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pay02Output {
+  readonly instapayDispatched: true;
+  readonly pesonetDispatched: true;
+  readonly routeId: UUID;
+  readonly traceEvents: readonly string[];
+}
