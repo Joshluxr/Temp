@@ -75,10 +75,15 @@ type CloseAccount = {
 };
 
 function closeAccount(stage: string, err: unknown, connected: boolean): CloseAccount {
-  const code =
-    typeof err === "object" && err !== null && "code" in err && typeof (err as { code?: unknown }).code === "string"
-      ? (err as { code: string }).code
-      : "CLOSE_FAILED";
+  let code = "CLOSE_FAILED";
+  try {
+    if (typeof err === "object" && err !== null && "code" in err) {
+      const value = (err as { code?: unknown }).code;
+      if (typeof value === "string") code = value;
+    }
+  } catch {
+    code = "CLOSE_FAILED";
+  }
   return { stage, code, connected };
 }
 
@@ -593,7 +598,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       hideSecondary(err, inventory);
     } else {
       const boxed = new Error("setup failed");
-      (boxed as { provisioned?: typeof inventory }).provisioned = inventory;
+      hideSecondary(boxed, inventory);
       hideSecondary(boxed, err);
       primary = boxed;
     }
@@ -608,7 +613,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         }
       } else {
         const error = cleanupError([ended.account], ended.raw);
-        (error as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
+        hideSecondary(error, { ...provisioned });
         throw error;
       }
     }

@@ -466,6 +466,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const sequence: string[] = [];
       let driverErr: unknown;
       let aborted: unknown;
+      let abortOccurred = false;
       const wrapping: PoolLike = {
         async connect() {
           requested += 1;
@@ -484,7 +485,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 sequence.push("function-a");
                 afterA.resolve();
                 await continueB.promise;
-                if (aborted) throw aborted;
+                if (abortOccurred) throw aborted ?? new Error("aborted");
                 return result;
               }
               try {
@@ -511,7 +512,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [keyB, "atom-b-other"]);
         return STORED;
       });
-      void running.catch(() => undefined);
+      void running.catch((err) => {
+        abortOccurred = true;
+        aborted = err;
+      });
       pending.push(running);
       await afterA.promise;
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
@@ -530,6 +534,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         await running;
       } catch (err) {
         helperErr = err;
+        abortOccurred = true;
         aborted = err;
         continueB.reject(err);
       }
@@ -631,7 +636,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           const next = side === "A" ? gatedA : gatedB;
           if (next === 2) {
             await allowVictimRetry.promise;
-            if (persistAbort) throw persistAbort;
+            if (abortOccurred) throw persistAbort ?? new Error("aborted");
           }
           const client = await pool.connect();
           if (side === "A") acquiredA += 1;
@@ -664,16 +669,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     if (side === "A") firstA.resolve();
                     else firstB.resolve();
                     await goSecond.promise;
-                    if (persistAbort) throw persistAbort;
+                    if (abortOccurred) throw persistAbort ?? new Error("aborted");
                   }
                 }
                 if (sql.includes("pg_advisory_xact_lock") && recorded) {
                   seq.push(`lock2:${attempt}`);
                   if (attempt === 1) {
                     await victimRolledBack.promise;
-                    if (persistAbort) throw persistAbort;
+                    if (abortOccurred) throw persistAbort ?? new Error("aborted");
                     await allowSurvivorCommit.promise;
-                    if (persistAbort) throw persistAbort;
+                    if (abortOccurred) throw persistAbort ?? new Error("aborted");
                   }
                 }
                 return result;
@@ -681,11 +686,17 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 if (sql.includes("pg_advisory_xact_lock") && recorded) {
                   seq.push(`lock2:${attempt}`);
                 }
-                const code = (err as { code?: string }).code;
+                let code = "";
+                try {
+                  const value = (err as { code?: unknown }).code;
+                  if (typeof value === "string") code = value;
+                } catch {
+                  code = "";
+                }
                 codes.push({
                   side,
                   attempt,
-                  code: code ?? "",
+                  code,
                   pid: backends[side]?.pid,
                   start: backends[side]?.start,
                   sql,
@@ -706,6 +717,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       };
     }
 
+    let persistAbort: unknown;
+    let abortOccurred = false;
+    const abort = (err: unknown) => {
+      abortOccurred = true;
+      persistAbort = err;
+      firstA.reject(err);
+      firstB.reject(err);
+      goSecond.reject(err);
+      victimRolledBack.reject(err);
+      allowSurvivorCommit.reject(err);
+      allowVictimRetry.reject(err);
+    };
     const runA = withSerializable(wrap(poolA, "A"), async (client) => {
       await client.query("SELECT pg_advisory_xact_lock($1, $2)", [lockA, 1]);
       const body = await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [keyA, tagA]);
@@ -718,19 +741,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       await client.query("SELECT pg_advisory_xact_lock($1, $2)", [lockA, 1]);
       return body.rows[0]?.body;
     });
-    void runA.catch(() => undefined);
-    void runB.catch(() => undefined);
+    void runA.catch((err) => abort(err));
+    void runB.catch((err) => abort(err));
     pending.push(runA, runB);
-    let persistAbort: unknown;
-    const abort = (err: unknown) => {
-      persistAbort = err;
-      firstA.reject(err);
-      firstB.reject(err);
-      goSecond.reject(err);
-      victimRolledBack.reject(err);
-      allowSurvivorCommit.reject(err);
-      allowVictimRetry.reject(err);
-    };
     try {
       await Promise.all([firstA.promise, firstB.promise]);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
@@ -739,7 +752,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         { classid: lockA, objid: 1 },
         { classid: lockB, objid: 1 },
       ]);
-      expect(afterFirst.filter((row) => row.granted)).toHaveLength(2);
+      const grantedFirst = afterFirst.filter((row) => row.granted && row.objsubid === "2" && row.objid === "1");
+      expect(grantedFirst).toHaveLength(2);
+      expect(new Set(grantedFirst.map((row) => row.classid))).toEqual(new Set([String(lockA), String(lockB)]));
+      const backendA = backends.A;
+      const backendB = backends.B;
+      if (!backendA || !backendB) throw new Error("missing first-attempt backend identities");
+      expect(
+        grantedFirst.some((row) => row.pid === backendA.pid && row.start === backendA.start),
+      ).toBe(true);
+      expect(
+        grantedFirst.some((row) => row.pid === backendB.pid && row.start === backendB.start),
+      ).toBe(true);
       goSecond.resolve();
       const deadline = Date.now() + 15_000;
       while (!codes.some((c) => c.code === "40P01") && Date.now() < deadline) {
@@ -757,17 +781,22 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         { classid: lockA, objid: 1 },
         { classid: lockB, objid: 1 },
       ]);
+      const survivorSide = victimSide === "A" ? "B" : "A";
+      const survivorBackend = backends[survivorSide];
+      if (!survivorBackend) throw new Error("missing survivor backend identity");
+      const grantedLeftover = leftover.filter(
+        (row) => row.granted && row.objsubid === "2" && row.objid === "1",
+      );
       expect(
         leftover.filter(
           (row) => row.pid === victimBackend.pid && row.start === victimBackend.start,
         ),
       ).toHaveLength(0);
-      expect(leftover.filter((row) => row.granted)).toHaveLength(2);
-      for (const lock of leftover) {
-        expect(lock.objsubid).toBe("2");
-        expect(lock.granted).toBe(true);
-        expect(lock.classid === String(lockA) || lock.classid === String(lockB)).toBe(true);
-        expect(lock.objid).toBe("1");
+      expect(grantedLeftover).toHaveLength(2);
+      expect(new Set(grantedLeftover.map((row) => row.classid))).toEqual(new Set([String(lockA), String(lockB)]));
+      for (const lock of grantedLeftover) {
+        expect(lock.pid).toBe(survivorBackend.pid);
+        expect(lock.start).toBe(survivorBackend.start);
       }
       allowSurvivorCommit.resolve();
       const settled = await Promise.race([
