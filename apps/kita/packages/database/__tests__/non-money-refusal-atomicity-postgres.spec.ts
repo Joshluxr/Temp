@@ -314,17 +314,21 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const pendingResults = await Promise.allSettled(pending);
     const closeFailures: unknown[] = [];
     if (fx) {
-      const first = fx.close();
-      const concurrent = fx.close();
+      const fixtures = fx;
+      const first = fixtures.close();
+      const concurrent = fixtures.close();
       const settled = await Promise.allSettled([first, concurrent]);
       expect(settled[0]?.status).toBe(settled[1]?.status);
       for (const result of settled) {
         if (result.status === "rejected") closeFailures.push(result.reason);
       }
-      expect(() => fx.poolFor("postgres://kita-refusal-closed/refused")).toThrow(/fixture closing/);
-      const repeated = await Promise.allSettled([fx.close(), fx.close()]);
+      expect(() => fixtures.poolFor("postgres://kita-refusal-closed/refused")).toThrow(/fixture closing/);
+      const repeated = await Promise.allSettled([fixtures.close(), fixtures.close()]);
       expect(repeated[0]?.status).toBe(settled[0]?.status);
       expect(repeated[1]?.status).toBe(settled[0]?.status);
+      if (settled[0]?.status === "rejected" && settled[1]?.status === "rejected") {
+        expect(settled[0].reason).toBe(settled[1].reason);
+      }
     }
     if (closeFailures.length > 0) {
       const error = new Error("fixture close failed after suite");

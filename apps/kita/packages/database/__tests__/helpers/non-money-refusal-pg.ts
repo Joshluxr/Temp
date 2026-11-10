@@ -100,12 +100,7 @@ function cleanupError(accounts: readonly CloseAccount[], raw: unknown): Error {
 
 function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: unknown): T {
   if (primary && typeof primary === "object") {
-    try {
-      const bag = primary as { closeAccounts?: CloseAccount[] };
-      bag.closeAccounts = [...(bag.closeAccounts ?? []), ...accounts];
-    } catch {
-      hideSecondary(primary, accounts);
-    }
+    hideSecondary(primary, accounts);
     hideSecondary(primary, raw);
     return primary;
   }
@@ -595,7 +590,12 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     };
     if (err && typeof err === "object") {
       primary = err;
-      (err as { provisioned?: typeof inventory }).provisioned = inventory;
+      try {
+        (err as { provisioned?: typeof inventory }).provisioned = inventory;
+      } catch {
+        hideSecondary(err, inventory);
+      }
+      hideSecondary(err, inventory);
     } else {
       const boxed = new Error("setup failed");
       (boxed as { provisioned?: typeof inventory }).provisioned = inventory;
@@ -609,8 +609,14 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       if (primary !== undefined) {
         retainCleanup(primary, [ended.account], ended.raw);
         if (primary && typeof primary === "object") {
-          const existing = (primary as { provisioned?: typeof provisioned }).provisioned;
-          (primary as { provisioned?: typeof provisioned }).provisioned = existing ?? { ...provisioned };
+          const snapshot = { ...provisioned };
+          try {
+            const existing = (primary as { provisioned?: typeof provisioned }).provisioned;
+            (primary as { provisioned?: typeof provisioned }).provisioned = existing ?? snapshot;
+          } catch {
+            hideSecondary(primary, snapshot);
+          }
+          hideSecondary(primary, snapshot);
         }
       } else {
         const error = cleanupError([ended.account], ended.raw);
