@@ -549,6 +549,115 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
     }
   });
 
+  function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (err: unknown) => void } {
+    let resolve!: (value: T) => void;
+    let reject!: (err: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  async function runRivalReadCommitted(url: string, key: string, tag: string): Promise<void> {
+    const client = new pg.Client({ connectionString: url });
+    await client.connect();
+    try {
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      const body = await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [key, tag]);
+      expect(body.rows[0]?.body).toEqual(STORED);
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* ignore */
+      }
+      throw err;
+    } finally {
+      await client.end();
+    }
+  }
+
+  function staleSnapshotPool(url: string): {
+    pool: PoolLike;
+    stats: { checkouts: number; firstSqlState?: string; firstConstraint?: string; sequence: string[] };
+    snapshotReady: Promise<void>;
+    markWinnerCommitted: () => void;
+    failCoordination: (err: unknown) => void;
+  } {
+    const snapshot = deferred<void>();
+    const winner = deferred<void>();
+    const stats = {
+      checkouts: 0,
+      firstSqlState: undefined as string | undefined,
+      firstConstraint: undefined as string | undefined,
+      sequence: [] as string[],
+    };
+    let attempt = 0;
+    const pool: PoolLike = {
+      async connect() {
+        stats.checkouts += 1;
+        attempt += 1;
+        const mine = attempt;
+        const client = new pg.Client({ connectionString: url });
+        await client.connect();
+        stats.sequence.push(`connect:${mine}`);
+        let closed = false;
+        const wrapped: PoolClientLike = {
+          async query(sql: string, params?: readonly unknown[]) {
+            if (sql.includes("record_non_money_refusal") && mine === 1) {
+              const snap = await client.query(
+                `SELECT pg_current_snapshot()::text AS snap,
+                        pg_backend_pid() AS pid,
+                        current_setting('transaction_isolation') AS isolation,
+                        current_setting('synchronous_commit') AS synchronous_commit`,
+              );
+              expect(snap.rows[0]?.isolation).toBe("serializable");
+              expect(snap.rows[0]?.synchronous_commit).toBe("on");
+              snapshot.resolve();
+              await winner.promise;
+              try {
+                const result = await client.query(sql, params ? [...params] : undefined);
+                return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+              } catch (err) {
+                stats.firstSqlState = (err as { code?: string }).code;
+                stats.firstConstraint = (err as { constraint?: string }).constraint;
+                stats.sequence.push(`error:${stats.firstSqlState}`);
+                throw err;
+              }
+            }
+            if (sql.startsWith("BEGIN")) stats.sequence.push(`begin:${mine}`);
+            if (sql.startsWith("COMMIT")) stats.sequence.push(`commit:${mine}`);
+            if (sql.startsWith("ROLLBACK")) stats.sequence.push(`rollback:${mine}`);
+            const result = await client.query(sql, params ? [...params] : undefined);
+            return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+          },
+          release() {
+            stats.sequence.push(`release:${mine}`);
+            if (!closed) {
+              void client.end();
+              closed = true;
+            }
+          },
+        };
+        return wrapped;
+      },
+      query: async () => ({ rows: [] }),
+      end: async () => {},
+    };
+    return {
+      pool,
+      stats,
+      snapshotReady: snapshot.promise,
+      markWinnerCommitted: () => winner.resolve(),
+      failCoordination: (err) => {
+        snapshot.reject(err);
+        winner.reject(err);
+      },
+    };
+  }
+
   it("treats a withheld COMMIT acknowledgment as unconfirmed and recovers the committed row", async () => {
     const key = "gggggggggggggggg";
     const tag = "lost-ack";
@@ -578,6 +687,65 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
       expectPreserved(committed, afterMismatch);
     } finally {
       await fresh.close();
+    }
+  });
+
+  it("stale-snapshot same tag recovers through native 40001", async () => {
+    const key = "hhhhhhhhhhhhhhhh";
+    const tag = "stale-same";
+    await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key)).resolves.toBe(0);
+    const coord = staleSnapshotPool(fx.loginA.url);
+    const app = recordNonMoneyRefusal(coord.pool, { idempotencyKey: key, requestTag: tag });
+    try {
+      await coord.snapshotReady;
+      await runRivalReadCommitted(fx.loginA.url, key, tag);
+      const winner = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
+      if (!winner) throw new Error("winner row missing before first attempt proceeds");
+      expect(winner.request_hash).toBe(expectedHash(tag));
+      coord.markWinnerCommitted();
+      await expect(app).resolves.toEqual(UNCONFIRMED);
+      expect(coord.stats.firstSqlState).toBe("23505");
+      expect(coord.stats.firstConstraint).toBe("command_keys_book_id_actor_id_operation_key_key");
+      expect(coord.stats.checkouts).toBe(1);
+      expect(coord.stats.sequence.join(",")).toContain("begin:1");
+      expect(coord.stats.sequence.join(",")).toContain("error:23505");
+      expect(coord.stats.sequence.join(",")).toContain("rollback:1");
+      expect(coord.stats.sequence.join(",")).toContain("release:1");
+      const recovered = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
+      if (!recovered) throw new Error("missing winner after 23505");
+      expectPreserved(winner, recovered);
+      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key)).resolves.toBe(1);
+    } catch (err) {
+      coord.failCoordination(err);
+      throw err;
+    }
+  });
+
+  it("stale-snapshot changed tag recovers as 409 after native 40001", async () => {
+    const key = "iiiiiiiiiiiiiiii";
+    const winnerTag = "stale-win";
+    const loserTag = "stale-lose";
+    await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key)).resolves.toBe(0);
+    const coord = staleSnapshotPool(fx.loginA.url);
+    const app = recordNonMoneyRefusal(coord.pool, { idempotencyKey: key, requestTag: loserTag });
+    try {
+      await coord.snapshotReady;
+      await runRivalReadCommitted(fx.loginA.url, key, winnerTag);
+      const winner = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
+      if (!winner) throw new Error("winner row missing before first attempt proceeds");
+      expect(winner.request_hash).toBe(expectedHash(winnerTag));
+      coord.markWinnerCommitted();
+      await expect(app).resolves.toEqual(UNCONFIRMED);
+      expect(coord.stats.firstSqlState).toBe("23505");
+      expect(coord.stats.firstConstraint).toBe("command_keys_book_id_actor_id_operation_key_key");
+      expect(coord.stats.checkouts).toBe(1);
+      const recovered = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
+      if (!recovered) throw new Error("missing winner after changed-tag 23505");
+      expectPreserved(winner, recovered);
+      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key)).resolves.toBe(1);
+    } catch (err) {
+      coord.failCoordination(err);
+      throw err;
     }
   });
 });
