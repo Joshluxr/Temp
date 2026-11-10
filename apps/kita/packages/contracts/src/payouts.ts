@@ -31,3 +31,16 @@ export interface Pay01Output {
   readonly payoutId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pay04Input {
+  readonly expiryAloneFabricatesReturn: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pay04Output {
+  readonly fabricatedReturnPosted: true;
+  readonly availableTreatedAsCollected: true;
+  readonly pickupId: UUID;
+  readonly traceEvents: readonly string[];
+}
