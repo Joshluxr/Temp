@@ -452,7 +452,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           return closeReport;
         },
       };
-      fixtures.poolFor("postgres://kita-refusal-fake/local");
+      const controlled = fixtures.poolFor("postgres://kita-refusal-fake/local");
+      const checkout = await controlled.connect();
+      checkout.release();
       const firstClose = fixtures.close();
       const concurrentClose = fixtures.close();
       expect(() => fixtures.poolFor("postgres://kita-refusal-fake/other")).toThrow(/fixture closing/);
