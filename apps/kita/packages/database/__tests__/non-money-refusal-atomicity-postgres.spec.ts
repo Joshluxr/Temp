@@ -1171,11 +1171,25 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       ).toBe(true);
       goSecond.resolve();
       const deadline = Date.now() + 15_000;
-      while (!codes.some((c) => c.code === "40P01") && Date.now() < deadline) {
+      while (victimSide === undefined && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 25));
       }
-      expect(codes.some((c) => c.code === "40P01" && c.attempt === 1)).toBe(true);
       expect(victimSide === "A" || victimSide === "B").toBe(true);
+      const opposingForVictim = victimSide === "A" ? [lockB, 1] : [lockA, 1];
+      const victimEntry = codes.find(
+        (c) =>
+          c.side === victimSide &&
+          c.attempt === 1 &&
+          c.code === "40P01" &&
+          c.sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+          Array.isArray(c.params) &&
+          c.params[0] === opposingForVictim[0] &&
+          c.params[1] === opposingForVictim[1] &&
+          c.pid === backends[victimSide]?.pid &&
+          c.start === backends[victimSide]?.start,
+      );
+      expect(victimEntry).toBeDefined();
+      expect(codes.filter((c) => c === victimEntry)).toHaveLength(1);
       await victimRolledBack.promise;
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
@@ -1228,7 +1242,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(gatedB).toBe(acquiredB);
       expect(Math.max(acquiredA, acquiredB)).toBe(2);
       expect(Math.min(acquiredA, acquiredB)).toBe(1);
-      expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
+      expect(codes.filter((c) => c === victimEntry)).toHaveLength(1);
       const rowA = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
         fx.bookA,
@@ -1310,10 +1324,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         "release:2",
       ]);
       expect(codes).toHaveLength(1);
-      expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
+      expect(codes[0]).toBe(victimEntry);
       expect(codes[0]?.code).toBe("40P01");
       expect(codes[0]?.attempt).toBe(1);
       expect(codes[0]?.side).toBe(victimSide);
+      expect(codes[0]?.sql).toBe("SELECT pg_advisory_xact_lock($1, $2)");
+      expect(codes[0]?.params).toEqual(opposingForVictim);
       const firstAttemptA = backends.A;
       const firstAttemptB = backends.B;
       if (!firstAttemptA || !firstAttemptB) throw new Error("missing first-attempt backend identities");
