@@ -905,15 +905,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         "release:2",
       ]);
       expect(codes).toHaveLength(1);
-      expect(codes).toHaveLength(1);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
       expect(codes[0]?.code).toBe("40P01");
       expect(codes[0]?.attempt).toBe(1);
       expect(codes[0]?.side).toBe(victimSide);
-      const backendA = backends.A;
-      const backendB = backends.B;
-      if (!backendA || !backendB) throw new Error("missing first-attempt backend identities");
-      expect(backendA.pid !== backendB.pid || backendA.start !== backendB.start).toBe(true);
+      const firstAttemptA = backends.A;
+      const firstAttemptB = backends.B;
+      if (!firstAttemptA || !firstAttemptB) throw new Error("missing first-attempt backend identities");
+      expect(firstAttemptA.pid !== firstAttemptB.pid || firstAttemptA.start !== firstAttemptB.start).toBe(true);
     } catch (err) {
       abort(err);
       throw err;
