@@ -49,3 +49,17 @@ export interface Wal03Output {
   readonly reservationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Wal04CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Wal04Input {
+  readonly fourCurrencyLegsUnbalancedOrUnconfirmedTarget: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Wal04Output {
+  readonly unconfirmedTargetAvailable: true;
+  readonly conversionId: UUID;
+  readonly traceEvents: readonly string[];
+}
