@@ -40,23 +40,19 @@ type FailureEntry = {
 
 function snapshotTrustedParams(params: unknown): unknown[] | undefined {
   if (!Array.isArray(params) || isProxy(params)) return undefined;
+  const proto = Object.getPrototypeOf(params);
+  if (proto !== Array.prototype || isProxy(proto)) return undefined;
   const ownIter = Object.getOwnPropertyDescriptor(params, Symbol.iterator);
   if (ownIter) return undefined;
-  let proto: object | null = Object.getPrototypeOf(params);
-  let sawIntrinsic = false;
-  while (proto && proto !== Object.prototype) {
-    const iter = Object.getOwnPropertyDescriptor(proto, Symbol.iterator);
-    if (iter) {
-      if (Object.prototype.hasOwnProperty.call(iter, "get") || Object.prototype.hasOwnProperty.call(iter, "set")) {
-        return undefined;
-      }
-      if (iter.value !== ARRAY_ITERATOR) return undefined;
-      sawIntrinsic = true;
-      break;
-    }
-    proto = Object.getPrototypeOf(proto);
+  const iter = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
+  if (
+    !iter ||
+    Object.prototype.hasOwnProperty.call(iter, "get") ||
+    Object.prototype.hasOwnProperty.call(iter, "set") ||
+    iter.value !== ARRAY_ITERATOR
+  ) {
+    return undefined;
   }
-  if (!sawIntrinsic) return undefined;
   const lenDesc = Object.getOwnPropertyDescriptor(params, "length");
   if (
     !lenDesc ||
@@ -85,19 +81,12 @@ function snapshotTrustedParams(params: unknown): unknown[] | undefined {
 }
 
 function firstAttemptStagesOrdered(seq: readonly string[]): boolean {
-  if (seq.includes("commit:1")) return false;
-  const qualifying = seq.filter(
-    (step) =>
-      step === "begin:1" || step === "lock1:1" || step === "function:1" || step === "lock2:1",
-  );
-  return (
-    qualifying[0] === "begin:1" &&
-    qualifying[1] === "lock1:1" &&
-    qualifying[2] === "function:1" &&
-    seq.filter((step) => step === "begin:1").length === 1 &&
-    seq.filter((step) => step === "lock1:1").length === 1 &&
-    seq.filter((step) => step === "function:1").length === 1
-  );
+  const lock2 = seq.indexOf("lock2:1");
+  const prefix = lock2 === -1 ? seq : seq.slice(0, lock2);
+  if (prefix.some((step) => step === "commit:1" || step === "rollback:1" || step === "release:1")) {
+    return false;
+  }
+  return prefix[0] === "begin:1" && prefix[1] === "lock1:1" && prefix[2] === "function:1" && prefix.length === 3;
 }
 
 const LOGIN_OID = Symbol.for("kita.non-money-refusal.login-oid");
@@ -110,8 +99,35 @@ function expectedLoginOid(login: { readonly name: string }): string {
   return oid;
 }
 
-function exactOriginalLedger(codes: readonly FailureEntry[], retained: FailureEntry | undefined): boolean {
-  return retained !== undefined && codes.length === 1 && codes[0] === retained;
+function proofMatches(entry: FailureEntry, proof: FailureEntry): boolean {
+  if (
+    entry.code !== proof.code ||
+    entry.sql !== proof.sql ||
+    entry.side !== proof.side ||
+    entry.attempt !== proof.attempt ||
+    entry.pid !== proof.pid ||
+    entry.start !== proof.start
+  ) {
+    return false;
+  }
+  const left = entry.params;
+  const right = proof.params;
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+function exactOriginalLedger(
+  codes: readonly FailureEntry[],
+  retained: FailureEntry | undefined,
+  proof?: FailureEntry,
+): boolean {
+  if (retained === undefined || codes.length !== 1 || codes[0] !== retained) return false;
+  if (proof) return proofMatches(retained, proof);
+  return true;
 }
 
 function classifyVictimOpposingLock(input: {
@@ -1122,6 +1138,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const backends: Record<string, { pid: number; start: string; oid: string }> = {};
     let victimSide: "A" | "B" | undefined;
     let victimEntry: (typeof codes)[number] | undefined;
+    let victimProof: FailureEntry | undefined;
     let victimRollbackAck = false;
     let coordinationCompleted = false;
 
@@ -1135,7 +1152,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           const next = side === "A" ? gatedA : gatedB;
           if (next === 2) {
             await allowVictimRetry.promise;
-            if (!exactOriginalLedger(codes, victimEntry)) throw persistAbort ?? new Error("HOLD: retry permission after ambiguous ledger");
+            if (!exactOriginalLedger(codes, victimEntry, victimProof)) throw persistAbort ?? new Error("HOLD: retry permission after ambiguous ledger");
             if (abortOccurred) throw persistAbort;
           }
           let client: Awaited<ReturnType<typeof pool.connect>>;
@@ -1159,7 +1176,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             }
             throw err;
           }
-          if (next === 2 && !exactOriginalLedger(codes, victimEntry)) {
+          if (next === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
             try {
               client.release();
             } catch (releaseErr) {
@@ -1212,13 +1229,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
               if (sql.startsWith("BEGIN")) {
                 try {
+                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                    throw persistAbort ?? new Error("HOLD: BEGIN after ambiguous ledger");
+                  }
                   callOwner.issued = true;
                   const result = await client.query(sql, params);
                   seq.push(`begin:${attempt}`);
                   if (abortOccurred) throw persistAbort;
                   const ident = await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA));
-                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry)) {
-                    throw persistAbort ?? new Error("HOLD: BEGIN after ambiguous ledger");
+                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                    throw persistAbort ?? new Error("HOLD: identity after ambiguous ledger");
                   }
                   if (abortOccurred) throw persistAbort;
                   if (attempt === 1) backends[side] = ident;
@@ -1244,16 +1264,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   throw err;
                 }
               }
+              if (sql.startsWith("COMMIT") && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                throw persistAbort ?? new Error("HOLD: COMMIT after ambiguous ledger");
+              }
               let driverAcked = false;
               try {
-                if (sql.startsWith("COMMIT") && !exactOriginalLedger(codes, victimEntry)) {
-                  throw persistAbort ?? new Error("HOLD: COMMIT after ambiguous ledger");
-                }
                 callOwner.issued = true;
                 const result = await client.query(sql, params);
                 driverAcked = true;
                 if (sql.startsWith("COMMIT")) {
-                  if (!exactOriginalLedger(codes, victimEntry)) {
+                  if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
                     throw persistAbort ?? new Error("HOLD: COMMIT result after ambiguous ledger");
                   }
                   seq.push(`commit:${attempt}`);
@@ -1308,11 +1328,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     await victimRolledBack.promise;
                     if (abortOccurred) throw persistAbort;
                     await allowSurvivorCommit.promise;
-                    if (!exactOriginalLedger(codes, victimEntry)) {
+                    if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
                       throw persistAbort ?? new Error("HOLD: survivor commit after ambiguous ledger");
                     }
                     if (abortOccurred) throw persistAbort;
                   }
+                } else if (
+                  sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+                  recorded &&
+                  recorderAck &&
+                  attempt === 1
+                ) {
+                  throw persistAbort ?? new Error("HOLD: successful opposing lock used exact unexpected parameters");
                 }
                 if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
                 return result;
@@ -1371,6 +1398,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   seq.push(`lock2:${attempt}`);
                   victimSide = side;
                   victimEntry = entry;
+                  victimProof = { side: entry.side, attempt: entry.attempt, code: entry.code };
+                  if (entry.pid !== undefined) victimProof.pid = entry.pid;
+                  if (entry.start !== undefined) victimProof.start = entry.start;
+                  if (entry.sql !== undefined) victimProof.sql = entry.sql;
+                  if (entry.params !== undefined) victimProof.params = entry.params.slice();
+                  if (entry.original !== undefined) victimProof.original = entry.original;
                 } else if (sql === "SELECT pg_advisory_xact_lock($1, $2)" && recorded && !driverAcked) {
                   seq.push(`lock2:${attempt}`);
                 }
@@ -1480,13 +1513,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(codes[0]).toBe(victimEntry);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
       expect(codes.filter((c) => c.code === "40P01")[0]).toBe(victimEntry);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       await victimRolledBack.promise;
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       const victimBackend = backends[victimSide!];
       if (!victimBackend) throw new Error("missing victim backend identity");
       expect(victimBackend.pid).toBeGreaterThan(0);
@@ -1511,13 +1544,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         expect(lock.pid).toBe(survivorBackend.pid);
         expect(lock.start).toBe(survivorBackend.start);
       }
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       allowSurvivorCommit.resolve();
       const settled = await Promise.race([
         runA.then((body) => ({ side: "A" as const, body })),
         runB.then((body) => ({ side: "B" as const, body })),
       ]);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       expect(settled.body).toEqual(STORED);
       const survivorKey = settled.side === "A" ? keyA : keyB;
       const survivorTag = settled.side === "A" ? tagA : tagB;
@@ -1529,14 +1562,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         survivorKey,
         survivorTag,
       );
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, victimKey)).resolves.toBe(0);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       allowVictimRetry.resolve();
       await expect(runA).resolves.toEqual(STORED);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       await expect(runB).resolves.toEqual(STORED);
-      expect(exactOriginalLedger(codes, victimEntry)).toBe(true);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       expect(acquiredA + acquiredB).toBe(3);
       expect(gatedA).toBe(acquiredA);
       expect(gatedB).toBe(acquiredB);

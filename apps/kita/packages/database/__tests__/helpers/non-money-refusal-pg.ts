@@ -489,9 +489,13 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
 }
 
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
+  const lifecycle = { kind: "refusal-fixture-lifecycle" as const };
+  const lifecycleState = invocationOf(lifecycle);
   await assertRefusalSecurityPreflight();
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
+  hideSecondary(lifecycle, client);
+  hideSecondary(client, lifecycleState);
   const provisioned = {
     booksPrepared: 0,
     booksIssued: 0,
@@ -544,7 +548,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         uncertain: false,
         outcome: "pending",
       };
-      invocationOf(client).resources.push(record);
+      lifecycleState.resources.push(record);
       provisioned.booksPrepared += 1;
       record.prepared = true;
       try {
@@ -620,8 +624,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
               outcome: "pending",
             }
           : undefined;
-      invocationOf(client).resources.push(roleRecord, grantRecord);
-      if (bindingRecord) invocationOf(client).resources.push(bindingRecord);
+      lifecycleState.resources.push(roleRecord, grantRecord);
+      if (bindingRecord) lifecycleState.resources.push(bindingRecord);
       try {
       provisioned.rolesPrepared += 1;
       roleRecord.prepared = true;
@@ -667,6 +671,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       await client.query(grantText);
       provisioned.grantsAcknowledged += 1;
       grantRecord.acknowledged = true;
+      grantRecord.outcome = "fulfilled";
       if (actorId !== null && bookId !== null && bindingRecord) {
         provisioned.bindingsPrepared += 1;
         bindingRecord.prepared = true;
@@ -687,7 +692,6 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         provisioned.retainedBindings.push({ loginName: name, loginOid, bookId, actorId });
         bindingRecord.outcome = "fulfilled";
       }
-      grantRecord.outcome = "fulfilled";
       const login: RestrictedLogin = { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
       Object.defineProperty(login, LOGIN_OID, { value: loginOid, enumerable: false, configurable: false, writable: false });
       return login;
@@ -755,7 +759,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       throw new Error("HOLD: observed books do not match the retained disabled pair");
     }
     provisioned.booksObserved += observedBooks.rows.length;
-    for (const record of invocationOf(client).resources.filter((item) => item.kind === "book")) {
+    for (const record of lifecycleState.resources.filter((item) => item.kind === "book")) {
       record.observed = true;
     }
 
@@ -789,7 +793,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       throw new Error("HOLD: unbound login unexpectedly bound");
     }
     provisioned.bindingsObserved += observedBindings.rows.length;
-    for (const record of invocationOf(client).resources.filter((item) => item.kind === "binding")) {
+    for (const record of lifecycleState.resources.filter((item) => item.kind === "binding")) {
       record.observed = true;
     }
     const expectedRecorderGrantor = "kita_test";
@@ -844,7 +848,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       throw new Error("HOLD: unexpected recorder membership row");
     }
     provisioned.grantsObserved += expectedLogins.length;
-    for (const record of invocationOf(client).resources.filter((item) => item.kind === "grant")) {
+    for (const record of lifecycleState.resources.filter((item) => item.kind === "grant")) {
       record.observed = true;
     }
 
@@ -867,11 +871,11 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       poolFor: (url: string) => registry.poolFor(url),
       close: () => registry.close(),
     };
-    const owner = invocationOf(fixtures);
-    for (const record of invocationOf(client).resources) owner.resources.push(record);
-    hideSecondary(fixtures, owner);
+    invocationOwners.set(fixtures, lifecycleState);
+    hideSecondary(fixtures, lifecycle);
+    hideSecondary(fixtures, lifecycleState);
     Object.defineProperty(fixtures, FIXTURE_INVOCATION, {
-      value: owner,
+      value: lifecycleState,
       enumerable: false,
       configurable: false,
       writable: false,
@@ -888,10 +892,13 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     };
     failed = true;
     primary = err;
+    hideSecondary(lifecycle, inventory);
+    hideSecondary(lifecycleState, err);
     hideSecondary(client, inventory);
     hideSecondary(client, err);
     if ((typeof err === "object" && err !== null) || typeof err === "function") {
       hideSecondary(err as object, inventory);
+      hideSecondary(err as object, lifecycleState);
     }
     throw err;
   } finally {
