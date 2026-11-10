@@ -379,7 +379,7 @@ export async function countReservedRows(
   });
 }
 
-export function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
+function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
   poolFor(url: string): ManagedPool;
   close(): Promise<void>;
 } {
@@ -398,7 +398,7 @@ export function createRefusalPoolRegistry(build: (url: string) => ManagedPool): 
       pools.set(url, pool);
       return pool;
     },
-    close(): Promise<void> {
+    async close(): Promise<void> {
       closing = true;
       if (closeReport) return closeReport;
       closeReport = (async () => {

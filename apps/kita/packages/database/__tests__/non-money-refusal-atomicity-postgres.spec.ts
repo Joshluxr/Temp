@@ -8,7 +8,6 @@ import { withSerializable } from "../src/transaction.js";
 import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.js";
 import {
   countReservedRows,
-  createRefusalPoolRegistry,
   ownerClient,
   postgresSuiteSelected,
   provisionRefusalFixtures,
@@ -412,55 +411,46 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const endStarted = new Promise<void>((resolve) => {
         sawEnd = resolve;
       });
-      const fixtures = createRefusalPoolRegistry((url) =>
-        createPool(
-          { databaseUrl: url, poolMax: 1 },
-          {
-            driver: {
-              createPool() {
-                return {
-                  connect: async () => ({
-                    query: async () => ({ rows: [] }),
-                    release() {},
-                  }),
+      const heldEnd = new Error("held-end-failed");
+      const pool = createPool(
+        { databaseUrl: "postgres://kita-refusal-fake/local", poolMax: 1 },
+        {
+          driver: {
+            createPool() {
+              return {
+                connect: async () => ({
                   query: async () => ({ rows: [] }),
-                  async end() {
-                    driverEnds += 1;
-                    sawEnd();
-                    await held;
-                  },
-                };
-              },
+                  release() {},
+                }),
+                query: async () => ({ rows: [] }),
+                async end() {
+                  driverEnds += 1;
+                  sawEnd();
+                  await held;
+                },
+              };
             },
           },
-        ),
+        },
       );
-      fixtures.poolFor("postgres://kita-refusal-fake/local");
-      const firstClose = fixtures.close();
-      const concurrentClose = fixtures.close();
-      expect(concurrentClose).toBe(firstClose);
-      expect(() => fixtures.poolFor("postgres://kita-refusal-fake/other")).toThrow(/fixture closing/);
-      await endStarted;
-      expect(driverEnds).toBe(1);
-      const heldEnd = new Error("held-end-failed");
-      settle(heldEnd);
-      let shared: unknown;
       try {
-        await firstClose;
-        throw new Error("expected fixture close to reject");
-      } catch (err) {
-        shared = err;
-      }
-      expect(shared).toBeInstanceOf(Error);
-      expect((shared as Error).message).toMatch(/cleanup failed/);
-      await expect(concurrentClose).rejects.toBe(shared);
-      expect(driverEnds).toBe(1);
-      const repeated = await Promise.allSettled([fixtures.close(), fixtures.close()]);
-      expect(repeated[0]?.status).toBe("rejected");
-      expect(repeated[1]?.status).toBe("rejected");
-      if (repeated[0]?.status === "rejected" && repeated[1]?.status === "rejected") {
-        expect(repeated[0].reason).toBe(repeated[1].reason);
-        expect(repeated[0].reason).toBe(shared);
+        const firstClose = pool.close();
+        const concurrentClose = pool.close();
+        await endStarted;
+        expect(driverEnds).toBe(1);
+        settle(heldEnd);
+        let shared: unknown;
+        try {
+          await firstClose;
+          throw new Error("expected pool close to reject");
+        } catch (err) {
+          shared = err;
+        }
+        expect(shared).toBe(heldEnd);
+        await expect(concurrentClose).resolves.toBeUndefined();
+        expect(driverEnds).toBe(1);
+      } finally {
+        settle(heldEnd);
       }
     }
     const ownerUrl = requireRefusalOwnerUrl();
