@@ -74,3 +74,17 @@ export interface Quote02Output {
   readonly quoteId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Quote03CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Quote03Input {
+  readonly missingTaxWouldDefaultZeroOrInexactTierTotals: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Quote03Output {
+  readonly missingTaxDefaultedZero: true;
+  readonly quoteId: UUID;
+  readonly traceEvents: readonly string[];
+}
