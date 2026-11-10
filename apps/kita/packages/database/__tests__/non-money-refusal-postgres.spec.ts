@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { createPool } from "../src/pool.js";
 import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.ts";
 import {
+  countReservedRows,
   postgresSuiteSelected,
   provisionRefusalFixtures,
   type RefusalPgFixtures,
@@ -102,6 +104,28 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
       });
     } finally {
       client.release();
+    }
+  });
+
+  it("converges 100 simultaneous contenders on one reserved row", async () => {
+    const key = "cccccccccccccccc";
+    const tag = "contend-one";
+    const pool = createPool({ databaseUrl: fx.loginA.url, poolMax: 40 });
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 100 }, () =>
+          recordNonMoneyRefusal(pool, { idempotencyKey: key, requestTag: tag }),
+        ),
+      );
+      expect(results).toHaveLength(100);
+      for (const result of results) {
+        expect(result).toEqual(STORED);
+      }
+      await expect(
+        countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key),
+      ).resolves.toBe(1);
+    } finally {
+      await pool.close();
     }
   });
 });
