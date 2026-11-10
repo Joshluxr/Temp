@@ -173,6 +173,9 @@ async function observeIdentity(
             current_setting('deadlock_timeout') AS deadlock_timeout,
             (SELECT oid::text FROM pg_roles WHERE rolname = current_user) AS login_oid,
             (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS rolsuper,
+            (SELECT rolcreatedb FROM pg_roles WHERE rolname = current_user) AS rolcreatedb,
+            (SELECT rolcanlogin FROM pg_roles WHERE rolname = current_user) AS rolcanlogin,
+            (SELECT rolinherit FROM pg_roles WHERE rolname = current_user) AS rolinherit,
             (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS rolcreaterole,
             (SELECT rolreplication FROM pg_roles WHERE rolname = current_user) AS rolreplication,
             (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS rolbypassrls,
@@ -191,12 +194,26 @@ async function observeIdentity(
   expect(typeof row?.deadlock_timeout).toBe("string");
   expect(String(row?.deadlock_timeout).length).toBeGreaterThan(0);
   expect(row?.rolsuper).toBe(false);
+  expect(row?.rolcreatedb).toBe(false);
+  expect(row?.rolcanlogin).toBe(true);
+  expect(row?.rolinherit).toBe(true);
   expect(row?.rolcreaterole).toBe(false);
   expect(row?.rolreplication).toBe(false);
   expect(row?.rolbypassrls).toBe(false);
   expect(row?.recorder_member).toBe(true);
-  expect(String(row?.login_oid).length).toBeGreaterThan(0);
-  return { pid: Number(row?.pid), start: String(row?.start), oid: String(row?.login_oid) };
+  if (typeof row?.login_oid !== "string" || row.login_oid.length === 0) {
+    throw new Error("HOLD: actual login oid missing");
+  }
+  if (typeof row?.start !== "string" || row.start.length === 0) {
+    throw new Error("HOLD: backend_start missing");
+  }
+  const statementMs = Number.parseInt(String(row.statement_timeout), 10);
+  const lockMs = Number.parseInt(String(row.lock_timeout), 10);
+  const deadlockMs = Number.parseInt(String(row.deadlock_timeout), 10);
+  expect(Number.isFinite(statementMs) && statementMs > 0).toBe(true);
+  expect(Number.isFinite(lockMs)).toBe(true);
+  expect(Number.isFinite(deadlockMs) && deadlockMs > 0).toBe(true);
+  return { pid: Number(row.pid), start: row.start, oid: row.login_oid };
 }
 
 async function assertSuitePreflight(ownerUrl: string): Promise<void> {
@@ -258,7 +275,7 @@ async function assertSuitePreflight(ownerUrl: string): Promise<void> {
     );
     expect(members.rows.length).toBeGreaterThan(0);
     expect(members.rows.every((m) => m.grantor !== "kita_test")).toBe(true);
-    const bootstrap = members.rows.filter((m) => m.admin_option && !m.set_option);
+    const bootstrap = members.rows.filter((m) => m.admin_option && !m.set_option && m.inherit_option === false);
     expect(bootstrap.length).toBeGreaterThan(0);
     expect(row.fn_oid.length).toBeGreaterThan(0);
   });
@@ -296,7 +313,9 @@ async function advisoryNamespace(
        WHERE l.locktype = 'advisory'`,
     );
     const allowed = new Set(expected.map((row) => `${row.classid}:${row.objid}`));
-    return result.rows.filter((row) => allowed.has(`${row.classid}:${row.objid}`));
+    return result.rows.filter(
+      (row) => row.objsubid === "2" && allowed.has(`${row.classid}:${row.objid}`),
+    );
   });
 }
 
@@ -488,6 +507,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
 
   it("Native 40P01 rolls back refusal and replays the full callback", async () => {
     if (!fx) throw new Error("fixtures missing");
+    const fixtures = fx;
     const keyA = freshKey();
     const keyB = freshKey();
     const tagA = "dl-a";
@@ -554,7 +574,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               if (sql.startsWith("BEGIN")) {
                 const result = await client.query(sql, params);
                 seq.push(`begin:${attempt}`);
-                const ident = await observeIdentity(client, fx!.loginA.name);
+                const ident = await observeIdentity(client, fixtures.loginA.name);
                 if (attempt === 1) backends[side] = ident;
                 return result;
               }
@@ -631,6 +651,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       await Promise.all([firstA.promise, firstB.promise]);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
+      const afterFirst = await advisoryNamespace(fx.ownerUrl, [
+        { classid: lockA, objid: 1 },
+        { classid: lockB, objid: 1 },
+      ]);
+      expect(afterFirst.filter((row) => row.granted)).toHaveLength(2);
       goSecond.resolve();
       const deadline = Date.now() + 15_000;
       while (!codes.some((c) => c.code === "40P01") && Date.now() < deadline) {
@@ -653,8 +678,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           (row) => row.pid === victimBackend.pid && row.start === victimBackend.start,
         ),
       ).toHaveLength(0);
+      expect(leftover.filter((row) => row.granted)).toHaveLength(2);
       for (const lock of leftover) {
         expect(lock.objsubid).toBe("2");
+        expect(lock.granted).toBe(true);
         expect(lock.classid === String(lockA) || lock.classid === String(lockB)).toBe(true);
         expect(lock.objid).toBe("1");
       }
@@ -701,13 +728,30 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       } else {
         expect(rowB).toEqual(survivorRow);
       }
-      const replay = createPool({
+      const replayRaw = createPool({
         databaseUrl: fx.loginA.url,
         poolMax: 2,
         statementTimeoutMs: 15_000,
         connectionTimeoutMs: 10_000,
         idleTimeoutMs: 15_000,
       });
+      const replay: PoolLike = {
+        async connect() {
+          const client = await replayRaw.connect();
+          return {
+            async query(sql: string, params?: readonly unknown[]) {
+              const result = await client.query(sql, params);
+              if (sql.startsWith("BEGIN")) await observeIdentity(client, fixtures.loginA.name);
+              return result;
+            },
+            release(err?: unknown) {
+              client.release(err);
+            },
+          } satisfies PoolClientLike;
+        },
+        query: (sql, params) => replayRaw.query(sql, params),
+        end: () => replayRaw.end(),
+      };
       try {
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: "dl-a-x" })).resolves.toEqual(
@@ -718,8 +762,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           MISMATCH,
         );
       } finally {
-        await replay.close();
+        await replayRaw.close();
       }
+      expect(
+        await advisoryNamespace(fx.ownerUrl, [
+          { classid: lockA, objid: 1 },
+          { classid: lockB, objid: 1 },
+        ]),
+      ).toHaveLength(0);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).toEqual(rowA);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
       const victimSeq = victimSide === "A" ? seqA : seqB;
@@ -739,6 +789,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         "commit:2",
         "release:2",
       ]);
+      expect(codes).toHaveLength(1);
+      expect(codes).toHaveLength(1);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
       expect(codes[0]?.code).toBe("40P01");
       expect(codes[0]?.attempt).toBe(1);
