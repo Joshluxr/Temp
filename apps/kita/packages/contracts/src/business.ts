@@ -3,7 +3,7 @@
  * Additive only. Live KYB/payout authority is not granted by this checker.
  */
 
-import type { UUID } from './context.ts';
+import type { UUID, WorkerContext } from './context.ts';
 import type { WorkerIdentity } from './platform.ts';
 
 export interface Ext03Input {
@@ -29,3 +29,20 @@ export interface Ext03ApprovalRequiredDetail {
 }
 
 export type Ext03FailureDetail = Ext03ApprovalRequiredDetail;
+
+/**
+ * Batch execution (T-EXT-04). Unauthorized execution, stale approval, limit
+ * breach, paid-item retry, and uncertain submission never grant payout.
+ * T-CORE-02, T-LEDGER-02, and DEP-12 remain HOLD.
+ */
+export interface Ext04Input {
+  readonly unauthorizedBatchExecution: boolean;
+  readonly approvalStale: boolean;
+  readonly limitExceeded: boolean;
+  readonly paidItemWouldBeRetried: boolean;
+  readonly itemSubmissionUncertain: boolean;
+}
+
+export type Ext04Output = never;
+
+export type Ext04CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration'>;

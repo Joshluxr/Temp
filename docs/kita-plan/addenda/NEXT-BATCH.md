@@ -1,70 +1,84 @@
 BATCH-OK
 
-Authorize only the T-EXT-02 settleCustodyLeg PURE boolean-input fail-closed checker specified below. This authorizes refusal paths only. Full T-EXT-02 delivery remains HOLD; the money path remains closed. T-CORE-02 and T-LEDGER-02 remain HOLD.
+Authorize only the T-EXT-04 executeBatch PURE boolean-input fail-closed checker specified below. This authorizes refusal paths only. Full T-EXT-04 delivery remains HOLD; the money path remains closed. T-CORE-02 and T-LEDGER-02 remain HOLD. Never authorize ok: true, ledger work, executeCommand or real stores.
 
-Reviewed baseline: 7ed47be8c900a8c23058d5ea805bd0e0675befe0 on cursor/kita-plat08-recover-financial-authority-05a3. Landed T-PLAT-08 recoverFinancialAuthority returns unauthorized / HTTP 403, then stale_or_conflicting_command / HTTP 409, then PROVIDER_OUTCOME_UNKNOWN / HTTP 409, otherwise dependency_unavailable / HTTP 503. Reviewed its imports and refusal branches and rechecked TEST-PLAT-08: 8 passed. Combined TEST-PLAT-08 / TEST-GROW-06 / TEST-ADM-08 / TEST-FIN-05 / TEST-FIN-06 / TEST-EXT-01: 43 passed. These are checker tests, not financial, custody, settlement or recovery integration evidence.
+Reviewed baseline: d7f01e6fc2055051e8635bbe9fe1238af4c4800d on cursor/kita-ext02-settle-custody-leg-05a3, the supplied PR #101 head. Reviewed the landed T-EXT-02 imports, contracts and refusal branches: unauthorized / HTTP 403, asset/network mismatch or depeg/reorg CAPABILITY_UNAVAILABLE / HTTP 409, settlement uncertainty PROVIDER_OUTCOME_UNKNOWN / HTTP 409, otherwise dependency_unavailable / HTTP 503. Rechecked TEST-EXT-02: 16 passed. Together with TEST-EXT-03, TEST-ADM-05, TEST-TX-01, TEST-PLAT-08, TEST-GROW-06, TEST-ADM-08, TEST-FIN-05, TEST-FIN-06 and TEST-EXT-01, 67 tests passed across ten files in two runs. These are checker tests, not batch, financial, custody or settlement integration evidence.
 
-Basis: 13-backlog.md T-EXT-02 requires wrong network, depeg and reorg never to produce available PHP cash, names CAPABILITY_UNAVAILABLE and PROVIDER_OUTCOME_UNKNOWN, and inherits M2 unauthorized errors. 07-algorithms.md G10 requires institutional custody, exact issuer/contract/network/decimals and atomic units, allowlisted destinations, separate custody/chain/off-ramp/fiat states, and signed chain/finality/custodian policies. 12-tests-gates.md M74/M75 and SC-51 prohibit PHP availability from provisional chain status and alternate-chain retry. 14-external-deps.md DEP-11 keeps stablecoin treasury disabled pending separate approvals. A pure checker can refuse supplied blockers without establishing any prerequisite. The exact branch mapping below applies only to this internal checker; it changes no frozen HTTP contract and implements no custody or settlement protocol.
+Basis: 13-backlog.md T-EXT-04 requires approval bound to ordered items and currency totals, immutable paid items and retries restricted to proven unsubmitted items. It names APPROVAL_STALE and LIMIT_EXCEEDED and inherits M2 unauthorized and stale/conflicting-command errors. 07-algorithms.md G10 requires KYB/signatory authority, protected encrypted CSV, item-specific drafts/quotes/allocations and normal dispatch gates; changes invalidate aggregate approval. 12-tests-gates.md M72/M73 and SC-52 require exact approval binding and prohibit repeating paid items after a partial batch/crash. F2 in 06-api-contracts.md distinguishes PROVIDER_OUTCOME_UNKNOWN from ordinary retryable rejection. DEP-12 in 14-external-deps.md keeps this product disabled pending its separate approvals. A pure checker can refuse supplied blockers without establishing any prerequisite. The exact mapping below is internal only; it changes no frozen HTTP contract and implements no batch or payout protocol.
 
-All previously held tasks and release/activation gates remain HOLD, including full T-PLAT-08, T-GROW-06, T-ADM-08 and T-EXT-02 delivery, T-CORE-02, T-LEDGER-02, CP-08/CP-09 closure and DEP-11 activation. T-EXT-04 is not authorized because T-EXT-02 fits this limited scope. No dependency, production or money-path gate is cleared.
+All previously held tasks and release/activation gates remain HOLD, including full T-EXT-02, T-EXT-03 and T-EXT-04 delivery, T-TX-01, T-ADM-05, T-CORE-02, T-LEDGER-02, CP-08/CP-09 closure, DEP-11 and DEP-12 activation. T-QUOTE-01 is not authorized because T-EXT-04 fits this limited scope. No dependency, production or money-path gate is cleared. This document replaces the prior next-checker authorization; it does not expand the landed EXT-02 checker.
 
 Allowed implementation files only (paths relative to apps/kita/):
 
-- packages/domain/treasury/settle-custody-leg.ts — create the inert settleCustodyLeg checker only.
-- tests/features/test-ext-02.spec.ts — create focused TEST-EXT-02 denial tests only.
-- packages/contracts/src/treasury.ts — additive Ext02Input, Ext02Output and Ext02CommandContext types only; preserve all existing imports and Fin05/Fin06 contracts.
+- packages/domain/business/execute-batch.ts — create the inert executeBatch checker only.
+- tests/features/test-ext-04.spec.ts — create focused TEST-EXT-04 denial tests only.
+- packages/contracts/src/business.ts — additive Ext04Input, Ext04Output and Ext04CommandContext types only; add WorkerContext to the existing type-only context.ts import and preserve all Ext03 imports and contracts.
 
-Exact required Ext02Input flag names and types (no other data fields):
+Exact required Ext04Input flag names and types (no other data fields):
 
 ```ts
-readonly unauthorizedCustodyMovement: boolean;
-readonly assetOrNetworkPolicyMismatch: boolean;
-readonly depegOrReorgDetected: boolean;
-readonly settlementUncertain: boolean;
+readonly unauthorizedBatchExecution: boolean;
+readonly approvalStale: boolean;
+readonly limitExceeded: boolean;
+readonly paidItemWouldBeRetried: boolean;
+readonly itemSubmissionUncertain: boolean;
 ```
 
-These are internal denial inputs, not HTTP fields, authenticated evidence or settlement attestations. unauthorizedCustodyMovement denotes a supplied absence or invalidity of the required current, scope-bound institutional treasury authorization. assetOrNetworkPolicyMismatch denotes a supplied mismatch against required asset issuer/contract/network/decimals, atomic-unit policy or destination/network allowlist, or absence of the required signed asset/network policy. depegOrReorgDetected denotes a supplied depeg stop or chain-reorganization blocker. settlementUncertain denotes supplied unresolved custody/chain/off-ramp/fiat settlement, including provisional or insufficient finality, custody mismatch or unconfirmed actual PHP settlement. Missing or pending local/chain evidence never proves nonpayment or available fiat. The checker must not derive these flags, inspect approvals or policies, calculate depeg/finality thresholds, parse chain or fiat evidence, read a clock, query a provider or load financial state.
+These are internal denial inputs, not HTTP fields, authenticated evidence or approval/dispatch attestations:
 
-Define Ext02Output = never. Define Ext02CommandContext as Pick<WorkerContext, 'workId' | 'attemptGeneration'> using the existing type-only WorkerContext import in treasury.ts. The checker signature is settleCustodyLeg(ctx: Ext02CommandContext, input: Ext02Input): Promise<Result<Ext02Output, Problem>>. Context identity is unused and never establishes authority. Use type-only imports for Ext02 types from ../../contracts/src/treasury.ts and Problem/Result from ../../contracts/src/result.ts; import only the existing err/problem runtime helpers from ../../contracts/src/result.ts. Do not import the contracts runtime barrel or ok helper, add a dependency, or edit package/barrel exports. Accept no trace/capability/execution callback, transaction runner, store, evidence/policy payload, approval, credential, address, hash/nonce, account, asset/amount/decimals, balance or journal line. This checker has no diagnostic callback or other I/O; it only returns a Problem.
+- unauthorizedBatchExecution denotes a supplied absence or invalidity of required current, scope-bound business KYB/signatory execution authorization. Personal KYC and a second login of the same person cannot supply that authority.
+- approvalStale denotes a supplied stale, invalidated or mismatched approval binding, including a change to CSV contents, ordered item/quote hashes, target versions or aggregate currency totals.
+- limitExceeded denotes a supplied item or aggregate limit breach. It carries no amount, currency, threshold or policy payload.
+- paidItemWouldBeRetried denotes a supplied attempt to include an already-paid item in a rerun/retry, including under a fresh item or command identity.
+- itemSubmissionUncertain denotes supplied unresolved, unknown, pending or possibly submitted item execution, including absence of definitive evidence that a candidate item is unsubmitted. A timeout, missing local record or lack of a paid status never proves nonpayment or safe resubmission.
 
-Required behavior, evaluated in this order:
+The checker must not derive these flags, authenticate signatories, inspect or consume approvals, parse CSV, hash or compare rows/quotes, sum currency totals, evaluate policies/limits, read a clock, query a provider or load batch/financial state. False flags never prove valid KYB, current approval, valid quotes, limits compliance, an unpaid/unsubmitted item or retry eligibility. No combination grants authority.
+
+Define Ext04Output = never. Define Ext04CommandContext as Pick<WorkerContext, 'workId' | 'attemptGeneration'> using a type-only import from ./context.ts. The checker signature is executeBatch(ctx: Ext04CommandContext, input: Ext04Input): Promise<Result<Ext04Output, Problem>>. Context identity is unused and never establishes authority. Use type-only imports for Ext04 types from ../../contracts/src/business.ts and Problem/Result from ../../contracts/src/result.ts; import only the existing err/problem runtime helpers from ../../contracts/src/result.ts. Do not import the contracts runtime barrel, ok helper, existing business checker or platform implementation. Add no dependency or package/barrel export.
+
+Accept no trace/capability/execution callback, transaction runner, store, worker payload, business/batch/item/operation identity, CSV/file, quote/hash, evidence, approval, credential, account, amount/currency, balance or journal line. The two context identity fields above are the only context fields. This checker has no diagnostic callback or other I/O; it only returns a Problem. Do not copy the trace callback or success-shaped output contracts from older checkers into this lane.
+
+Required behavior, evaluated in this exact order:
 
 | Condition | Exact error code | HTTP status | retryable |
 |---|---|---|---|
-| unauthorizedCustodyMovement === true, regardless of other flags | unauthorized | 403 | false |
-| Otherwise assetOrNetworkPolicyMismatch === true, regardless of remaining flags | CAPABILITY_UNAVAILABLE | 409 | false |
-| Otherwise depegOrReorgDetected === true, including when settlementUncertain is true | CAPABILITY_UNAVAILABLE | 409 | false |
-| Otherwise settlementUncertain === true | PROVIDER_OUTCOME_UNKNOWN | 409 | false |
+| unauthorizedBatchExecution === true, regardless of other flags | unauthorized | 403 | false |
+| Otherwise approvalStale === true, regardless of remaining flags | APPROVAL_STALE | 409 | false |
+| Otherwise limitExceeded === true, regardless of remaining flags | LIMIT_EXCEEDED | 409 | false |
+| Otherwise paidItemWouldBeRetried === true, including when itemSubmissionUncertain is true | stale_or_conflicting_command | 409 | false |
+| Otherwise itemSubmissionUncertain === true | PROVIDER_OUTCOME_UNKNOWN | 409 | false |
 | Otherwise | dependency_unavailable | 503 | true |
-
-CAPABILITY_UNAVAILABLE denotes a supplied inadmissible custody policy or depeg/reorg blocker; it must not claim a live capability was disabled or liquidity was frozen. PROVIDER_OUTCOME_UNKNOWN denotes supplied uncertainty only; it must not claim an authenticated provider outcome was established or durably recorded. Neither error permits fresh-key, alternate-chain or provider retry.
 
 Return only ok: false failures with exactly a bounded, fixed, non-PII Problem and no value, operationId, fieldErrors or success payload. Use these fixed detail strings in table order:
 
-- T-EXT-02 institutional custody movement is not authorized
-- T-EXT-02 custody asset or network policy mismatch blocks settlement
-- T-EXT-02 depeg or reorganization blocks custody settlement
-- T-EXT-02 custody or fiat settlement remains uncertain; no available PHP cash is established
-- T-EXT-02 settleCustodyLeg cannot persist custody or fiat settlement or grant financial authority: T-CORE-02 and T-LEDGER-02 remain HOLD; DEP-11 is not cleared (fail closed)
+- T-EXT-04 batch execution is not authorized
+- T-EXT-04 batch approval is stale or no longer binds the ordered items and currency totals
+- T-EXT-04 supplied item or aggregate limit breach blocks batch execution
+- T-EXT-04 a paid batch item cannot be retried
+- T-EXT-04 item submission remains uncertain; no retry is authorized
+- T-EXT-04 executeBatch cannot persist batch or item state or grant payout authority: T-CORE-02 and T-LEDGER-02 remain HOLD; DEP-12 is not cleared (fail closed)
 
-False flags never establish valid authorization, approved asset/network policy, correct units, finality, resolved outcomes, settled fiat or spendable PHP. Even all flags false must return the 503 refusal. retryable: true on that refusal permits no automatic settlement execution, inquiry scheduling, provider retry or new-key submission. Do not add another error branch/code or any successful custody/chain/off-ramp/fiat payload. No result may attest that a live gate is closed, assets are frozen, a movement was recorded or money was settled.
+The 403/409 errors describe supplied blockers only; they do not attest that live authorization, approval invalidation, a limit decision, a paid item or a provider outcome was authenticated, stored or enforced. PROVIDER_OUTCOME_UNKNOWN records nothing durably and permits no new-key submission or provider retry. Even all flags false must return the 503 refusal. retryable: true on that refusal permits no automatic execution, retry scheduling, inquiry or submission. Add no other branch/code or batch/item result. No result may claim that an item was preserved, paid, rolled back, resumed, safely retried or recorded, or that a live gate was enforced.
 
-No persistence or database/store access, including in-memory substitute stores. No ledger/journal posting, balance mutation, executeCommand, holds store, approval creation/consumption, provider/custody/chain/adapter call, signing, credential operation, queue/outbox/timer work, inquiry, dispatch or financial execution. No minting, transfer, on-ramp/off-ramp, atomic-unit/fiat conversion, liquidity reservation/release/freeze, finality advancement, reorg reversal, compensating event, reconciliation receipt or settlement-state transition. Never authorize or return ok: true, command authority, available PHP cash or a recorded financial outcome. Do not change API/controller/worker/UI wiring, providers, runbooks, Terraform, CI, frozen OpenAPI, migrations, permissions, existing checkers, package configuration or dependencies.
+No persistence or database/store access, including in-memory substitute stores. No ledger/journal posting, balance mutation, executeCommand, holds store, approval creation/consumption, KYB or signatory update, provider/adapter call, credential operation, queue/outbox/timer work, inquiry, dispatch or financial execution. No batch/item/transfer creation, status transition, partial-result aggregation, quote construction/acceptance, currency arithmetic, allocation, reservation/release, deduplication record, fresh identity or compensating event. Never authorize or return ok: true, command authority, payout eligibility, a dispatch/retry permit or a recorded financial outcome. Do not change API/controller/worker/UI wiring, providers, runbooks, Terraform, CI, frozen OpenAPI, migrations, permissions, existing checkers, package configuration or dependencies.
 
-TEST-EXT-02 must cover all sixteen boolean combinations with exact code/status/retryable/detail values, all precedence rules, and the all-false 503. Object.freeze every input and context and verify they remain unchanged; repeat every case and assert the same refusal. Assert the exact error-only result shape in every case, with no extra fields, value, operationId, authority, receipt, settled/frozen/final assertion, balance or available-cash payload. Use no mock store or simulated custody/chain/provider implementation. These tests do not satisfy full TEST-EXT-02, M74/M75, SC-51, PACK-PROVIDER, CP-08/CP-09 or DEP-11: authentic asset/network and allowlist validation, atomic units, transaction/nonce deduplication, finality/reorg/depeg controls, separate custody/off-ramp/fiat accounting, real PHP settlement and funded fiat refunds remain unimplemented and HOLD.
+TEST-EXT-04 must cover all 32 boolean combinations with exact code/status/retryable/detail values, every precedence rule and the all-false 503. Object.freeze every input and context and verify they remain unchanged; repeat every case and assert the same refusal. Assert the exact error-only result shape in every case, with no extra fields, value, operationId, authority, permit, per-item result, receipt, paid/preserved assertion, balance or payout payload. Use no mock store, simulated batch workflow or provider implementation. These tests do not satisfy full TEST-EXT-04, M72/M73, SC-52, PACK-AUTOMATION, PACK-PROVIDER, PACK-API, CP-08/CP-09 or DEP-12: authentic KYB/signatory checks, protected CSV validation, exact ordered approval binding, item quotes/currency totals, durable item identities/states, normal financial gates, paid-item immutability and crash-safe partial-batch retry remain unimplemented and HOLD.
 
 Validation required on the returned implementation head (commands run from apps/kita/):
 
 ```sh
-./node_modules/.bin/vitest run tests/features/test-ext-02.spec.ts tests/features/test-plat-08.spec.ts tests/features/test-grow-06.spec.ts tests/features/test-adm-08.spec.ts tests/features/test-fin-05.spec.ts tests/features/test-fin-06.spec.ts tests/features/test-ext-01.spec.ts
-./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/contracts/src/treasury.ts
-./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/domain/treasury/settle-custody-leg.ts
+./node_modules/.bin/vitest run tests/features/test-ext-04.spec.ts tests/features/test-ext-02.spec.ts tests/features/test-ext-03.spec.ts tests/features/test-adm-05.spec.ts tests/features/test-tx-01.spec.ts tests/features/test-plat-08.spec.ts tests/features/test-grow-06.spec.ts tests/features/test-adm-08.spec.ts tests/features/test-fin-05.spec.ts tests/features/test-fin-06.spec.ts tests/features/test-ext-01.spec.ts
+./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/contracts/src/business.ts
+./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/domain/business/execute-batch.ts
+./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/contracts/src/treasury.ts packages/domain/treasury/settle-custody-leg.ts
 ./node_modules/.bin/tsc --noEmit --project packages/contracts/tsconfig.json
 ./node_modules/.bin/tsc --noEmit --project packages/contracts/tsconfig.json --allowImportingTsExtensions
 ```
 
-Type-check baseline rechecked at the reviewed SHA: the strict treasury.ts command passes. The unmodified contracts package check fails with 15 diagnostics: ten TS5097 import-extension diagnostics and five registry diagnostics. With explicit --allowImportingTsExtensions it fails with the five existing diagnostics in commands.ts (108 TS2502; 345 TS2456) and events.ts (78 TS2502; 125 TS2456; 129 TS7006). Strict checking of the landed platform/recover-financial-authority.ts fails with those three existing events.ts diagnostics. The new checker and TEST-EXT-02 do not yet exist and have not been run. Both strict treasury.ts and new checker checks must pass on the returned head; rerun and report the full package checks separately. Do not claim failing checks pass, change config to hide them, suppress errors, waive a review gate or fix unrelated files. Any new diagnostic or need to expand scope returns to Sol as BATCH-HOLD.
+Type-check baseline rechecked at the reviewed SHA: strict treasury.ts plus settle-custody-leg.ts passes. Strict business.ts fails before any EXT-04 change with three existing events.ts diagnostics (78 TS2502; 125 TS2456; 129 TS7006), reached through its existing WorkerIdentity type import from platform.ts. The unmodified contracts package check fails with 15 diagnostics: ten TS5097 import-extension diagnostics and five registry diagnostics. With explicit --allowImportingTsExtensions it fails with the five existing diagnostics in commands.ts (108 TS2502; 345 TS2456) and events.ts (78 TS2502; 125 TS2456; 129 TS7006).
 
-Inspect final imports and diff for effects, forbidden success/authority paths and edits outside the three allowed implementation files. Return the exact implementation head, changed-file list and complete test/type-check outcomes for Codex Sol max review. Checker test success alone does not close the task or authorize money movement.
+The new checker, types and TEST-EXT-04 do not yet exist and have not been tested. All checker tests and the strict treasury/custody check must pass on the returned head. Strict business.ts and the new checker must introduce no diagnostics beyond the unchanged three-event baseline above; report each actual exit status and diagnostic. Rerun and report both full package checks separately. Existing failures remain failing gates; this authorization does not mark them passed or close them. Do not change configuration, suppress diagnostics, waive a review gate or fix unrelated files. Any new diagnostic, failed checker test, changed baseline failure or need to expand scope returns to Sol as BATCH-HOLD.
+
+Inspect final imports and the complete diff for effects, forbidden success/authority paths and edits outside the three allowed implementation files. Return the exact implementation head, changed-file list and complete test/type-check outcomes for Codex Sol max review. Checker test success alone does not close the task or authorize money movement. No GitHub merge, publication or deployment is authorized.
 
 Implementation follows the established roles: Qoder CLI Efficient Agent Teams/subagents on gpu-fqaf implement the authorized checker; coordinator handles sync/bundles/GitHub; Codex Sol max reviews the returned batch. This document authorizes the next limited checker only and does not start implementation or a swarm. If it cannot fit these constraints, stop the batch and report BATCH-HOLD with the reason. T-CORE-02 remains HOLD.
