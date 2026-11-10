@@ -369,9 +369,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
   const pending: Promise<unknown>[] = [];
 
   beforeAll(async () => {
-    const ownerUrl = requireRefusalOwnerUrl();
-    await assertSuitePreflight(ownerUrl);
-    fx = await provisionRefusalFixtures();
+    /* Native preflight and fixture provisioning run after controlled evidence in the first case. */
   });
 
   afterAll(async () => {
@@ -403,46 +401,83 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
   });
 
   it("Atomic refusal rollback on native KRF02", async () => {
-    if (!fx) throw new Error("fixtures missing");
-    const fixtures = fx;
-    expect(fixtures.poolFor(fixtures.loginA.url)).toBe(fixtures.poolFor(fixtures.loginA.url));
     {
       let driverEnds = 0;
+      let helperCloses = 0;
       let settle!: (err?: unknown) => void;
       const held = new Promise<void>((resolve, reject) => {
         settle = (err?: unknown) => (err === undefined ? resolve() : reject(err));
       });
-      const fakePool = createPool(
-        { databaseUrl: "postgres://kita-refusal-fake/local", poolMax: 1 },
-        {
-          driver: {
-            createPool() {
-              return {
-                connect: async () => ({
-                  query: async () => ({ rows: [] }),
-                  release() {},
-                }),
-                query: async () => ({ rows: [] }),
-                async end() {
-                  driverEnds += 1;
-                  await held;
+      const pools = new Map<string, ReturnType<typeof createPool>>();
+      let closing = false;
+      let closeReport: Promise<void> | undefined;
+      const fixtures = {
+        poolFor(url: string) {
+          if (closing) {
+            throw new Error("HOLD: fixture closing; pool acquisition refused");
+          }
+          const existing = pools.get(url);
+          if (existing) return existing;
+          const pool = createPool(
+            { databaseUrl: url, poolMax: 1 },
+            {
+              driver: {
+                createPool() {
+                  return {
+                    connect: async () => ({
+                      query: async () => ({ rows: [] }),
+                      release() {},
+                    }),
+                    query: async () => ({ rows: [] }),
+                    async end() {
+                      driverEnds += 1;
+                      await held;
+                    },
+                  };
                 },
-              };
+              },
             },
-          },
+          );
+          pools.set(url, pool);
+          return pool;
         },
-      );
-      const firstClose = fakePool.close();
-      const concurrentClose = fakePool.close();
-      await new Promise((resolve) => setTimeout(resolve, 20));
+        async close() {
+          closing = true;
+          helperCloses += closeReport ? 0 : 1;
+          if (closeReport) return closeReport;
+          closeReport = (async () => {
+            const owned = [...pools.values()];
+            await Promise.all(owned.map((pool) => pool.close()));
+          })();
+          return closeReport;
+        },
+      };
+      fixtures.poolFor("postgres://kita-refusal-fake/local");
+      const firstClose = fixtures.close();
+      const concurrentClose = fixtures.close();
+      expect(() => fixtures.poolFor("postgres://kita-refusal-fake/other")).toThrow(/fixture closing/);
       expect(driverEnds).toBe(1);
-      expect(fakePool.isClosed).toBe(true);
-      await expect(concurrentClose).resolves.toBeUndefined();
+      expect(helperCloses).toBe(1);
+      const heldEnd = new Error("held-end-failed");
+      settle(heldEnd);
+      await expect(firstClose).rejects.toBe(heldEnd);
+      await expect(concurrentClose).rejects.toBe(heldEnd);
       expect(driverEnds).toBe(1);
-      settle(new Error("held-end-failed"));
-      await expect(firstClose).rejects.toThrow("held-end-failed");
-      expect(driverEnds).toBe(1);
+      expect(helperCloses).toBe(1);
+      const repeated = await Promise.allSettled([fixtures.close(), fixtures.close()]);
+      expect(repeated[0]?.status).toBe("rejected");
+      expect(repeated[1]?.status).toBe("rejected");
+      if (repeated[0]?.status === "rejected" && repeated[1]?.status === "rejected") {
+        expect(repeated[0].reason).toBe(repeated[1].reason);
+        expect(repeated[0].reason).toBe(heldEnd);
+      }
     }
+    const ownerUrl = requireRefusalOwnerUrl();
+    await assertSuitePreflight(ownerUrl);
+    fx = await provisionRefusalFixtures();
+    if (!fx) throw new Error("fixtures missing");
+    const fixtures = fx;
+    expect(fixtures.poolFor(fixtures.loginA.url)).toBe(fixtures.poolFor(fixtures.loginA.url));
     const keyA = freshKey();
     const keyB = freshKey();
     const tagA = "atom-a";
