@@ -48,3 +48,17 @@ export interface Grow02Output {
   readonly reservationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Grow03CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Grow03Input {
+  readonly lastBudgetUnitReservedTwice: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Grow03Output {
+  readonly lastBudgetUnitReservedTwice: true;
+  readonly promotionReservationId: UUID;
+  readonly traceEvents: readonly string[];
+}
