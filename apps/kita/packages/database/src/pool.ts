@@ -148,12 +148,19 @@ function pgDriver(): PoolDriver {
         // factory never observe or end each other's underlying pg.Pool.
         let inner: PgPoolLike | undefined;
         let pending: Promise<PgPoolCtor> | undefined;
+        const nativeOptions = Object.freeze({
+          connectionString: config.connectionString,
+          ...(config.max !== undefined ? { max: config.max } : {}),
+          ...(config.statementTimeoutMs !== undefined ? { statement_timeout: config.statementTimeoutMs } : {}),
+          ...(config.connectionTimeoutMs !== undefined ? { connectionTimeoutMillis: config.connectionTimeoutMs } : {}),
+          ...(config.idleTimeoutMs !== undefined ? { idleTimeoutMillis: config.idleTimeoutMs } : {}),
+        });
         const ensure = (): Promise<PgPoolLike> => {
           if (inner !== undefined) return Promise.resolve(inner);
           if (pending === undefined) {
             pending = loadPgPoolCtor();
           }
-          return pending.then((Pool) => (inner ??= new Pool(config)));
+          return pending.then((Pool) => (inner ??= new Pool(nativeOptions)));
         };
         return {
           connect: () => ensure().then((p) => p.connect()),
