@@ -18,3 +18,17 @@ export interface Tx10Output {
   readonly occurrenceId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Auto-conversion (T-GROW-06). Revoked mandate, stale revoke version, and
+ * mandate-bound violations never reserve or convert. T-CORE-02 HOLD.
+ */
+export interface Grow06Input {
+  readonly revokedMandate: boolean;
+  readonly staleRevokeVersion: boolean;
+  readonly wouldViolateMandateBounds: boolean;
+}
+
+export type Grow06Output = never;
+
+export type Grow06CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
