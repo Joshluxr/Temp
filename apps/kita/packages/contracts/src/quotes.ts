@@ -18,3 +18,17 @@ export interface Quote04Output {
   readonly quoteId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Quote05CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Quote05Input {
+  readonly expiryEqualityOrRecipientChange: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Quote05Output {
+  readonly expiredQuoteAccepted: true;
+  readonly transferId: UUID;
+  readonly traceEvents: readonly string[];
+}
