@@ -88,3 +88,17 @@ export interface Quote03Output {
   readonly quoteId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Quote06CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Quote06Input {
+  readonly wholesaleDeteriorationWouldChangeCustomerPromise: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Quote06Output {
+  readonly customerPromiseChanged: true;
+  readonly exposureId: UUID;
+  readonly traceEvents: readonly string[];
+}
