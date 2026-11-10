@@ -94,3 +94,17 @@ export interface Tx01Output {
   readonly transferId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Tx05CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Tx05Input {
+  readonly rewrittenReceiptTimestampWouldChangeEligibleRemedy: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Tx05Output {
+  readonly rewrittenReceiptTimestampUsed: true;
+  readonly cancellationId: UUID;
+  readonly traceEvents: readonly string[];
+}
