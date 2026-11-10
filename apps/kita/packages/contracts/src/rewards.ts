@@ -19,3 +19,18 @@ export interface Grow04Output {
   readonly referralId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Grow01CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Grow01Input {
+  readonly duplicatePayoutCallbackAwardsTwice: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Grow01Output {
+  readonly pointsAwardedTwice: true;
+  readonly duplicateCallbackAccepted: true;
+  readonly vestId: UUID;
+  readonly traceEvents: readonly string[];
+}
