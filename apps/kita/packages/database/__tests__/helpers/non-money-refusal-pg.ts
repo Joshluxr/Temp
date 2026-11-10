@@ -104,14 +104,12 @@ function cleanupError(accounts: readonly CloseAccount[], raw: unknown): Error {
 }
 
 function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: unknown): T {
-  if (primary && typeof primary === "object") {
-    hideSecondary(primary, accounts);
-    hideSecondary(primary, raw);
+  if ((typeof primary === "object" && primary !== null) || typeof primary === "function") {
+    hideSecondary(primary as object, accounts);
+    hideSecondary(primary as object, raw);
     return primary;
   }
-  const error = cleanupError(accounts, raw);
-  hideSecondary(error, primary);
-  throw error;
+  throw primary;
 }
 
 type LateOutcome =
@@ -195,10 +193,7 @@ async function endOwnerClient(
   try {
     ending = Promise.resolve(client.end());
   } catch (sync) {
-    return {
-      account: closeAccount("owner-client.end", sync, connected),
-      raw: { status: "sync" as const, reason: sync },
-    };
+    ending = Promise.reject(sync);
   }
   const ledger = watchUntilSettled(ending);
   try {

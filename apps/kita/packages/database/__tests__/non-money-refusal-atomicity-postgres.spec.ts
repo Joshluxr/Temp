@@ -117,12 +117,14 @@ function timedDeferred<T = void>(name: string, ms = 20_000): {
 async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = ownerClient(ownerUrl);
   let connected = false;
+  let failed = false;
   let primary: unknown;
   try {
     await client.connect();
     connected = true;
     return await fn(client);
   } catch (err) {
+    failed = true;
     primary = err;
     throw err;
   } finally {
@@ -140,12 +142,13 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
       }
       const cleanup = new Error(`observer close failed stage=owner-client.end code=${code} connected=${connected}`);
       notePrivate(cleanup, endErr);
-      if (primary && typeof primary === "object") {
-        notePrivate(primary, cleanup);
-        notePrivate(primary, endErr);
-      } else if (primary !== undefined) {
-        notePrivate(cleanup, primary);
-        throw cleanup;
+      const hideable =
+        (typeof primary === "object" && primary !== null) || typeof primary === "function";
+      if (failed && hideable) {
+        notePrivate(primary as object, cleanup);
+        notePrivate(primary as object, endErr);
+      } else if (failed) {
+        throw primary;
       } else {
         throw cleanup;
       }
@@ -490,6 +493,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           requested += 1;
           const client = await pool.connect();
           acquired += 1;
+          if (abortOccurred) {
+            client.release();
+            throw aborted;
+          }
           return {
             async query(sql: string, params?: readonly unknown[]) {
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw aborted;
@@ -498,6 +505,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 sequence.push("begin");
                 if (abortOccurred) throw aborted;
                 await observeIdentity(client, fx!.loginA.name);
+                if (abortOccurred) throw aborted;
                 return result;
               }
               if (sql.includes("record_non_money_refusal") && !sequence.includes("function-a")) {
@@ -511,6 +519,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               try {
                 const result = await client.query(sql, params);
                 if (sql.startsWith("COMMIT")) sequence.push("commit");
+                if (abortOccurred && !sql.startsWith("ROLLBACK")) throw aborted;
                 if (sql.startsWith("ROLLBACK")) sequence.push("rollback");
                 return result;
               } catch (err) {
@@ -661,28 +670,92 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             await allowVictimRetry.promise;
             if (abortOccurred) throw persistAbort;
           }
-          const client = await pool.connect();
+          let client: Awaited<ReturnType<typeof pool.connect>>;
+          try {
+            client = await pool.connect();
+          } catch (err) {
+            const original = err;
+            const entry: (typeof codes)[number] = {
+              side,
+              attempt: next,
+              code: "",
+              sql: "CONNECT",
+              original,
+            };
+            codes.push(entry);
+            try {
+              const value = (original as { code?: unknown }).code;
+              if (typeof value === "string") entry.code = value;
+            } catch {
+              /* retain original without code */
+            }
+            throw err;
+          }
           if (side === "A") acquiredA += 1;
           else acquiredB += 1;
           const attempt = side === "A" ? acquiredA : acquiredB;
+          if (abortOccurred) {
+            try {
+              client.release();
+            } catch (releaseErr) {
+              const original = releaseErr;
+              const entry: (typeof codes)[number] = {
+                side,
+                attempt,
+                code: "",
+                sql: "RELEASE",
+                original,
+              };
+              codes.push(entry);
+              try {
+                const value = (original as { code?: unknown }).code;
+                if (typeof value === "string") entry.code = value;
+              } catch {
+                /* retain original without code */
+              }
+            }
+            throw persistAbort;
+          }
           let recorded = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
               if (sql.startsWith("BEGIN")) {
-                const result = await client.query(sql, params);
-                seq.push(`begin:${attempt}`);
-                if (abortOccurred) throw persistAbort;
-                const ident = await observeIdentity(client, fixtures.loginA.name);
-                if (attempt === 1) backends[side] = ident;
-                return result;
+                try {
+                  const result = await client.query(sql, params);
+                  seq.push(`begin:${attempt}`);
+                  if (abortOccurred) throw persistAbort;
+                  const ident = await observeIdentity(client, fixtures.loginA.name);
+                  if (abortOccurred) throw persistAbort;
+                  if (attempt === 1) backends[side] = ident;
+                  return result;
+                } catch (err) {
+                  const original = err;
+                  const entry: (typeof codes)[number] = {
+                    side,
+                    attempt,
+                    code: "",
+                    pid: backends[side]?.pid,
+                    start: backends[side]?.start,
+                    sql,
+                    original,
+                  };
+                  codes.push(entry);
+                  try {
+                    const value = (original as { code?: unknown }).code;
+                    if (typeof value === "string") entry.code = value;
+                  } catch {
+                    /* retain original without code */
+                  }
+                  throw err;
+                }
               }
               try {
                 const result = await client.query(sql, params);
                 if (sql.startsWith("COMMIT")) seq.push(`commit:${attempt}`);
+                if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
                 if (sql.startsWith("ROLLBACK")) {
                   seq.push(`rollback:${attempt}`);
-                  if (attempt === 1 && victimSide === side) victimRolledBack.resolve();
                 }
                 if (sql.includes("pg_advisory_xact_lock") && !recorded) {
                   seq.push(`lock1:${attempt}`);
@@ -733,8 +806,30 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               }
             },
             release(err?: unknown) {
-              client.release(err);
-              seq.push(`release:${attempt}`);
+              try {
+                client.release(err);
+                seq.push(`release:${attempt}`);
+                if (attempt === 1 && victimSide === side) victimRolledBack.resolve();
+              } catch (releaseErr) {
+                const original = releaseErr;
+                const entry: (typeof codes)[number] = {
+                  side,
+                  attempt,
+                  code: "",
+                  pid: backends[side]?.pid,
+                  start: backends[side]?.start,
+                  sql: "RELEASE",
+                  original,
+                };
+                codes.push(entry);
+                try {
+                  const value = (original as { code?: unknown }).code;
+                  if (typeof value === "string") entry.code = value;
+                } catch {
+                  /* retain original without code */
+                }
+                throw releaseErr;
+              }
             },
           } satisfies PoolClientLike;
         },
