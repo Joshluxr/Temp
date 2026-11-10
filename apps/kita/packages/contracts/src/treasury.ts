@@ -32,3 +32,19 @@ export interface Fin06Output {
   readonly allocationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Custody settlement (T-EXT-02). Unauthorized movement, policy mismatch,
+ * depeg/reorg, and uncertain settlement never produce available PHP cash.
+ * T-CORE-02, T-LEDGER-02, and DEP-11 remain HOLD.
+ */
+export interface Ext02Input {
+  readonly unauthorizedCustodyMovement: boolean;
+  readonly assetOrNetworkPolicyMismatch: boolean;
+  readonly depegOrReorgDetected: boolean;
+  readonly settlementUncertain: boolean;
+}
+
+export type Ext02Output = never;
+
+export type Ext02CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration'>;
