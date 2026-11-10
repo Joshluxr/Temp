@@ -70,3 +70,16 @@ export interface Pay02Output {
   readonly routeId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Pay03Input {
+  readonly acceptedRequestMarksRecipientCredited: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Pay03Output {
+  readonly recipientCredited: true;
+  readonly walletCreditDispatched: true;
+  readonly payoutId: UUID;
+  readonly traceEvents: readonly string[];
+}
