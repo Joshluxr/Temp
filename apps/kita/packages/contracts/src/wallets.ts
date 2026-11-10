@@ -21,3 +21,17 @@ export interface Wal01Output {
   readonly walletId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Wal02CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Wal02Input {
+  readonly creditWithoutSettlementOrApprovedEvidence: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Wal02Output {
+  readonly fundsCredited: true;
+  readonly topupId: UUID;
+  readonly traceEvents: readonly string[];
+}
