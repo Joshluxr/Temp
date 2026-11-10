@@ -46,3 +46,17 @@ export interface Quote08Output {
   readonly draftId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Quote07CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Quote07Input {
+  readonly displayRoundingWouldChangeExecutionArithmetic: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Quote07Output {
+  readonly executionArithmeticChangedByDisplayRounding: true;
+  readonly quoteId: UUID;
+  readonly traceEvents: readonly string[];
+}
