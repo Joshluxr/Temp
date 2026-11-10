@@ -62,3 +62,17 @@ export interface Grow03Output {
   readonly promotionReservationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Grow09CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Grow09Input {
+  readonly issuedVestedRedeemedExpiredDisagreeProvision: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Grow09Output {
+  readonly fiatBalanceImplied: true;
+  readonly statementId: UUID;
+  readonly traceEvents: readonly string[];
+}
