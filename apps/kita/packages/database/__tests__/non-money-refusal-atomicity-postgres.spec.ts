@@ -412,28 +412,81 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         sawEnd = resolve;
       });
       const heldEnd = new Error("held-end-failed");
-      const fixtures = await provisionRefusalFixtures({
-        poolDriver: {
-          createPool() {
-            return {
-              connect: async () => ({
-                query: async () => ({ rows: [] }),
-                release() {},
-              }),
-              query: async () => ({ rows: [] }),
-              async end() {
-                driverEnds += 1;
-                sawEnd();
-                await held;
+      const previousOwnerUrl = process.env.KITA_REFUSAL_TEST_OWNER_URL;
+      const OriginalClient = pg.Client;
+      const originalPool = (pg as { Pool?: unknown }).Pool;
+      let bookSeq = 0;
+      const fakeQuery = async (sql: string) => {
+        if (sql.includes("server_version_num") || sql.includes("session_replication_role")) {
+          return {
+            rows: [
+              {
+                server_version_num: "180006",
+                current_database: "kita_core_test",
+                session_user: "kita_test",
+                current_user: "kita_test",
+                schema_owner: "kita_test",
+                fsync: "on",
+                full_page_writes: "on",
+                synchronous_commit: "on",
+                rolsuper: false,
+                rolcreaterole: true,
+                replication_role: "origin",
+                fn_owner: "kita_refusal_definer",
+                fn_hash: "a6140caff93ff7a014ee33ae6c32bb669f8bd75322580fdaafc9c3179f76898a",
+                fn_len: "3950",
+                prosecdef: true,
+                temp_grant: "0",
               },
-            };
-          },
-        },
-      });
+            ],
+          };
+        }
+        if (sql.includes("SELECT version()")) return { rows: [{ version: "PostgreSQL 18.6" }] };
+        if (sql.includes("INSERT INTO kita.books")) {
+          bookSeq += 1;
+          return { rows: [{ id: `00000000-0000-4000-8000-${String(bookSeq).padStart(12, "0")}` }] };
+        }
+        if (sql.includes("CREATE ROLE")) return { rows: [{ sql: "CREATE ROLE kita_refusal_fake LOGIN" }] };
+        if (sql.includes("GRANT kita_refusal_recorder")) {
+          return { rows: [{ sql: "GRANT kita_refusal_recorder TO kita_refusal_fake" }] };
+        }
+        if (sql.includes("FROM pg_catalog.pg_roles") && sql.includes("oid")) {
+          return { rows: [{ oid: String(10_000 + bookSeq) }] };
+        }
+        if (sql.includes("INSERT INTO kita.non_money_refusal_principals")) {
+          return { rowCount: 1, rows: [] };
+        }
+        return { rows: [], rowCount: 0 };
+      };
+      class FakeClient {
+        async connect() {}
+        async end() {}
+        query(sql: string) {
+          return fakeQuery(sql);
+        }
+      }
+      class FakePool {
+        async connect() {
+          return { query: fakeQuery, release() {} };
+        }
+        query(sql: string) {
+          return fakeQuery(sql);
+        }
+        async end() {
+          driverEnds += 1;
+          sawEnd();
+          await held;
+        }
+      }
+      process.env.KITA_REFUSAL_TEST_OWNER_URL = "postgres://kita_test@127.0.0.1:54339/kita_core_test";
+      (pg as { Client: unknown }).Client = FakeClient;
+      (pg as { Pool: unknown }).Pool = FakePool;
+      let fixtures: RefusalPgFixtures | undefined;
       let firstClose: Promise<void> | undefined;
       let concurrentClose: Promise<void> | undefined;
       try {
-        fixtures.poolFor("postgres://kita-refusal-fake/local");
+        fixtures = await provisionRefusalFixtures();
+        fixtures.poolFor(fixtures.loginA.url);
         firstClose = fixtures.close();
         const firstObserved = firstClose.then(
           () => undefined,
@@ -444,7 +497,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           () => undefined,
           (err: unknown) => err,
         );
-        expect(() => fixtures.poolFor("postgres://kita-refusal-fake/other")).toThrow(/fixture closing/);
+        expect(() => fixtures!.poolFor("postgres://kita_test@127.0.0.1:54339/kita_core_test")).toThrow(
+          /fixture closing/,
+        );
         await endStarted;
         expect(driverEnds).toBe(1);
         settle(heldEnd);
@@ -462,7 +517,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         }
       } finally {
         settle(heldEnd);
-        await Promise.allSettled([firstClose ?? Promise.resolve(), concurrentClose ?? Promise.resolve(), fixtures.close()]);
+        await Promise.allSettled([
+          firstClose ?? Promise.resolve(),
+          concurrentClose ?? Promise.resolve(),
+          fixtures?.close() ?? Promise.resolve(),
+        ]);
+        (pg as { Client: unknown }).Client = OriginalClient;
+        if (originalPool === undefined) delete (pg as { Pool?: unknown }).Pool;
+        else (pg as { Pool: unknown }).Pool = originalPool;
+        if (previousOwnerUrl === undefined) delete process.env.KITA_REFUSAL_TEST_OWNER_URL;
+        else process.env.KITA_REFUSAL_TEST_OWNER_URL = previousOwnerUrl;
       }
     }
     const ownerUrl = requireRefusalOwnerUrl();
