@@ -24,6 +24,24 @@ export interface Adm01Output {
 export type Adm01CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
 
 /**
+ * Set hold (T-ADM-03). Hold after dispatch must never be treated as
+ * pre-dispatch cancellation. Holds store is T-CORE-02 (HOLD).
+ */
+export interface Adm03Input {
+  readonly holdAfterDispatchWouldBeTreatedAsPreDispatchCancel: boolean;
+  readonly journalPosting?: never;
+  readonly preDispatchCancel?: never;
+}
+
+export interface Adm03Output {
+  readonly holdRecorded: true;
+  readonly treatedAsPreDispatchCancel: true;
+  readonly traceEvents: readonly string[];
+}
+
+export type Adm03CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+/**
  * Ops queue (T-ADM-02). Projections never confer mutation rights.
  */
 export interface Adm02Input {
