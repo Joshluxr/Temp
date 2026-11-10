@@ -1270,7 +1270,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     client,
                     fixtures.loginA.name,
                     expectedLoginOid(fixtures.loginA),
-                    () => phaseLedgerOk(attempt),
+                    () => !abortOccurred && phaseLedgerOk(attempt),
                   );
                   if (!phaseLedgerOk(attempt)) {
                     throw persistAbort ?? new Error("HOLD: identity after ambiguous ledger");
