@@ -83,3 +83,18 @@ export interface Fund02Output {
   readonly settlementId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Fund03CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Fund03Input {
+  readonly authorizationWouldPostCashOrCaptureLabeledBankCash: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fund03Output {
+  readonly authorizationPostedCash: true;
+  readonly captureLabeledBankCash: true;
+  readonly captureId: UUID;
+  readonly traceEvents: readonly string[];
+}
