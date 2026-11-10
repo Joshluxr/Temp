@@ -947,6 +947,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             throw persistAbort;
           }
           let recorded = false;
+          let firstLockAck = false;
+          let recorderAck = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
@@ -980,19 +982,37 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   throw err;
                 }
               }
+              let driverAcked = false;
               try {
                 const result = await client.query(sql, params);
+                driverAcked = true;
                 if (sql.startsWith("COMMIT")) seq.push(`commit:${attempt}`);
-                if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
                 if (sql.startsWith("ROLLBACK")) {
                   seq.push(`rollback:${attempt}`);
                   if (attempt === 1 && victimSide === side) victimRollbackAck = true;
                 }
-                if (sql.includes("pg_advisory_xact_lock") && !recorded) {
+                const ownFirst = side === "A" ? [lockA, 1] : [lockB, 1];
+                const recorderParams = side === "A" ? [keyA, tagA] : [keyB, tagB];
+                if (
+                  sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+                  Array.isArray(params) &&
+                  params.length === 2 &&
+                  params[0] === ownFirst[0] &&
+                  params[1] === ownFirst[1]
+                ) {
+                  firstLockAck = true;
                   seq.push(`lock1:${attempt}`);
                 }
-                if (sql.includes("record_non_money_refusal") && !recorded) {
+                if (
+                  sql === "SELECT kita.record_non_money_refusal($1,$2) AS body" &&
+                  Array.isArray(params) &&
+                  params.length === 2 &&
+                  params[0] === recorderParams[0] &&
+                  params[1] === recorderParams[1] &&
+                  firstLockAck
+                ) {
                   recorded = true;
+                  recorderAck = true;
                   seq.push(`function:${attempt}`);
                   if (attempt === 1) {
                     if (side === "A") firstA.resolve();
@@ -1001,7 +1021,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     if (abortOccurred) throw persistAbort;
                   }
                 }
-                if (sql.includes("pg_advisory_xact_lock") && recorded) {
+                if (
+                  sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+                  recorded &&
+                  recorderAck
+                ) {
                   seq.push(`lock2:${attempt}`);
                   if (attempt === 1) {
                     await victimRolledBack.promise;
@@ -1010,13 +1034,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     if (abortOccurred) throw persistAbort;
                   }
                 }
+                if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
                 return result;
               } catch (err) {
-                if (sql.includes("pg_advisory_xact_lock") && recorded) {
-                  seq.push(`lock2:${attempt}`);
-                }
                 const original = err;
-                const forwardedParams = Array.isArray(params) ? [...params] : [];
                 const entry: (typeof codes)[number] = {
                   side,
                   attempt,
@@ -1024,22 +1045,31 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   pid: backends[side]?.pid,
                   start: backends[side]?.start,
                   sql,
-                  params: forwardedParams,
                   original,
                 };
                 codes.push(entry);
+                let forwardedParams: unknown[] = [];
                 try {
+                  forwardedParams = Array.isArray(params) ? [...params] : [];
+                  entry.params = forwardedParams;
                   const value = (original as { code?: unknown }).code;
                   if (typeof value === "string") entry.code = value;
-                } catch {
-                  /* retain original without code */
+                } catch (snapshotErr) {
+                  notePrivate(entry, snapshotErr);
+                  if ((typeof original === "object" && original !== null) || typeof original === "function") {
+                    notePrivate(original as object, snapshotErr);
+                  }
+                  throw original;
                 }
                 const opposing = side === "A" ? [lockB, 1] : [lockA, 1];
                 if (
+                  !driverAcked &&
+                  original !== persistAbort &&
                   victimSide === undefined &&
                   entry.code === "40P01" &&
                   attempt === 1 &&
-                  recorded &&
+                  firstLockAck &&
+                  recorderAck &&
                   sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
                   forwardedParams.length === 2 &&
                   forwardedParams[0] === opposing[0] &&
@@ -1047,9 +1077,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   backends[side]?.pid !== undefined &&
                   backends[side]?.start !== undefined
                 ) {
+                  seq.push(`lock2:${attempt}`);
                   victimSide = side;
+                } else if (sql === "SELECT pg_advisory_xact_lock($1, $2)" && recorded && !driverAcked) {
+                  seq.push(`lock2:${attempt}`);
                 }
-                throw err;
+                throw original;
               }
             },
             release(err?: unknown) {
