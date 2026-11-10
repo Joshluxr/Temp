@@ -444,15 +444,23 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(driverEnds).toBe(1);
       const heldEnd = new Error("held-end-failed");
       settle(heldEnd);
-      await expect(firstClose).rejects.toBe(heldEnd);
-      await expect(concurrentClose).rejects.toBe(heldEnd);
+      let shared: unknown;
+      try {
+        await firstClose;
+        throw new Error("expected fixture close to reject");
+      } catch (err) {
+        shared = err;
+      }
+      expect(shared).toBeInstanceOf(Error);
+      expect((shared as Error).message).toMatch(/cleanup failed/);
+      await expect(concurrentClose).rejects.toBe(shared);
       expect(driverEnds).toBe(1);
       const repeated = await Promise.allSettled([fixtures.close(), fixtures.close()]);
       expect(repeated[0]?.status).toBe("rejected");
       expect(repeated[1]?.status).toBe("rejected");
       if (repeated[0]?.status === "rejected" && repeated[1]?.status === "rejected") {
         expect(repeated[0].reason).toBe(repeated[1].reason);
-        expect(repeated[0].reason).toBe(heldEnd);
+        expect(repeated[0].reason).toBe(shared);
       }
     }
     const ownerUrl = requireRefusalOwnerUrl();

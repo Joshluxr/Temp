@@ -398,7 +398,7 @@ export function createRefusalPoolRegistry(build: (url: string) => ManagedPool): 
       pools.set(url, pool);
       return pool;
     },
-    async close(): Promise<void> {
+    close(): Promise<void> {
       closing = true;
       if (closeReport) return closeReport;
       closeReport = (async () => {
