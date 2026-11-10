@@ -127,16 +127,12 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
       const cleanup = new Error(`observer close failed stage=owner-client.end code=${code} connected=${connected}`);
       notePrivate(cleanup, endErr);
       if (primary && typeof primary === "object") {
-        try {
-          (primary as { closeAccounts?: unknown[] }).closeAccounts = [
-            ...((primary as { closeAccounts?: unknown[] }).closeAccounts ?? []),
-            { stage: "owner-client.end", code, connected },
-          ];
-        } catch {
-          notePrivate(primary, cleanup);
-        }
+        notePrivate(primary, cleanup);
         notePrivate(primary, endErr);
-      } else if (!primary) {
+      } else if (primary !== undefined) {
+        notePrivate(cleanup, primary);
+        throw cleanup;
+      } else {
         throw cleanup;
       }
     }
@@ -226,13 +222,17 @@ async function observeIdentity(
   if (typeof row?.start !== "string" || row.start.length === 0) {
     throw new Error("HOLD: backend_start missing");
   }
+  const pid = Number(row.pid);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    throw new Error("HOLD: backend pid missing");
+  }
   const statementMs = Number.parseInt(String(row.statement_timeout), 10);
   const lockMs = Number.parseInt(String(row.lock_timeout), 10);
   const deadlockMs = Number.parseInt(String(row.deadlock_timeout), 10);
   expect(Number.isFinite(statementMs) && statementMs > 0).toBe(true);
   expect(Number.isFinite(lockMs)).toBe(true);
   expect(Number.isFinite(deadlockMs) && deadlockMs > 0).toBe(true);
-  return { pid: Number(row.pid), start: row.start, oid: row.login_oid };
+  return { pid, start: row.start, oid: row.login_oid };
 }
 
 async function assertSuitePreflight(ownerUrl: string): Promise<void> {
@@ -380,6 +380,43 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     if (!fx) throw new Error("fixtures missing");
     const fixtures = fx;
     expect(fixtures.poolFor(fixtures.loginA.url)).toBe(fixtures.poolFor(fixtures.loginA.url));
+    {
+      let driverEnds = 0;
+      let settle!: (err?: unknown) => void;
+      const held = new Promise<void>((resolve, reject) => {
+        settle = (err?: unknown) => (err === undefined ? resolve() : reject(err));
+      });
+      const fakePool = createPool(
+        { databaseUrl: "postgres://kita-refusal-fake/local", poolMax: 1 },
+        {
+          driver: {
+            createPool() {
+              return {
+                connect: async () => ({
+                  query: async () => ({ rows: [] }),
+                  release() {},
+                }),
+                query: async () => ({ rows: [] }),
+                async end() {
+                  driverEnds += 1;
+                  await held;
+                },
+              };
+            },
+          },
+        },
+      );
+      const firstClose = fakePool.close();
+      const concurrentClose = fakePool.close();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(driverEnds).toBe(1);
+      expect(fakePool.isClosed).toBe(true);
+      await expect(concurrentClose).resolves.toBeUndefined();
+      expect(driverEnds).toBe(1);
+      settle(new Error("held-end-failed"));
+      await expect(firstClose).rejects.toThrow("held-end-failed");
+      expect(driverEnds).toBe(1);
+    }
     const keyA = freshKey();
     const keyB = freshKey();
     const tagA = "atom-a";
@@ -570,6 +607,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       pid?: number;
       start?: string;
       sql?: string;
+      original?: unknown;
     }> = [];
     let acquiredA = 0;
     let acquiredB = 0;
@@ -608,7 +646,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               try {
                 const result = await client.query(sql, params);
                 if (sql.startsWith("COMMIT")) seq.push(`commit:${attempt}`);
-                if (sql.startsWith("ROLLBACK")) seq.push(`rollback:${attempt}`);
+                if (sql.startsWith("ROLLBACK")) {
+                  seq.push(`rollback:${attempt}`);
+                  if (attempt === 1 && victimSide === side) victimRolledBack.resolve();
+                }
                 if (sql.includes("pg_advisory_xact_lock") && !recorded) {
                   seq.push(`lock1:${attempt}`);
                 }
@@ -637,7 +678,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   seq.push(`lock2:${attempt}`);
                 }
                 const code = (err as { code?: string }).code;
-                if (code) codes.push({ side, attempt, code, pid: backends[side]?.pid, start: backends[side]?.start });
+                codes.push({
+                  side,
+                  attempt,
+                  code: code ?? "",
+                  pid: backends[side]?.pid,
+                  start: backends[side]?.start,
+                  sql,
+                  original: err,
+                });
                 if (code === "40P01" && attempt === 1) victimSide = side;
                 throw err;
               }
@@ -645,7 +694,6 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             release(err?: unknown) {
               client.release(err);
               seq.push(`release:${attempt}`);
-              if (attempt === 1 && victimSide === side) victimRolledBack.resolve();
             },
           } satisfies PoolClientLike;
         },
@@ -738,6 +786,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       await expect(runA).resolves.toEqual(STORED);
       await expect(runB).resolves.toEqual(STORED);
       expect(acquiredA + acquiredB).toBe(3);
+      expect(gatedA).toBe(acquiredA);
+      expect(gatedB).toBe(acquiredB);
       expect(Math.max(acquiredA, acquiredB)).toBe(2);
       expect(Math.min(acquiredA, acquiredB)).toBe(1);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);

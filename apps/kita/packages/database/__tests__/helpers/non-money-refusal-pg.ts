@@ -185,7 +185,7 @@ async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise
 async function endOwnerClient(
   client: pg.Client,
   connected: boolean,
-): Promise<{ account?: CloseAccount; raw?: unknown }> {
+): Promise<{ account?: CloseAccount; raw?: unknown; ledger?: CloseLedger }> {
   let ending: Promise<void>;
   try {
     ending = Promise.resolve(client.end());
@@ -195,11 +195,11 @@ async function endOwnerClient(
       raw: { status: "sync" as const, reason: sync },
     };
   }
+  const ledger = watchUntilSettled(ending);
   try {
     await bounded("owner-client.end", ending, 22_000);
-    return {};
+    return { ledger };
   } catch (err) {
-    const ledger = watchUntilSettled(ending);
     const late = await observeLate(ending, 1_000);
     const raw = { first: err, late, ledger };
     if (err && typeof err === "object") {
@@ -590,11 +590,6 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     };
     if (err && typeof err === "object") {
       primary = err;
-      try {
-        (err as { provisioned?: typeof inventory }).provisioned = inventory;
-      } catch {
-        hideSecondary(err, inventory);
-      }
       hideSecondary(err, inventory);
     } else {
       const boxed = new Error("setup failed");
@@ -609,14 +604,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       if (primary !== undefined) {
         retainCleanup(primary, [ended.account], ended.raw);
         if (primary && typeof primary === "object") {
-          const snapshot = { ...provisioned };
-          try {
-            const existing = (primary as { provisioned?: typeof provisioned }).provisioned;
-            (primary as { provisioned?: typeof provisioned }).provisioned = existing ?? snapshot;
-          } catch {
-            hideSecondary(primary, snapshot);
-          }
-          hideSecondary(primary, snapshot);
+          hideSecondary(primary, { ...provisioned });
         }
       } else {
         const error = cleanupError([ended.account], ended.raw);
