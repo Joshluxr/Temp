@@ -80,6 +80,27 @@ function loginUrl(ownerUrl: string, name: string, secret: string): string {
   return parsed.toString();
 }
 
+export async function fetchReservedHash(
+  ownerUrl: string,
+  bookId: string,
+  actorId: string,
+  key: string,
+): Promise<string | undefined> {
+  const client = new pg.Client({ connectionString: ownerUrl });
+  await client.connect();
+  try {
+    const result = await client.query<{ request_hash: string }>(
+      `SELECT request_hash
+       FROM kita.command_keys
+       WHERE book_id = $1 AND actor_id = $2 AND operation = 'recordNonMoneyRefusal.v1' AND key = $3`,
+      [bookId, actorId, key],
+    );
+    return result.rows[0]?.request_hash;
+  } finally {
+    await client.end();
+  }
+}
+
 export async function countReservedRows(
   ownerUrl: string,
   bookId: string,

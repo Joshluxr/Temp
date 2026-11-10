@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createPool } from "../src/pool.js";
 import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.ts";
 import {
   countReservedRows,
+  fetchReservedHash,
   postgresSuiteSelected,
   provisionRefusalFixtures,
   type RefusalPgFixtures,
@@ -126,6 +128,32 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
       ).resolves.toBe(1);
     } finally {
       await pool.close();
+    }
+  });
+
+  it("stores the independently computed rr1 SHA-256 over UTF-8 canonical bytes", async () => {
+    const key = "dddddddddddddddd";
+    const tag = "golden1";
+    const poolA = fx.poolFor(fx.loginA.url);
+    await expect(
+      recordNonMoneyRefusal(poolA, { idempotencyKey: key, requestTag: tag }),
+    ).resolves.toEqual(STORED);
+    const canonical = `{"requestTag":"${tag}","schemaVersion":1}`;
+    const digest = createHash("sha256").update(canonical, "utf8").digest("hex");
+    await expect(
+      fetchReservedHash(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key),
+    ).resolves.toBe(`rr1:${digest}`);
+  });
+
+  it("denies SET ROLE to the definer from a restricted login", async () => {
+    const poolA = fx.poolFor(fx.loginA.url);
+    const client = await poolA.connect();
+    try {
+      await expect(client.query("SET ROLE kita_refusal_definer")).rejects.toMatchObject({
+        code: "42501",
+      });
+    } finally {
+      client.release();
     }
   });
 });
