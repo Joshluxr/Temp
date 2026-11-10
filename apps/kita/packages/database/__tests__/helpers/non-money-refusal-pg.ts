@@ -79,8 +79,8 @@ export function ownerClient(ownerUrl: string): pg.Client {
 export async function assertRefusalSecurityPreflight(): Promise<void> {
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
-  await client.connect();
   try {
+    await client.connect();
     const row = (
       await client.query<{
         server_version_num: string;
@@ -157,7 +157,11 @@ export async function assertRefusalSecurityPreflight(): Promise<void> {
     }
     if (row.temp_grant !== "0") throw new Error("HOLD: temporary definer membership is present");
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      /* connect may have failed */
+    }
   }
 }
 
@@ -186,8 +190,8 @@ export async function fetchReservedHash(
   key: string,
 ): Promise<string | undefined> {
   const client = ownerClient(ownerUrl);
-  await client.connect();
   try {
+    await client.connect();
     const result = await client.query<{ request_hash: string }>(
       `SELECT request_hash
        FROM kita.command_keys
@@ -196,7 +200,11 @@ export async function fetchReservedHash(
     );
     return result.rows[0]?.request_hash;
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      /* connect may have failed */
+    }
   }
 }
 
@@ -207,8 +215,8 @@ export async function countReservedRows(
   key: string,
 ): Promise<number> {
   const client = ownerClient(ownerUrl);
-  await client.connect();
   try {
+    await client.connect();
     const result = await client.query<{ n: string }>(
       `SELECT count(*)::text AS n
        FROM kita.command_keys
@@ -217,7 +225,11 @@ export async function countReservedRows(
     );
     return Number(result.rows[0]?.n ?? "0");
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      /* connect may have failed */
+    }
   }
 }
 
@@ -225,8 +237,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   await assertRefusalSecurityPreflight();
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
-  await client.connect();
   try {
+    await client.connect();
     const version = await client.query<{ version: string }>("SELECT version()");
     if (!version.rows[0]?.version.includes("PostgreSQL 18.")) {
       throw new Error(`expected PostgreSQL 18, got ${version.rows[0]?.version ?? "unknown"}`);
@@ -303,11 +315,18 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         return pool;
       },
       async close(): Promise<void> {
-        await Promise.all([...pools.values()].map((pool) => pool.close()));
+        const closing = [...pools.values()].map((pool) => pool.close());
         pools.clear();
+        const results = await Promise.allSettled(closing);
+        const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (rejected) throw rejected.reason;
       },
     };
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      /* connect may have failed */
+    }
   }
 }

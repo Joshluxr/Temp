@@ -174,20 +174,20 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         tagB,
       );
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
+      let requested = 0;
       let acquired = 0;
       const sequence: string[] = [];
       let driverErr: unknown;
       const wrapping: PoolLike = {
         async connect() {
-          acquired += 1;
+          requested += 1;
           const client = await pool.connect();
+          acquired += 1;
           return {
             async query(sql: string, params?: readonly unknown[]) {
-              if (sql.startsWith("BEGIN")) sequence.push("begin");
-              if (sql.startsWith("COMMIT")) sequence.push("commit");
-              if (sql.startsWith("ROLLBACK")) sequence.push("rollback");
               if (sql.startsWith("BEGIN")) {
                 const result = await client.query(sql, params);
+                sequence.push("begin");
                 await observeIdentity(client, fx!.loginA.name);
                 return result;
               }
@@ -199,15 +199,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 return result;
               }
               try {
-                return await client.query(sql, params);
+                const result = await client.query(sql, params);
+                if (sql.startsWith("COMMIT")) sequence.push("commit");
+                if (sql.startsWith("ROLLBACK")) sequence.push("rollback");
+                return result;
               } catch (err) {
                 if (sql.includes("record_non_money_refusal")) driverErr = err;
                 throw err;
               }
             },
             release(err?: unknown) {
-              sequence.push("release");
               client.release(err);
+              sequence.push("release");
             },
           } satisfies PoolClientLike;
         },
@@ -240,6 +243,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       }
       expect(helperErr).toBe(driverErr);
       expect((helperErr as { code?: string }).code).toBe("KRF02");
+      expect(requested).toBe(1);
       expect(acquired).toBe(1);
       expect(sequence).toEqual(["begin", "function-a", "rollback", "release"]);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
@@ -261,6 +265,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     } finally {
       afterA.reject(new Error("cleanup"));
       continueB.reject(new Error("cleanup"));
+      await Promise.allSettled(pending);
       await pool.close();
     }
   });
@@ -315,14 +320,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const victimRolledBack = timedDeferred("victimRolledBack");
     const allowSurvivorCommit = timedDeferred("allowSurvivorCommit");
     const allowVictimRetry = timedDeferred("allowVictimRetry");
-    const codes: Array<{ side: string; attempt: number; code: string }> = [];
+    const codes: Array<{ side: "A" | "B"; attempt: number; code: string }> = [];
     let acquiredA = 0;
     let acquiredB = 0;
     let gatedA = 0;
     let gatedB = 0;
     const seqA: string[] = [];
     const seqB: string[] = [];
-    let victimPid: number | undefined;
+    const backends: Record<string, { pid: number; start: string }> = {};
+    let victimSide: "A" | "B" | undefined;
 
     function wrap(pool: ReturnType<typeof createPool>, side: "A" | "B"): PoolLike {
       const seq = side === "A" ? seqA : seqB;
@@ -330,7 +336,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         async connect() {
           if (side === "A") gatedA += 1;
           else gatedB += 1;
-          const next = (side === "A" ? gatedA : gatedB);
+          const next = side === "A" ? gatedA : gatedB;
           if (next === 2) await allowVictimRetry.promise;
           const client = await pool.connect();
           if (side === "A") acquiredA += 1;
@@ -343,16 +349,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 const result = await client.query(sql, params);
                 seq.push(`begin:${attempt}`);
                 const ident = await observeIdentity(client, fx!.loginA.name);
-                if (attempt === 1) victimPid = ident.pid;
+                if (attempt === 1) backends[side] = ident;
                 return result;
               }
               try {
                 const result = await client.query(sql, params);
                 if (sql.startsWith("COMMIT")) seq.push(`commit:${attempt}`);
-                if (sql.startsWith("ROLLBACK")) {
-                  seq.push(`rollback:${attempt}`);
-                  if (attempt === 1) victimRolledBack.resolve();
-                }
+                if (sql.startsWith("ROLLBACK")) seq.push(`rollback:${attempt}`);
                 if (sql.includes("record_non_money_refusal") && attempt === 1 && !recorded) {
                   recorded = true;
                   seq.push(`function:${attempt}`);
@@ -369,12 +372,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               } catch (err) {
                 const code = (err as { code?: string }).code;
                 if (code) codes.push({ side, attempt, code });
+                if (code === "40P01" && attempt === 1) victimSide = side;
                 throw err;
               }
             },
             release(err?: unknown) {
-              seq.push(`release:${attempt}`);
               client.release(err);
+              seq.push(`release:${attempt}`);
+              if (attempt === 1 && victimSide === side) victimRolledBack.resolve();
             },
           } satisfies PoolClientLike;
         },
@@ -414,7 +419,32 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         await new Promise((r) => setTimeout(r, 25));
       }
       expect(codes.some((c) => c.code === "40P01" && c.attempt === 1)).toBe(true);
+      expect(victimSide === "A" || victimSide === "B").toBe(true);
       await victimRolledBack.promise;
+      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
+      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
+      const victimBackend = backends[victimSide!];
+      expect(victimBackend?.pid).toBeGreaterThan(0);
+      const lockClient = new pg.Client({
+        connectionString: fx.ownerUrl,
+        connectionTimeoutMillis: 10_000,
+        statement_timeout: 15_000,
+      });
+      await lockClient.connect();
+      try {
+        const leftover = await lockClient.query(
+          `SELECT count(*)::int AS n
+           FROM pg_locks l
+           JOIN pg_stat_activity a ON a.pid = l.pid
+           WHERE l.locktype = 'advisory'
+             AND a.pid = $1
+             AND a.backend_start::text = $2`,
+          [victimBackend.pid, victimBackend.start],
+        );
+        expect(Number(leftover.rows[0]?.n)).toBe(0);
+      } finally {
+        await lockClient.end();
+      }
       allowSurvivorCommit.resolve();
       const settled = await Promise.race([
         runA.then((body) => ({ side: "A" as const, body })),
@@ -463,15 +493,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
       expect(seqA.join(",")).toMatch(/begin:1/);
       expect(seqB.join(",")).toMatch(/begin:1/);
-      expect(victimPid).toBeGreaterThan(0);
+      expect(seqA.join(",") + seqB.join(",")).toMatch(/rollback:1/);
+      expect(seqA.join(",") + seqB.join(",")).toMatch(/release:1/);
+      expect(seqA.join(",") + seqB.join(",")).toMatch(/commit:1/);
     } catch (err) {
       abort(err);
       throw err;
     } finally {
       abort(new Error("cleanup"));
       await Promise.allSettled([runA, runB]);
-      await poolA.close();
-      await poolB.close();
+      const closes = await Promise.allSettled([poolA.close(), poolB.close()]);
+      const failed = closes.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failed) throw failed.reason;
     }
   });
 });
