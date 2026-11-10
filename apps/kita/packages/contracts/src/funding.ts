@@ -43,3 +43,16 @@ export interface Fund07Output {
   readonly movementId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Fund06Input {
+  readonly erasePaidPhpOrSeizeUnrelatedWallet: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fund06Output {
+  readonly paidPhpErased: true;
+  readonly unrelatedWalletSeized: true;
+  readonly disputeId: UUID;
+  readonly traceEvents: readonly string[];
+}
