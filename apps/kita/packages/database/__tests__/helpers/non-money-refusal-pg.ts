@@ -234,14 +234,8 @@ async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => P
     return await fn(client);
   } catch (err) {
     failed = true;
-    if (err && typeof err === "object") {
-      primary = err;
-    } else {
-      const boxed = new Error("owner-client failed");
-      hideSecondary(boxed, err);
-      primary = boxed;
-    }
-    throw primary;
+    primary = err;
+    throw err;
   } finally {
     const ended = await endOwnerClient(client, connected);
     if (ended.account) {

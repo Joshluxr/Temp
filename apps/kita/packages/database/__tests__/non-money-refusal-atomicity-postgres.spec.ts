@@ -123,14 +123,8 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
     connected = true;
     return await fn(client);
   } catch (err) {
-    if (err && typeof err === "object") {
-      primary = err;
-    } else {
-      const boxed = new Error("observer failed");
-      notePrivate(boxed, err);
-      primary = boxed;
-    }
-    throw primary;
+    primary = err;
+    throw err;
   } finally {
     try {
       await client.end();
@@ -540,6 +534,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       void running.catch((err) => {
         abortOccurred = true;
         aborted = err;
+        continueB.reject(err);
       });
       pending.push(running);
       await afterA.promise;
