@@ -186,3 +186,17 @@ export interface Adm06Input {
 export type Adm06Output = never;
 
 export type Adm06CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+/**
+ * Policy release (T-ADM-08). Unauthorized release, stale approval, and
+ * accepted-quote rewrite never grant command authority. T-CORE-02 HOLD.
+ */
+export interface Adm08Input {
+  readonly unauthorizedRelease: boolean;
+  readonly staleApproval: boolean;
+  readonly wouldRewriteAcceptedQuote: boolean;
+}
+
+export type Adm08Output = never;
+
+export type Adm08CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
