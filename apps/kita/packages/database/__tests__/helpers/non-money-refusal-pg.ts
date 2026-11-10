@@ -112,13 +112,21 @@ function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: un
 
 async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout:${stage}`)), ms);
+  });
   try {
-    return await Promise.race([
-      work,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`timeout:${stage}`)), ms);
-      }),
+    return await Promise.race([work, timeout]);
+  } catch (err) {
+    const late = await Promise.race([
+      work.then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason: unknown) => ({ status: "rejected" as const, reason }),
+      ),
+      Promise.resolve(undefined),
     ]);
+    if (late && typeof err === "object" && err) hideSecondary(err, late);
+    throw err;
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -128,11 +136,18 @@ async function endOwnerClient(
   client: pg.Client,
   connected: boolean,
 ): Promise<{ account?: CloseAccount; raw?: unknown }> {
+  const ending = client.end();
   try {
-    await bounded("owner-client.end", client.end());
+    await bounded("owner-client.end", ending);
     return {};
   } catch (err) {
-    return { account: closeAccount("owner-client.end", err, connected), raw: err };
+    const late = await ending.then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+    const raw = late !== undefined && late !== err ? { first: err, late } : err;
+    if (err && typeof err === "object" && late !== undefined && late !== err) hideSecondary(err, late);
+    return { account: closeAccount("owner-client.end", err, connected), raw };
   }
 }
 
@@ -147,18 +162,26 @@ export function ownerClient(ownerUrl: string): pg.Client {
 async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = ownerClient(ownerUrl);
   let connected = false;
+  let failed = false;
   let primary: unknown;
   try {
     await client.connect();
     connected = true;
     return await fn(client);
   } catch (err) {
-    primary = err;
-    throw err;
+    failed = true;
+    if (err && typeof err === "object") {
+      primary = err;
+    } else {
+      const boxed = new Error("owner-client failed");
+      hideSecondary(boxed, err);
+      primary = boxed;
+    }
+    throw primary;
   } finally {
     const ended = await endOwnerClient(client, connected);
     if (ended.account) {
-      if (primary !== undefined) {
+      if (failed) {
         retainCleanup(primary, [ended.account], ended.raw);
       } else {
         throw cleanupError([ended.account], ended.raw);
