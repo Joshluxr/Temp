@@ -13,7 +13,7 @@
  */
 
 import { problem, type Problem } from './result.ts';
-import type { Instant, UUID } from './context.ts';
+import type { Instant, UUID, WorkerContext } from './context.ts';
 
 /* ------------------------------------------------------------------ brands */
 
@@ -240,3 +240,20 @@ export interface DocumentAccessGrant {
 export function unavailable(feature: string): Problem {
   return problem('capability_unavailable', 503, false, `${feature} requires T-CORE-02 command authority; not implemented`);
 }
+
+/**
+ * Identity binding (T-IDENTITY-01). Ownership mismatch, replay, expired
+ * challenge, reused refresh, and unsafe return URI never bind a session.
+ * T-CORE-02 remains HOLD.
+ */
+export interface Identity01Input {
+  readonly identityOwnershipMismatch: boolean;
+  readonly identityEvidenceReplayed: boolean;
+  readonly identityChallengeExpired: boolean;
+  readonly refreshTokenReused: boolean;
+  readonly unsafeReturnUri: boolean;
+}
+
+export type Identity01Output = never;
+
+export type Identity01CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration'>;
