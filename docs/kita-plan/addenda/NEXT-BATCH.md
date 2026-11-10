@@ -1,87 +1,103 @@
 BATCH-OK
 
-Authorize only the T-QUOTE-01 buildQuote PURE boolean-input fail-closed checker specified below. Full T-QUOTE-01 delivery remains HOLD. T-CORE-02, T-FIN-01, T-LEDGER-02 and T-REWARD-01 remain HOLD. Money path closed. Never authorize ok: true, persistence, executeCommand, posting or financial execution.
+Authorize only the T-IDENTITY-01 checkIdentityBinding LIMITED PURE boolean-input fail-closed checker specified below. Full T-IDENTITY-01 remains HOLD. Money path closed. Never authorize ok: true, executeCommand, ledger posting, financial execution, persistence or real stores. T-CORE-02, T-FIN-01, T-LEDGER-02 and T-REWARD-01 remain HOLD; no implementation, scaffold or new checker for those tasks is authorized.
 
-Reviewed baseline: f50af3dffb4ca213de53f228ca4485e7e88873a7 on cursor/kita-ext04-execute-batch-05a3, with T-EXT-04 landed. Inspected its additive contracts, direct result-helper imports and refusal branches: unauthorized / 403; APPROVAL_STALE, LIMIT_EXCEEDED, stale_or_conflicting_command and PROVIDER_OUTCOME_UNKNOWN / 409; otherwise dependency_unavailable / 503. Ext04Output is never; no callback, persistence, payout or success path exists. Rechecked TEST-EXT-04: 32 passed. Together with existing TEST-QUOTE-02 through TEST-QUOTE-08, 46 tests passed across eight files (exit 0). These are refusal-checker tests; they do not establish paid-item preservation, crash-safe retries, executable pricing or any financial integration gate.
+Reviewed baseline: e4e3888c1a71eed18aebe9510834ff3ffc5b18ef on cursor/kita-quote01-build-quote-05a3. T-QUOTE-01 buildQuote has landed. Its direct err/problem imports, Quote01Output = never and refusal branches preserve unauthorized / 403, LIMIT_EXCEEDED / 409, POLICY_UNAVAILABLE / 409, then dependency_unavailable / 503. Rechecked TEST-QUOTE-01: 8 passed. Together with TEST-AUTH-01 through TEST-AUTH-07, 22 tests passed across eight files (exit 0). These are refusal tests; they do not prove identity lifecycle, executable pricing, persistence or financial authority.
 
-Review basis: [13-backlog.md](../13-backlog.md) T-QUOTE-01 explicitly names LIMIT_EXCEEDED and POLICY_UNAVAILABLE, and M2 supplies unauthorized / 403. [07-algorithms.md](../07-algorithms.md) G1 requires authorization, corridor/customer/rail limits and approved fee/tax policies; an unsupported tax rule cannot default to zero. Full buildQuote also requires executable provider terms, exact rational arithmetic, expiry checks and immutable quote persistence. A pure checker can refuse supplied authorization, limit and policy blockers without performing any of those operations. This is an internal checker contract; it changes no frozen HTTP schema, API error mapping or production command signature.
+Review basis: [13-backlog.md](../13-backlog.md) T-IDENTITY-01 requires rejection of replay, expired challenge, wrong ownership, reused refresh token and unsafe return URI. M2 supplies unauthorized / 403, stale_or_conflicting_command / 409 and invalid_request / 400. [09-admin-security.md](../09-admin-security.md#i1-identity-and-authorization) requires session-bound one-use state, exact return-URI allowlisting and refresh reuse detection. A separate internal checker can refuse supplied blockers without authenticating, verifying evidence, detecting reuse, reading a clock, binding a session or touching a store. The existing bindSession, registerInstrument and document-access gates remain unchanged. No HTTP schema, error mapping or production command signature changes; existing customer-object concealment rules remain in force.
 
-Remaining-task disposition:
+A missing tests/features/test-*.spec.ts file is an inventory observation, not proof that a task is unimplemented or that adding a checker can close it. Existing identity/schema, provider, migration, database and contract artifacts remain outside this batch. All 16 supplied leftover IDs lack their matching feature-test file at the reviewed head.
 
-| Task | Disposition after this review | Work still requiring stores or financial authority |
+Remaining-task disposition for this batch:
+
+| Task | Disposition | Reason / work still withheld |
 |---|---|---|
-| T-QUOTE-01 | BATCH-OK for the checker below only; full task HOLD | Exact principal/receive/fee/tax/total arithmetic, authoritative policies/rates, immutable quotes/terms and connected createQuote flow. No executable or indicative price is authorized here. |
-| T-CORE-02 | HOLD; no checker, scaffold or implementation authorized | Durable money_operations/command identities, ownership, holds/limits, atomic state/event/outbox/audit and fenced dispatch authority; CP-02/03/05 proofs. The existing T-CORE-02-BATCH.md HOLD remains in force. |
-| T-FIN-01 | HOLD; outside this batch | Verified economic-event posting, immutable journals/lines, same-key replay and mismatch detection, per-currency balances, real-role denial and independent reconstruction. Boolean flags cannot establish these durable invariants. |
-| T-LEDGER-02 | HOLD; outside this batch | Controller-approved posting templates, evidence/policy authority, real period locks/nonoverlap/close, cumulative allocations and posting functions; CP-04 closure. |
-| T-REWARD-01 | HOLD; outside this batch | Paired point events, lot reservations/expiry/reversal limits, source-key uniqueness and the approved financial provision bridge; T-LEDGER-02 and CP-07 remain prerequisites. |
+| T-SCOPE-01 | HOLD | Source hashes, original-spec crosswalk and accountable scope review require actual source evidence; no source recovery or coverage claim is authorized. |
+| T-CONTRACT-01 | HOLD | No freeze checker selected; full freeze needs reviewed wire/event/schema/port hashes, compatibility and ownership decisions. Existing freezeContracts success helper must not be imported, called or extended in this lane. |
+| T-CORE-01 | HOLD | Existing database tests do not prove complete runtime/transaction composition; pool, role, retry and commit/rollback work requires real bindings outside this lane. |
+| T-CORE-02 | HOLD | Explicitly prohibited; durable operation identity, atomic command/state/event/outbox/audit, holds, limits and fenced dispatch authority remain unproved. |
+| T-LEDGER-02 | HOLD | Explicitly prohibited; posting templates, evidence authority, period enforcement, balances and allocation limits require approved durable financial controls. |
+| T-IDENTITY-01 | BATCH-OK for the checker below only; full task HOLD | Supplied blockers may produce refusals only. Durable sessions, contacts, instruments, consents, refresh rotation/revocation and evidence-access grants remain withheld. |
+| T-ADAPTER-01 | HOLD | No adapter checker selected; real transport/signature verification needs account-scoped contracts and evidence. Existing Unknown/quarantine gates must not be expanded or activated. |
+| T-REWARD-01 | HOLD | Explicitly prohibited; paired points, lot reservations, expiry/reversal caps and the financial provision bridge depend on approved ledger authority. |
+| T-MIG-01 | HOLD | No migration checker selected; actual archive hashes/dispositions, import/build reachability scans and consented data handling cannot be established by flags. Preserve the archive. |
+| T-INTEGRATE-01 | HOLD | Connected features, exact artifacts, real-role/concurrency tests and independent financial reconstruction remain incomplete; no G1/G2 decision is authorized. |
+| T-CERT-01 | HOLD | Provider/account/method certification requires real sandbox transcripts, native-device evidence and review; no G3 closure or provider call is authorized. |
+| T-LIVE-01 | HOLD | Live-pilot authority, reconciled real positions, caps and approvals are absent from this batch; no pilot, G4 entry or G5 exit is authorized. |
+| T-GA-01 | HOLD | Signed exact-scope launch evidence and G1-G5 prerequisites remain open; no G6 decision or exposure change is authorized. |
+| T-BASE-01 | HOLD | No boundary checker selected; archive/root isolation and GPU-to-VM bundle integrity require actual path/hash evidence; this checker grants no handoff acceptance. |
+| T-RELEASE-01 | HOLD | No release checker selected; exact-candidate proof completeness, freshness and approver validation remain open; no gate closure or activation is authorized. |
+| T-FIN-01 | HOLD | Explicitly prohibited; immutable nonempty balanced journals, event replay/mismatch checks, permissions and independent reconstruction require real ledger controls. |
 
-Only T-QUOTE-01 is selected for the next limited checker. No other new checker is authorized by this document. All prior full-feature holds, CP gaps, dependency/activation gates and release gates remain open, including full T-EXT-04 and DEP-12. No production approval is granted. This replaces the prior EXT-04 next-checker authorization and does not expand any landed checker.
+Only the T-IDENTITY-01 checker below is selected. Other HOLD rows exclude those tasks from this batch; they do not assert that every task is incapable of a future refusal-only slice. This document replaces the prior T-QUOTE-01 next-batch authorization, which has landed, and does not expand any landed checker. All full-feature holds, CP gaps, dependency/activation gates and release gates remain open. No production, live-pilot or G1-G6 closure is authorized.
 
-Allowed files for implementation only (paths relative to apps/kita/):
+Allowed implementation files only (paths relative to apps/kita/):
 
-- packages/domain/quotes/build-quote.ts — create the inert buildQuote checker only.
-- tests/features/test-quote-01.spec.ts — create focused TEST-QUOTE-01 refusal tests only.
-- packages/contracts/src/quotes.ts — additive Quote01Input, Quote01Output and Quote01CommandContext types only. Reuse its existing type-only WorkerContext import; preserve all existing imports and Quote02 through Quote08 contracts unchanged.
+- packages/domain/identity/check-identity-binding.ts — create one standalone inert checkIdentityBinding checker; do not edit or wrap session-store.ts or another existing identity function.
+- tests/features/test-identity-01.spec.ts — create focused TEST-IDENTITY-01 refusal tests only.
+- packages/contracts/src/auth.ts — append only Identity01Input, Identity01Output and Identity01CommandContext type declarations; add WorkerContext to its existing type-only context import if needed. Preserve all existing types, functions, imports and behavior otherwise.
 
-Exact required Quote01Input flag names and types (all required; no other data fields):
+No other implementation file is allowed. In particular, packages/contracts/src/identity.ts, result.ts, index.ts, generated clients, existing tests, migrations, provider ports and all stores remain untouched. This planning update edits only docs/kita-plan/addenda/NEXT-BATCH.md; the returned implementation diff is measured from its coordinator-recorded implementation base and may contain only the three implementation paths above.
+
+Exact required Identity01Input flags (all required; no optional or additional data fields):
 
 ```ts
-readonly unauthorizedQuoteCreation: boolean;
-readonly limitExceeded: boolean;
-readonly pricingPolicyUnavailable: boolean;
+readonly identityOwnershipMismatch: boolean;
+readonly identityEvidenceReplayed: boolean;
+readonly identityChallengeExpired: boolean;
+readonly refreshTokenReused: boolean;
+readonly unsafeReturnUri: boolean;
 ```
 
-These flags are internal supplied blockers, not HTTP fields, authenticated evidence or pricing attestations:
+Flag meanings are supplied blockers only:
 
-- unauthorizedQuoteCreation denotes supplied absent or invalid current, scope-bound authorization to create the attempted quote.
-- limitExceeded denotes a supplied corridor, customer or rail limit breach. It carries no amount, currency, threshold or policy payload.
-- pricingPolicyUnavailable denotes a supplied missing, invalid, inactive or unsupported applicable fee, surcharge or tax policy. Missing tax never authorizes a zero-tax fallback.
+- identityOwnershipMismatch: a supplied mismatch between the attempted binding and its required identity/session/actor scope; no referenced object or actor payload is accepted.
+- identityEvidenceReplayed: supplied already-consumed identity evidence, nonce or one-use state; no evidence or nonce is accepted or looked up.
+- identityChallengeExpired: a supplied expired identity/contact challenge; no challenge, timestamp or clock access is accepted.
+- refreshTokenReused: supplied reuse of a refresh token from a rotated or otherwise unusable generation; no token, family, generation record or detection callback is accepted.
+- unsafeReturnUri: a supplied non-allowlisted or mismatched return URI; no URI, allowlist or redirect operation is accepted.
 
-The checker must not derive the flags, authenticate an actor, evaluate an amount or policy, inspect a rate, read a clock, load state or consult another checker. False flags never prove authorization, limits compliance, policy availability, valid arithmetic or quote eligibility. No combination grants authority.
+Do not derive these flags, validate identity, consume evidence, detect replay/reuse, perform ownership checks, evaluate a URI or consult another checker. False flags prove none of those controls and never grant authorization, authentication, KYC status, session eligibility, document access, instrument verification or financial authority. The blocker categories and ordered mappings are an internal refusal contract only; they are not new public error codes or customer-object responses.
 
-Define Quote01Output = never. Define Quote01CommandContext as Pick<WorkerContext, 'workId' | 'attemptGeneration'>. The internal checker signature is buildQuote(ctx: Quote01CommandContext, input: Quote01Input): Promise<Result<Quote01Output, Problem>>. Both context fields are unused identity metadata and establish no actor, book or command authority. Do not accept CommandContext, a transaction runner, trace/capability/execution callbacks or additional context fields in this lane.
+Define Identity01Output = never. Define Identity01CommandContext as Pick<WorkerContext, 'workId' | 'attemptGeneration'>. The checker signature is checkIdentityBinding(ctx: Identity01CommandContext, input: Identity01Input): Promise<Result<Identity01Output, Problem>>. Both context fields are unused metadata and establish no identity, actor, book or command authority. Do not accept CommandContext, ReadContext, full WorkerContext, transaction runners, trace/capability/execution callbacks, dependencies or additional context fields.
 
-Use type-only imports for Quote01 types from ../../contracts/src/quotes.ts and Problem/Result from ../../contracts/src/result.ts; import only the existing err/problem runtime helpers from ../../contracts/src/result.ts. Do not import the contracts runtime barrel, ok helper, money utilities, existing quote checkers, platform, providers or stores. Add no dependency, package/barrel export or runtime schema. Test imports may use vitest, the new checker and direct contract type paths; avoid the contracts barrel.
+Use type-only imports for Identity01 types from ../../contracts/src/auth.ts and Problem/Result from ../../contracts/src/result.ts. The only runtime import is the existing err/problem helpers from ../../contracts/src/result.ts. Never import the contracts runtime barrel, auth.ts runtime, unavailable helper, ok helper, freezeContracts, node:crypto, identity functions, money utilities, platform, providers or stores. Add no dependency, runtime schema or package/barrel export. Test imports may use vitest, the new checker and direct contract type paths (including UUID from context.ts); no contracts barrel.
 
-Required behavior, evaluated in this exact order:
+Required behavior in this exact order; the first true blocker wins regardless of all lower-priority flags:
 
-| Condition | Exact error code | HTTP status | retryable |
-|---|---|---|---|
-| unauthorizedQuoteCreation === true, regardless of other flags | unauthorized | 403 | false |
-| Otherwise limitExceeded === true, including when pricingPolicyUnavailable is true | LIMIT_EXCEEDED | 409 | false |
-| Otherwise pricingPolicyUnavailable === true | POLICY_UNAVAILABLE | 409 | false |
-| Otherwise | dependency_unavailable | 503 | true |
+| Condition | Exact error code | HTTP status | retryable | Fixed detail |
+|---|---|---|---|---|
+| identityOwnershipMismatch === true | unauthorized | 403 | false | T-IDENTITY-01 supplied identity ownership mismatch blocks binding |
+| Otherwise identityEvidenceReplayed === true | stale_or_conflicting_command | 409 | false | T-IDENTITY-01 supplied replayed identity evidence blocks binding |
+| Otherwise identityChallengeExpired === true | stale_or_conflicting_command | 409 | false | T-IDENTITY-01 supplied expired identity challenge blocks binding |
+| Otherwise refreshTokenReused === true | stale_or_conflicting_command | 409 | false | T-IDENTITY-01 supplied reused refresh token blocks binding |
+| Otherwise unsafeReturnUri === true | invalid_request | 400 | false | T-IDENTITY-01 supplied unsafe return URI blocks binding |
+| Otherwise (all five flags false) | dependency_unavailable | 503 | true | T-IDENTITY-01 checkIdentityBinding cannot verify identity or bind a session: identity stores and T-CORE-02 remain HOLD (fail closed) |
 
-Return only ok: false failures with exactly { ok: false, error: { code, status, retryable, detail } }. Use these fixed, bounded, non-PII detail strings in table order:
+Return only failures with exactly { ok: false, error: { code, status, retryable, detail } }. Use the fixed, bounded, non-PII detail strings above verbatim. No extra branch, error code, value, operationId, fieldErrors, session/token/grant/permit, instrument/document reference, authority payload or other result field is permitted. All flags false still refuses with 503. retryable: true authorizes no automatic retry, scheduling, callback, command execution or provider request. Never claim an identity or URI was validated, replay/reuse was detected, a challenge consumed, a session bound, a token rotated/revoked or any access granted.
 
-- T-QUOTE-01 quote creation is not authorized
-- T-QUOTE-01 supplied corridor, customer or rail limit breach blocks quote creation
-- T-QUOTE-01 required pricing policy is unavailable; no fee or tax fallback is authorized
-- T-QUOTE-01 buildQuote cannot price or persist a quote or grant financial authority: quote/policy stores, T-CORE-02 and T-LEDGER-02 remain HOLD (fail closed)
+No persistence or store/database access, including real, test or in-memory substitute stores. No money arithmetic or money/ledger/points path; no executeCommand, posting, holds, approvals, balance mutation, reservation, transfer/operation creation or financial outcome. No authentication/IdP/JWKS/provider/network/credential call; token minting, exchange, hashing, encryption, rotation or revocation; session/contact/instrument/consent/document mutation; signed access link, redirect, cookie, storage, queue/outbox/timer, trace/log/audit emission or state transition. No clock, randomness, filesystem, environment reads, path/hash validation or archive scan in the checker. Accept no token, cookie, claims, URI, nonce, contact data, PAN/CVV, evidence, document, approval, command key/hash, policy, amount, currency, financial payload or additional identity fields. The two unused context metadata fields are the only identities accepted.
 
-The 403/409 results describe supplied blockers only; they do not authenticate or enforce live authorization, limits or policies. All flags false must still return the 503 refusal. retryable: true permits no automatic execution, scheduling, provider request or financial retry. Add no other code/branch, extra result field, value, operationId, fieldErrors, quote ID, computed or fixture price, terms, balance, receipt, permit or authority payload. Never claim that a quote was built, persisted, accepted, executable, eligible or policy-validated.
+Do not change or wire API/controller/worker/UI routes, sessions, funding/instrument flows, mobile/web auth, provider adapters or any money workflow. No changes to runbooks, infrastructure, CI, package/configuration/dependencies, frozen OpenAPI, SQL, migrations, grants, source archives or migration manifests. No production activation, deployment, publication, live pilot, GitHub merge or G1-G6 closure is authorized. T-CORE-02/T-FIN-01/T-LEDGER-02/T-REWARD-01 implementation remains prohibited.
 
-No persistence or database/store access, including in-memory substitute stores. No principal/receive/fee/tax/total arithmetic, decimal/rational parsing, rounding, rate lookup, cached/fixed-rate fallback, policy resolution, quote creation/acceptance, transfer/operation creation, status transition, ledger/journal work, balance mutation, reservation/release, points/promo application, executeCommand, holds/approval work, provider/adapter call, credential operation or queue/outbox/timer work. Accept no money, currency/exponent, rate, policy/version, recipient/instrument/book/quote/operation ID, evidence, approval, command key/hash or financial payload. The two permitted context identity fields are the only identities accepted. Never return ok: true or any financial/acceptance/dispatch authority.
+TEST-IDENTITY-01 must cover every one of the 32 boolean combinations in an explicit independently specified expected-results table. Expected code/status/retryable/detail must be literal expectations, not computed by copying the checker's if-chain or imported implementation constants. Include all 16 ownership-mismatch combinations, all 8 remaining replay combinations, all 4 remaining expiry combinations, both remaining refresh-reuse combinations, the sole remaining unsafe-URI combination and the all-false fallback. Assert the complete exact error-only result for every case, absence of value/extra success/access/authority fields, and identical refusal on a repeated call. Object.freeze each input and context, capture their values before calling, and verify both remain unchanged. Use no mocked store, fake token/evidence, identity workflow, provider implementation, clock or randomness.
 
-Do not change API/controller/worker/UI wiring, generated clients, existing checkers, providers, runbooks, Terraform, CI, frozen OpenAPI, migrations, SQL grants, package configuration or dependencies. T-CORE-02 remains HOLD. This checker cannot be wired into createQuote, a quote read route or a money workflow.
-
-TEST-QUOTE-01 must cover all eight boolean combinations using an explicit expected-results table, including both limit/policy precedence cases and every unauthorized combination. Assert exact code/status/retryable/detail and the entire error-only result shape for every case. Object.freeze every input and context, verify they remain unchanged, repeat each call and require the identical refusal. Assert no value or extra success/authority/quote fields. Use no mock store, simulated quote workflow, pricing fixture or provider implementation. These tests establish only the internal refusal contract; they do not satisfy full TEST-QUOTE-01, the 500 USD -> 28710 PHP / 503.99 USD fixture, M01/M03, PACK-MONEY/API/UX, REQ-SC-01/05/06/18 or CP-03/04/05 closure.
+Those tests establish only supplied-blocker precedence, deterministic refusal and input/context non-mutation. They do not satisfy full T-IDENTITY-01, PACK-IDENTITY/API/SECURITY, REQ-SC-14/15, actual replay/expiry/refresh-rotation or ownership enforcement, CP-01/06, identity lifecycle, any connected feature gate or G1-G6. Missing feature-test coverage is not closed by naming this file TEST-IDENTITY-01.
 
 Validation required on the returned implementation head (commands run from apps/kita/):
 
 ```sh
-./node_modules/.bin/vitest run tests/features/test-quote-01.spec.ts tests/features/test-quote-02.spec.ts tests/features/test-quote-03.spec.ts tests/features/test-quote-04.spec.ts tests/features/test-quote-05.spec.ts tests/features/test-quote-06.spec.ts tests/features/test-quote-07.spec.ts tests/features/test-quote-08.spec.ts tests/features/test-ext-04.spec.ts
-./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/contracts/src/quotes.ts
-./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/domain/quotes/build-quote.ts
+./node_modules/.bin/vitest run tests/features/test-identity-01.spec.ts tests/features/test-quote-01.spec.ts tests/features/test-auth-01.spec.ts tests/features/test-auth-02.spec.ts tests/features/test-auth-03.spec.ts tests/features/test-auth-04.spec.ts tests/features/test-auth-05.spec.ts tests/features/test-auth-06.spec.ts tests/features/test-auth-07.spec.ts
+./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/contracts/src/auth.ts
+./node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --allowImportingTsExtensions --skipLibCheck --noUncheckedIndexedAccess --exactOptionalPropertyTypes packages/domain/identity/check-identity-binding.ts
 ./node_modules/.bin/tsc --noEmit --project packages/contracts/tsconfig.json
 ./node_modules/.bin/tsc --noEmit --project packages/contracts/tsconfig.json --allowImportingTsExtensions
 ```
 
-Type-check baseline rechecked at the reviewed SHA: strict quotes.ts passes (exit 0). The unmodified contracts package check fails (exit 2) with 15 diagnostics: ten TS5097 import-extension diagnostics in auth.ts, freeze-contracts.ts and index.ts, plus five registry diagnostics. With explicit --allowImportingTsExtensions it fails (exit 2) with those five existing diagnostics: commands.ts 108 TS2502 and 345 TS2456; events.ts 78 TS2502, 125 TS2456 and 129 TS7006. No source was changed for these checks.
+At the reviewed SHA, strict isolated auth.ts checking passes (exit 0). The unmodified contracts package check fails (exit 2) with 15 diagnostics: ten TS5097 import-extension diagnostics in auth.ts:15, freeze-contracts.ts:10 and index.ts:5-12; plus commands.ts:108 TS2502, commands.ts:345 TS2456, events.ts:78 TS2502, events.ts:125 TS2456 and events.ts:129 TS7006. With explicit --allowImportingTsExtensions the package check fails (exit 2) with those same five registry diagnostics. These are existing failing gates, not waived or passed checks. Preserve the diagnostic identities; line movement caused solely by the allowed type-only import/additions must be explained.
 
-The new Quote01 types, checker and TEST-QUOTE-01 do not yet exist and have not been tested. All checker tests and both strict isolated checks must pass on the returned head without diagnostics. Rerun and report both full package checks separately, with actual exit statuses and diagnostics. Existing package failures remain failing gates; this authorization does not mark them passed or close them. Do not suppress diagnostics, change configuration, waive a gate or fix unrelated files. Any new diagnostic, failed checker test, changed baseline failure, need for a store or scope expansion returns to Sol as BATCH-HOLD.
+The new Identity01 types, checker and TEST-IDENTITY-01 do not yet exist and have not been tested. Require the 32 new refusal cases and all 22 reviewed quote/AUTH cases to pass, plus both strict isolated checks without diagnostics. Rerun and report both full package checks separately with their actual exit statuses and complete diagnostics. Do not suppress diagnostics, alter configuration, fix unrelated files or treat existing package failures as closed. Any new diagnostic, changed failure beyond explained allowed line movement, failed checker test, need for a store or scope expansion returns to Sol as BATCH-HOLD.
 
-Inspect final imports and the complete diff for side effects, forbidden success/authority paths and edits outside the three allowed implementation files. Return the exact implementation head, changed-file list and complete test/type-check outcomes for Codex Sol max review. Passing refusal tests does not close T-QUOTE-01 or authorize money movement. No GitHub merge, publication or deployment is authorized.
+Inspect the complete final diff and imports for side effects, success/access/authority paths and changes outside the three allowed implementation paths. Return the coordinator-recorded base, exact implementation head, changed-file list and complete test/type-check outcomes for Codex Sol max review. No gate or full task closes merely because refusal tests pass.
 
-Implementation follows the established roles: Qoder CLI Efficient Agent Teams/subagents on gpu-fqaf implement the authorized checker; coordinator handles sync/bundles/GitHub; Codex Sol max reviews the returned batch. This document authorizes the next limited checker only and does not start implementation or a swarm. If it cannot fit these constraints, stop the batch and report BATCH-HOLD with the reason. T-CORE-02 remains HOLD. Money path closed.
+Implementation follows the established roles: Qoder CLI Efficient Agent Teams/subagents on gpu-fqaf implement the authorized checker; coordinator handles sync/bundles/GitHub; Codex Sol max reviews the returned batch. This document authorizes only the specified limited checker; it does not start implementation, a swarm, a provider interaction or a store. If it cannot fit these constraints, stop the batch and report BATCH-HOLD with the reason. Money path closed; no production, live-pilot or G1-G6 approval.
