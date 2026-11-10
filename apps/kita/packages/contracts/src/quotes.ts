@@ -102,3 +102,18 @@ export interface Quote06Output {
   readonly exposureId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+/**
+ * Quote construction (T-QUOTE-01). Unauthorized creation, limit breach, and
+ * unavailable pricing policy never build or persist a quote. T-CORE-02 and
+ * T-LEDGER-02 remain HOLD.
+ */
+export interface Quote01Input {
+  readonly unauthorizedQuoteCreation: boolean;
+  readonly limitExceeded: boolean;
+  readonly pricingPolicyUnavailable: boolean;
+}
+
+export type Quote01Output = never;
+
+export type Quote01CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration'>;
