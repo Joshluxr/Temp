@@ -439,7 +439,33 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
   };
 }
 
-export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
+export async function provisionRefusalFixtures(options?: {
+  readonly poolDriver?: {
+    createPool(config: unknown): {
+      connect(): Promise<{ query: (sql: string, params?: readonly unknown[]) => Promise<unknown>; release(): void }>;
+      query(sql: string, params?: readonly unknown[]): Promise<unknown>;
+      end(): Promise<void>;
+    };
+  };
+}): Promise<RefusalPgFixtures> {
+  if (options?.poolDriver) {
+    const url = "postgres://kita-refusal-fake/local";
+    const login = { name: "kita_refusal_fake", url, actorId: "refusal-service:fake" };
+    const registry = createRefusalPoolRegistry((poolUrl) =>
+      createPool({ databaseUrl: poolUrl, poolMax: 1 }, { driver: options.poolDriver }),
+    );
+    return {
+      ownerUrl: url,
+      bookA: "00000000-0000-4000-8000-00000000000a",
+      bookC: "00000000-0000-4000-8000-00000000000c",
+      loginA: login,
+      loginB: login,
+      loginC: login,
+      loginUnbound: login,
+      poolFor: (poolUrl: string) => registry.poolFor(poolUrl),
+      close: () => registry.close(),
+    };
+  }
   await assertRefusalSecurityPreflight();
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);

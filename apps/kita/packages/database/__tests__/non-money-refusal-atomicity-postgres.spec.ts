@@ -412,45 +412,57 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         sawEnd = resolve;
       });
       const heldEnd = new Error("held-end-failed");
-      const pool = createPool(
-        { databaseUrl: "postgres://kita-refusal-fake/local", poolMax: 1 },
-        {
-          driver: {
-            createPool() {
-              return {
-                connect: async () => ({
-                  query: async () => ({ rows: [] }),
-                  release() {},
-                }),
+      const fixtures = await provisionRefusalFixtures({
+        poolDriver: {
+          createPool() {
+            return {
+              connect: async () => ({
                 query: async () => ({ rows: [] }),
-                async end() {
-                  driverEnds += 1;
-                  sawEnd();
-                  await held;
-                },
-              };
-            },
+                release() {},
+              }),
+              query: async () => ({ rows: [] }),
+              async end() {
+                driverEnds += 1;
+                sawEnd();
+                await held;
+              },
+            };
           },
         },
-      );
+      });
+      let firstClose: Promise<void> | undefined;
+      let concurrentClose: Promise<void> | undefined;
       try {
-        const firstClose = pool.close();
-        const concurrentClose = pool.close();
+        fixtures.poolFor("postgres://kita-refusal-fake/local");
+        firstClose = fixtures.close();
+        const firstObserved = firstClose.then(
+          () => undefined,
+          (err: unknown) => err,
+        );
+        concurrentClose = fixtures.close();
+        const concurrentObserved = concurrentClose.then(
+          () => undefined,
+          (err: unknown) => err,
+        );
+        expect(() => fixtures.poolFor("postgres://kita-refusal-fake/other")).toThrow(/fixture closing/);
         await endStarted;
         expect(driverEnds).toBe(1);
         settle(heldEnd);
-        let shared: unknown;
-        try {
-          await firstClose;
-          throw new Error("expected pool close to reject");
-        } catch (err) {
-          shared = err;
-        }
-        expect(shared).toBe(heldEnd);
-        await expect(concurrentClose).resolves.toBeUndefined();
+        const shared = await firstObserved;
+        expect(shared).toBeInstanceOf(Error);
+        expect((shared as Error).message).toMatch(/cleanup failed/);
+        expect(await concurrentObserved).toBe(shared);
         expect(driverEnds).toBe(1);
+        const repeated = await Promise.allSettled([fixtures.close(), fixtures.close()]);
+        expect(repeated[0]?.status).toBe("rejected");
+        expect(repeated[1]?.status).toBe("rejected");
+        if (repeated[0]?.status === "rejected" && repeated[1]?.status === "rejected") {
+          expect(repeated[0].reason).toBe(repeated[1].reason);
+          expect(repeated[0].reason).toBe(shared);
+        }
       } finally {
         settle(heldEnd);
+        await Promise.allSettled([firstClose ?? Promise.resolve(), concurrentClose ?? Promise.resolve(), fixtures.close()]);
       }
     }
     const ownerUrl = requireRefusalOwnerUrl();
