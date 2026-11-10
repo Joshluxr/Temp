@@ -393,13 +393,16 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       provisioned.grantsAcknowledged += 1;
       if (actorId !== null && bookId !== null) {
         provisioned.principalsAttempted += 1;
-        await client.query(
+        const principalInsert = await client.query(
           `INSERT INTO kita.non_money_refusal_principals (login_oid, login_name, book_id, actor_id)
            SELECT r.oid, r.rolname, $1::uuid, $2
            FROM pg_catalog.pg_roles r
            WHERE r.rolname = $3`,
           [bookId, actorId, name],
         );
+        if (principalInsert.rowCount !== 1) {
+          throw new Error("HOLD: principal insert did not acknowledge one row");
+        }
         provisioned.principalsAcknowledged += 1;
         provisioned.retainedBindings.push({ loginName: name, loginOid, bookId, actorId });
       }
@@ -457,18 +460,32 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       },
     };
   } catch (err) {
-    primary = err;
+    const inventory = {
+      ...provisioned,
+      retainedBookIds: [...provisioned.retainedBookIds],
+      retainedLoginNames: [...provisioned.retainedLoginNames],
+      attemptedLoginNames: [...provisioned.attemptedLoginNames],
+      retainedLoginOids: [...provisioned.retainedLoginOids],
+      retainedBindings: [...provisioned.retainedBindings],
+    };
     if (err && typeof err === "object") {
-      (err as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
+      primary = err;
+      (err as { provisioned?: typeof inventory }).provisioned = inventory;
+    } else {
+      const boxed = new Error("setup failed");
+      (boxed as { provisioned?: typeof inventory }).provisioned = inventory;
+      hideSecondary(boxed, err);
+      primary = boxed;
     }
-    throw err;
+    throw primary;
   } finally {
     const ended = await endOwnerClient(client, connected);
     if (ended.account) {
       if (primary !== undefined) {
         retainCleanup(primary, [ended.account], ended.raw);
         if (primary && typeof primary === "object") {
-          (primary as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
+          const existing = (primary as { provisioned?: typeof provisioned }).provisioned;
+          (primary as { provisioned?: typeof provisioned }).provisioned = existing ?? { ...provisioned };
         }
       } else {
         const error = cleanupError([ended.account], ended.raw);
