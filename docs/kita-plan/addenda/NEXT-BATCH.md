@@ -1,26 +1,25 @@
 BATCH-OK
 
-Authorize T-FIN-07 only: a PURE closePeriod checker, within the exact scope below.
+Authorize T-FIN-08 only: resolveCreditOverlap as a pure checker.
 
-Allowed files:
-- packages/domain/ledger/close-period.ts
-- tests/features/test-fin-07.spec.ts
-- packages/contracts/src/ledger.ts — additive Fin07 types only
+Status supplied by operator: T-FIN-07 landed. unauthorizedBackdatedPostingIntoClosedPeriod returns POLICY_UNAVAILABLE / HTTP 409; otherwise HTTP 503. TEST-FIN-07: 2 passed. PR #74 pending.
+
+Allowed files only:
+- packages/domain/ledger/resolve-credit-overlap.ts
+- tests/features/test-fin-08.spec.ts
+- packages/contracts/src/ledger.ts — additive Fin08 types only
 
 Required behavior:
 - Never return ok:true.
-- Never accept unauthorized backdated posting into a closed period.
-- When unauthorizedBackdatedPostingIntoClosedPeriod === true, return POLICY_UNAVAILABLE with HTTP 409 and the message: Closed period cannot receive unauthorized backdated posting.
-- Otherwise return HTTP 503 with dependency_unavailable because the ledger period store is not implemented (T-FIN-01 HOLD).
-- Reuse Fin05CommandContext, or a WorkerContext pick named Fin07CommandContext.
+- Never issue a second automatic customer credit for the same entitlement.
+- secondAutomaticCreditSameEntitlement === true returns POLICY_UNAVAILABLE / HTTP 409. No second automatic customer credit for the same entitlement.
+- Otherwise return dependency_unavailable / HTTP 503 because the refund/dispute store is not implemented; T-TX-06 remains HOLD.
+- Reuse Fin07CommandContext, or use a WorkerContext Pick named Fin08CommandContext.
 
-No database access, money movement, executeCommand, or backdated posting. No additional files or behavior are authorized. Tests must cover both outcomes and assert neither returns ok:true. If this exact scope cannot be maintained, HOLD.
+Scope and acceptance:
+- Pure checker only: no DB access, money movement, side effects, or executeCommand.
+- Cover the exact-true 409 branch and the otherwise-503 branch in tests/features/test-fin-08.spec.ts; neither branch may succeed or issue a credit.
+- Do not implement the refund/dispute store, expand any held task, or change files beyond the three allowed paths. HOLD if this exact scope cannot be maintained.
+- Follow the existing GPU gpu-fqaf / Qoder Efficient implementation flow and Sol max review gates; GitHub work remains with the coordinator.
 
-Implementation follows the existing GPU gpu-fqaf / Qoder Efficient swarm flow; VM Codex reviews the returned changes.
-
-Landed:
-- T-FIN-05: concurrentSpendSameLastPrefund yields LIQUIDITY_UNAVAILABLE / HTTP 409; otherwise HTTP 503.
-- TEST-FIN-05: 2 passed.
-
-Existing holds remain:
-T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
+Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.

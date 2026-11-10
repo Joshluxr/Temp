@@ -18,3 +18,17 @@ export interface Fin07Output {
   readonly periodId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Fin08CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Fin08Input {
+  readonly secondAutomaticCreditSameEntitlement: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fin08Output {
+  readonly secondAutomaticCreditIssued: true;
+  readonly overlapId: UUID;
+  readonly traceEvents: readonly string[];
+}
