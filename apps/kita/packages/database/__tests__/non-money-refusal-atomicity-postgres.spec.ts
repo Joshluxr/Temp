@@ -1149,6 +1149,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     let victimRollbackAck = false;
     let coordinationCompleted = false;
 
+    function phaseLedgerOk(attempt: number): boolean {
+      if (attempt === 1) return codes.length === 0;
+      return exactOriginalLedger(codes, victimEntry, victimProof);
+    }
+
     function wrap(pool: ReturnType<typeof createPool>, side: "A" | "B"): PoolLike {
       const seq = side === "A" ? seqA : seqB;
       return {
@@ -1242,13 +1247,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
               if (sql.startsWith("BEGIN")) {
                 try {
-                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                  if (!phaseLedgerOk(attempt)) {
                     throw persistAbort ?? new Error("HOLD: BEGIN after ambiguous ledger");
                   }
                   callOwner.issued = true;
                   const result = await client.query(sql, params);
                   seq.push(`begin:${attempt}`);
-                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                  if (!phaseLedgerOk(attempt)) {
                     throw persistAbort ?? new Error("HOLD: BEGIN result after ambiguous ledger");
                   }
                   if (abortOccurred) throw persistAbort;
@@ -1256,9 +1261,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     client,
                     fixtures.loginA.name,
                     expectedLoginOid(fixtures.loginA),
-                    attempt === 2 ? () => exactOriginalLedger(codes, victimEntry, victimProof) : undefined,
+                    () => phaseLedgerOk(attempt),
                   );
-                  if (attempt === 2 && !exactOriginalLedger(codes, victimEntry, victimProof)) {
+                  if (!phaseLedgerOk(attempt)) {
                     throw persistAbort ?? new Error("HOLD: identity after ambiguous ledger");
                   }
                   if (abortOccurred) throw persistAbort;
@@ -1650,12 +1655,22 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       });
       const replay: PoolLike = {
         async connect() {
+          if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+            throw new Error("HOLD: replay checkout after ambiguous ledger");
+          }
           const client = await replayRaw.connect();
+          if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+            client.release();
+            throw new Error("HOLD: replay checkout result after ambiguous ledger");
+          }
           return {
             async query(sql: string, params?: readonly unknown[]) {
-              const result = await client.query(sql, params);
               if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
                 throw new Error("HOLD: replay query after ambiguous ledger");
+              }
+              const result = await client.query(sql, params);
+              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+                throw new Error("HOLD: replay query result after ambiguous ledger");
               }
               if (sql.startsWith("BEGIN")) {
                 await observeIdentity(
@@ -1668,6 +1683,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               return result;
             },
             release(err?: unknown) {
+              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+                try {
+                  client.release(err);
+                } finally {
+                  throw new Error("HOLD: replay release after ambiguous ledger");
+                }
+              }
               client.release(err);
             },
           } satisfies PoolClientLike;
