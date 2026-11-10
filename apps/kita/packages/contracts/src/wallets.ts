@@ -35,3 +35,17 @@ export interface Wal02Output {
   readonly topupId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Wal03CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Wal03Input {
+  readonly twoSimultaneousSpendsWouldOverdraw: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Wal03Output {
+  readonly overdrawn: true;
+  readonly reservationId: UUID;
+  readonly traceEvents: readonly string[];
+}
