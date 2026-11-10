@@ -1,22 +1,23 @@
 BATCH-OK
 
-Authorize only T-QUOTE-05: acceptQuote PURE checker.
+Authorize only T-QUOTE-08: the saveDraft PURE checker described below.
 
-T-QUOTE-04 landed: staleQuoteWouldExecuteFromCache => RATE_STALE 409; else 503.
-TEST-QUOTE-04: 2 passed.
+T-QUOTE-05 landed: expiryEqualityOrRecipientChange => QUOTE_EXPIRED 409; otherwise 503. TEST-QUOTE-05: 2 passed.
 
-Files only:
-- packages/domain/quotes/accept-quote.ts
-- tests/features/test-quote-05.spec.ts
-- packages/contracts/src/quotes.ts — additive Quote05 types only
+Allowed implementation files only:
+- packages/domain/quotes/save-draft.ts
+- tests/features/test-quote-08.spec.ts
+- packages/contracts/src/quotes.ts — additive Quote08 types only
 
 Required behavior:
-- Pure checker: no DB, no money, no executeCommand.
-- Never ok:true; never accept an expired quote or changed recipient as a new transfer.
-- expiryEqualityOrRecipientChange === true => QUOTE_EXPIRED 409. Expiry equality or recipient change produces conflict.
-- Otherwise 503 dependency_unavailable because quotes/transfers store is not implemented (T-QUOTE-01 HOLD).
-- Reuse Quote04CommandContext or a WorkerContext pick named Quote05CommandContext.
-- Tests cover expiry equality conflict, recipient change conflict, fallback 503, and no success or transfer execution.
+- Never return ok: true and never overwrite a newer recipient/amount with a stale draft version.
+- staleDraftWouldOverwriteNewerRecipientOrAmount === true => VERSION_CONFLICT 409. Stale draft version cannot overwrite newer recipient/amount. This check takes precedence over the dependency fallback.
+- Otherwise return 503 dependency_unavailable because the drafts store is not implemented; T-CORE-02 remains HOLD.
+- PURE checker only: no DB, no money, no executeCommand.
+- Reuse Quote05CommandContext or a WorkerContext pick named Quote08CommandContext.
 
-Holds remain:
-T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
+Regression coverage must verify the 409 conflict branch, the 503 fallback, and that no branch returns ok: true.
+
+Holds remain: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
+
+No authorization beyond this exact checker and these three implementation files.
