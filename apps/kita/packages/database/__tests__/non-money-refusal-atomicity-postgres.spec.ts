@@ -126,9 +126,10 @@ function exactOriginalLedger(
   retained: FailureEntry | undefined,
   proof?: FailureEntry,
 ): boolean {
-  if (retained === undefined || codes.length !== 1 || codes[0] !== retained) return false;
-  if (proof) return proofMatches(retained, proof);
-  return true;
+  if (retained === undefined || proof === undefined || codes.length !== 1 || codes[0] !== retained) {
+    return false;
+  }
+  return proofMatches(retained, proof);
 }
 
 function classifyVictimOpposingLock(input: {
@@ -158,7 +159,8 @@ function classifyVictimOpposingLock(input: {
     !input.driverAcked &&
     input.original !== input.persistAbort &&
     input.victimEntry === undefined &&
-    exactOriginalLedger(input.codes, input.entry) &&
+    input.codes.length === 1 &&
+    input.codes[0] === input.entry &&
     input.entry.code === "40P01" &&
     input.attempt === 1 &&
     input.requestedAttempt === 1 &&
@@ -632,7 +634,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           coordinationCompleted: true,
         };
         expect(classifyVictimOpposingLock(valid)).toBe(true);
-        expect(exactOriginalLedger(codes, entry)).toBe(true);
+        expect(exactOriginalLedger(codes, entry, { side: entry.side, attempt: entry.attempt, code: entry.code, pid: 100 + (side === "A" ? 1 : 2), start: "2026-01-01", sql, params: opposing, original })).toBe(true);
         expect(snapshotTrustedParams([lockA, 1])).toEqual([lockA, 1]);
         expect(snapshotTrustedParams(Object.assign([lockA, 1], { [Symbol.iterator]: function* () { yield 0; } }))).toBeUndefined();
         let inheritedInvoked = false;
@@ -672,7 +674,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         expect(classifyVictimOpposingLock({ ...valid, observedOid: "9" })).toBe(false);
         expect(classifyVictimOpposingLock({ ...valid, forwardedAtCall: [lockA, 1] })).toBe(side === "B");
         const extra = { ...entry, code: "XX001" as const };
-        expect(exactOriginalLedger([entry, extra], entry)).toBe(false);
+        expect(exactOriginalLedger([entry, extra], entry, { side: entry.side, attempt: entry.attempt, code: entry.code })).toBe(false);
         expect(classifyVictimOpposingLock({ ...valid, codes: [entry, extra] })).toBe(false);
         const abortToken = {};
         expect(classifyVictimOpposingLock({ ...valid, persistAbort: abortToken, original: abortToken })).toBe(false);
@@ -1417,6 +1419,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   if (entry.sql !== undefined) victimProof.sql = entry.sql;
                   if (entry.params !== undefined) victimProof.params = entry.params.slice();
                   if (entry.original !== undefined) victimProof.original = entry.original;
+                  if (victimProof.params) Object.freeze(victimProof.params);
+                  Object.freeze(victimProof);
                 } else if (sql === "SELECT pg_advisory_xact_lock($1, $2)" && recorded && !driverAcked) {
                   seq.push(`lock2:${attempt}`);
                 }
@@ -1445,8 +1449,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 try {
                   const value = (original as { code?: unknown }).code;
                   if (typeof value === "string") entry.code = value;
-                } catch {
-                  /* retain original without code */
+                } catch (snapshotErr) {
+                  notePrivate(entry, snapshotErr);
+                  if ((typeof original === "object" && original !== null) || typeof original === "function") {
+                    notePrivate(original as object, snapshotErr);
+                  }
                 }
                 throw releaseErr;
               }
@@ -1540,6 +1547,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         { classid: lockA, objid: 1 },
         { classid: lockB, objid: 1 },
       ]);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       const survivorSide = victimSide === "A" ? "B" : "A";
       const survivorBackend = backends[survivorSide];
       if (!survivorBackend) throw new Error("missing survivor backend identity");
@@ -1568,8 +1576,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const survivorKey = settled.side === "A" ? keyA : keyB;
       const survivorTag = settled.side === "A" ? tagA : tagB;
       const victimKey = settled.side === "A" ? keyB : keyA;
+      const survivorFetched = await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, survivorKey);
+      expect(exactOriginalLedger(codes, victimEntry, victimProof)).toBe(true);
       const survivorRow = expectRow(
-        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, survivorKey),
+        survivorFetched,
         fx.bookA,
         fx.loginA.actorId,
         survivorKey,
