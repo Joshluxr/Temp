@@ -23,7 +23,7 @@
  */
 
 import type { DomainEventType } from './events.ts';
-import type { UUID } from './context.ts';
+import type { UUID, WorkerContext } from './context.ts';
 
 /* ------------------------------------------------------------------ *
  * T-PLAT-01 — monorepo versions / contract freeze
@@ -657,3 +657,18 @@ export interface Plat09PolicyUnavailableDetail {
 }
 
 export type Plat09FailureDetail = Plat09PolicyUnavailableDetail;
+
+/**
+ * Financial authority recovery (T-PLAT-08). Unauthorized reopen, unfenced old
+ * writers, and unreconciled uncertainty never grant submission authority.
+ * T-CORE-02 and T-LEDGER-02 remain HOLD.
+ */
+export interface Plat08Input {
+  readonly unauthorizedReopen: boolean;
+  readonly oldWriterNotFenced: boolean;
+  readonly uncertaintyWindowUnreconciled: boolean;
+}
+
+export type Plat08Output = never;
+
+export type Plat08CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration'>;
