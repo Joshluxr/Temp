@@ -32,3 +32,17 @@ export interface Quote05Output {
   readonly transferId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Quote08CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Quote08Input {
+  readonly staleDraftWouldOverwriteNewerRecipientOrAmount: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Quote08Output {
+  readonly staleDraftOverwroteNewerIntent: true;
+  readonly draftId: UUID;
+  readonly traceEvents: readonly string[];
+}
