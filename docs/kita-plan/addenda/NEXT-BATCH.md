@@ -1,27 +1,24 @@
 BATCH-OK
 
-Authorize only T-FUND-04: validateFundingCapability, a pure checker.
+Authorize exactly T-WAL-01: getWalletBalances PURE checker.
 
-Allowed files only:
-- packages/domain/funding/validate-funding-capability.ts
-- tests/features/test-fund-04.spec.ts
-- packages/contracts/src/funding.ts — additive Fund04 types only
-
-Reuse Fund01CommandContext.
+Allowed implementation files only:
+- packages/domain/wallets/get-wallet-balances.ts
+- tests/features/test-wal-01.spec.ts
+- packages/contracts/src/wallets.ts — additive Wal01 types only.
 
 Required behavior:
-- Never return ok:true.
-- Never enable an unapproved credit/Apple/Google Pay method and never collect funds.
-- unapprovedMethod === true => CAPABILITY_UNAVAILABLE, HTTP 403. Unapproved methods fail closed.
-- Otherwise => dependency_unavailable, HTTP 503, because the capabilities store is not implemented (T-FUND-03 HOLD).
-- No DB access, money operations, or executeCommand. Keep the checker pure.
+- Never return ok:true or spendable balances.
+- Projection and ledger must agree per currency; agreement in aggregate cannot mask a disagreement in any currency.
+- projectionLedgerDisagree === true => CAPABILITY_UNAVAILABLE, HTTP 409.
+- Otherwise => dependency_unavailable, HTTP 503, because the ledger_accounts store is not implemented (T-LEDGER-02 HOLD).
+- Reuse Fund01CommandContext or a WorkerContext pick named Wal01CommandContext.
+- Pure checker only: no DB access, no money operations, no executeCommand, and no replica authority.
 
-TEST-FUND-04 must cover the explicit true/403 branch, the otherwise/503 branch, and absence of any ok:true result.
+Validation in tests/features/test-wal-01.spec.ts must cover per-currency disagreement returning 409, the otherwise branch returning 503, and absence of successful or spendable-balance responses. No additional implementation files or scope are authorized. Any implementation requiring broader scope is HOLD.
 
-Landed:
-- T-FUND-06: erasePaidPhpOrSeizeUnrelatedWallet => POLICY_UNAVAILABLE 409; else 503.
-- TEST-FUND-06: 2 passed.
+Landed status supplied by operator:
+T-FUND-04: unapprovedMethod => CAPABILITY_UNAVAILABLE, HTTP 403; otherwise HTTP 503. TEST-FUND-04: 2 passed.
 
-HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03.
-
-Authorization is limited to this exact checker, its tests, and additive Fund04 contract types in the files above. All listed holds remain in effect.
+Holds remain unchanged:
+T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
