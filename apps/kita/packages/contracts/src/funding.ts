@@ -31,3 +31,15 @@ export interface Fund05Output {
   readonly operationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export interface Fund07Input {
+  readonly unownedCashRecognizedAsRevenue: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fund07Output {
+  readonly unownedCashPostedAsRevenue: true;
+  readonly movementId: UUID;
+  readonly traceEvents: readonly string[];
+}
