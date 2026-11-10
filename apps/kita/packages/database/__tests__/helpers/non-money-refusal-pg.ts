@@ -60,7 +60,106 @@ export type RefusalPgFixtures = {
   readonly loginC: RestrictedLogin;
   readonly loginUnbound: RestrictedLogin;
   poolFor(url: string): ManagedPool;
+  close(): Promise<void>;
 };
+
+const CLIENT_TIMEOUT = {
+  connectionTimeoutMillis: 10_000,
+  statement_timeout: 15_000,
+} as const;
+
+export function ownerClient(ownerUrl: string): pg.Client {
+  return new pg.Client({
+    connectionString: ownerUrl,
+    connectionTimeoutMillis: CLIENT_TIMEOUT.connectionTimeoutMillis,
+    statement_timeout: CLIENT_TIMEOUT.statement_timeout,
+  });
+}
+
+export async function assertRefusalSecurityPreflight(): Promise<void> {
+  const ownerUrl = requireRefusalOwnerUrl();
+  const client = ownerClient(ownerUrl);
+  await client.connect();
+  try {
+    const row = (
+      await client.query<{
+        server_version_num: string;
+        current_database: string;
+        session_user: string;
+        current_user: string;
+        schema_owner: string;
+        fsync: string;
+        full_page_writes: string;
+        synchronous_commit: string;
+        rolsuper: boolean;
+        rolcreaterole: boolean;
+        replication_role: string;
+        fn_owner: string;
+        fn_hash: string;
+        fn_len: string;
+        prosecdef: boolean;
+        temp_grant: string;
+      }>(
+        `SELECT current_setting('server_version_num') AS server_version_num,
+                current_database() AS current_database,
+                session_user AS session_user,
+                current_user AS current_user,
+                (SELECT pg_get_userbyid(n.nspowner) FROM pg_namespace n WHERE n.nspname = 'kita') AS schema_owner,
+                current_setting('fsync') AS fsync,
+                current_setting('full_page_writes') AS full_page_writes,
+                current_setting('synchronous_commit') AS synchronous_commit,
+                (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS rolsuper,
+                (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS rolcreaterole,
+                current_setting('session_replication_role') AS replication_role,
+                (SELECT pg_get_userbyid(p.proowner)
+                   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                  WHERE n.nspname = 'kita' AND p.proname = 'record_non_money_refusal'
+                    AND pg_get_function_identity_arguments(p.oid) = 'p_key text, p_tag text') AS fn_owner,
+                (SELECT encode(sha256(convert_to(p.prosrc, 'UTF8')), 'hex')
+                   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                  WHERE n.nspname = 'kita' AND p.proname = 'record_non_money_refusal'
+                    AND pg_get_function_identity_arguments(p.oid) = 'p_key text, p_tag text') AS fn_hash,
+                (SELECT length(p.prosrc)::text
+                   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                  WHERE n.nspname = 'kita' AND p.proname = 'record_non_money_refusal'
+                    AND pg_get_function_identity_arguments(p.oid) = 'p_key text, p_tag text') AS fn_len,
+                (SELECT p.prosecdef
+                   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                  WHERE n.nspname = 'kita' AND p.proname = 'record_non_money_refusal'
+                    AND pg_get_function_identity_arguments(p.oid) = 'p_key text, p_tag text') AS prosecdef,
+                (SELECT count(*)::text
+                   FROM pg_auth_members m
+                   JOIN pg_roles r ON r.oid = m.member
+                   JOIN pg_roles g ON g.oid = m.roleid
+                   JOIN pg_roles grantor ON grantor.oid = m.grantor
+                  WHERE r.rolname = 'kita_test'
+                    AND g.rolname = 'kita_refusal_definer'
+                    AND grantor.rolname = 'kita_test') AS temp_grant`,
+      )
+    ).rows[0];
+    if (!row) throw new Error("HOLD: preflight returned no row");
+    if (row.server_version_num !== "180006") throw new Error("HOLD: not PostgreSQL 18.6");
+    if (row.current_database !== "kita_core_test") throw new Error("HOLD: wrong database");
+    if (row.session_user !== "kita_test" || row.current_user !== "kita_test") {
+      throw new Error("HOLD: owner session is not kita_test");
+    }
+    if (row.rolsuper || !row.rolcreaterole) throw new Error("HOLD: installer attributes unexpected");
+    if (row.schema_owner !== "kita_test") throw new Error("HOLD: schema owner is not kita_test");
+    if (row.fsync !== "on" || row.full_page_writes !== "on" || row.synchronous_commit !== "on") {
+      throw new Error("HOLD: durability settings are not on");
+    }
+    if (row.replication_role !== "origin") throw new Error("HOLD: session_replication_role is not origin");
+    if (row.fn_owner !== "kita_refusal_definer" || row.prosecdef !== true) {
+      throw new Error("HOLD: function owner/security mismatch");
+    }
+    if (row.fn_len !== "3950" || row.fn_hash !== "a6140caff93ff7a014ee33ae6c32bb669f8bd75322580fdaafc9c3179f76898a") {
+      throw new Error("HOLD: installed 006 body hash mismatch");
+    }
+    if (row.temp_grant !== "0") throw new Error("HOLD: temporary definer membership is present");
+  } finally {
+    await client.end();
+  }
+}
 
 function quoteIdent(name: string): string {
   if (!/^[A-Za-z0-9_]+$/.test(name)) {
@@ -86,7 +185,7 @@ export async function fetchReservedHash(
   actorId: string,
   key: string,
 ): Promise<string | undefined> {
-  const client = new pg.Client({ connectionString: ownerUrl });
+  const client = ownerClient(ownerUrl);
   await client.connect();
   try {
     const result = await client.query<{ request_hash: string }>(
@@ -107,7 +206,7 @@ export async function countReservedRows(
   actorId: string,
   key: string,
 ): Promise<number> {
-  const client = new pg.Client({ connectionString: ownerUrl });
+  const client = ownerClient(ownerUrl);
   await client.connect();
   try {
     const result = await client.query<{ n: string }>(
@@ -123,8 +222,9 @@ export async function countReservedRows(
 }
 
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
+  await assertRefusalSecurityPreflight();
   const ownerUrl = requireRefusalOwnerUrl();
-  const client = new pg.Client({ connectionString: ownerUrl });
+  const client = ownerClient(ownerUrl);
   await client.connect();
   try {
     const version = await client.query<{ version: string }>("SELECT version()");
@@ -193,9 +293,18 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       poolFor(url: string): ManagedPool {
         const existing = pools.get(url);
         if (existing) return existing;
-        const pool = createPool({ databaseUrl: url, poolMax: 4 });
+        const pool = createPool({
+          databaseUrl: url,
+          poolMax: 4,
+          statementTimeoutMs: 15_000,
+          connectionTimeoutMs: 10_000,
+        });
         pools.set(url, pool);
         return pool;
+      },
+      async close(): Promise<void> {
+        await Promise.all([...pools.values()].map((pool) => pool.close()));
+        pools.clear();
       },
     };
   } finally {
