@@ -15,12 +15,15 @@
 -- 001's funding_instruments; this file adds HMAC columns only (see refresh_tokens.token_hmac) and
 -- never a card number or security code column. No money columns (*_minor / atomic_units), no
 -- journals/balances/economic tables. executeCommand/command_keys are untouched (T-CORE-02 owns them).
--- Privileges stay with 001's tail: this file issues NO GRANT/REVOKE, and it ALTERs nothing that
--- already exists — permissions documents.read vs access.grant remain data in the existing
--- approvals/audit_events/staff_grants machinery, not new database roles.
+-- Privileges stay with 001's tail: this file issues NO GRANT/REVOKE. Its only ALTER adds
+-- UNIQUE(id,book_id) to kita.documents for the existing same-book FK; permissions documents.read
+-- vs access.grant remain data in approvals/audit_events/staff_grants, not new database roles.
 BEGIN;
 
 SET search_path = kita, pg_catalog;
+
+ALTER TABLE kita.documents
+  ADD CONSTRAINT documents_id_book_id_key UNIQUE (id, book_id);
 
 -- ---------------------------------------------------------------------------
 -- 1. session_devices: durable device inventory referenced by auth_sessions.device_ref.
