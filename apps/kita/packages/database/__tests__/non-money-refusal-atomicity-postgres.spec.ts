@@ -1150,7 +1150,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     let coordinationCompleted = false;
 
     function phaseLedgerOk(attempt: number): boolean {
-      if (attempt === 1) return codes.length === 0;
+      if (attempt === 1) {
+        return (
+          codes.length === 0 &&
+          victimSide === undefined &&
+          victimEntry === undefined &&
+          victimProof === undefined &&
+          !coordinationCompleted &&
+          !victimRollbackAck
+        );
+      }
       return exactOriginalLedger(codes, victimEntry, victimProof);
     }
 
@@ -1663,13 +1672,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             client.release();
             throw new Error("HOLD: replay checkout result after ambiguous ledger");
           }
+          let released = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
-              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+              const necessaryRollback = sql.startsWith("ROLLBACK");
+              if (!necessaryRollback && !exactOriginalLedger(codes, victimEntry, victimProof)) {
                 throw new Error("HOLD: replay query after ambiguous ledger");
               }
               const result = await client.query(sql, params);
-              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+              if (!necessaryRollback && !exactOriginalLedger(codes, victimEntry, victimProof)) {
                 throw new Error("HOLD: replay query result after ambiguous ledger");
               }
               if (sql.startsWith("BEGIN")) {
@@ -1683,14 +1694,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               return result;
             },
             release(err?: unknown) {
-              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
-                try {
-                  client.release(err);
-                } finally {
-                  throw new Error("HOLD: replay release after ambiguous ledger");
-                }
-              }
+              if (released) return;
+              released = true;
               client.release(err);
+              if (!exactOriginalLedger(codes, victimEntry, victimProof)) {
+                throw new Error("HOLD: replay release after ambiguous ledger");
+              }
             },
           } satisfies PoolClientLike;
         },
