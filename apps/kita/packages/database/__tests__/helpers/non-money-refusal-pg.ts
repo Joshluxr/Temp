@@ -110,6 +110,33 @@ function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: un
   throw error;
 }
 
+type LateOutcome =
+  | { readonly status: "fulfilled"; readonly value?: unknown }
+  | { readonly status: "rejected"; readonly reason: unknown; readonly reasonDefined: boolean }
+  | { readonly status: "pending" }
+  | { readonly status: "sync"; readonly reason: unknown };
+
+async function observeLate(work: Promise<unknown>, ms: number): Promise<LateOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work.then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason: unknown) => ({
+          status: "rejected" as const,
+          reason,
+          reasonDefined: reason !== undefined,
+        }),
+      ),
+      new Promise<LateOutcome>((resolve) => {
+        timer = setTimeout(() => resolve({ status: "pending" }), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((_, reject) => {
@@ -118,15 +145,15 @@ async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise
   try {
     return await Promise.race([work, timeout]);
   } catch (err) {
-    const late = await Promise.race([
-      work.then(
-        (value) => ({ status: "fulfilled" as const, value }),
-        (reason: unknown) => ({ status: "rejected" as const, reason }),
-      ),
-      Promise.resolve(undefined),
-    ]);
-    if (late && typeof err === "object" && err) hideSecondary(err, late);
-    throw err;
+    const late = await observeLate(work, 1_000);
+    if (err && typeof err === "object") {
+      hideSecondary(err, late);
+      throw err;
+    }
+    const boxed = new Error(`timeout:${stage}`);
+    hideSecondary(boxed, err);
+    hideSecondary(boxed, late);
+    throw boxed;
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -136,17 +163,22 @@ async function endOwnerClient(
   client: pg.Client,
   connected: boolean,
 ): Promise<{ account?: CloseAccount; raw?: unknown }> {
-  const ending = client.end();
+  let ending: Promise<void>;
+  try {
+    ending = Promise.resolve(client.end());
+  } catch (sync) {
+    return {
+      account: closeAccount("owner-client.end", sync, connected),
+      raw: { status: "sync" as const, reason: sync },
+    };
+  }
   try {
     await bounded("owner-client.end", ending);
     return {};
   } catch (err) {
-    const late = await ending.then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-    const raw = late !== undefined && late !== err ? { first: err, late } : err;
-    if (err && typeof err === "object" && late !== undefined && late !== err) hideSecondary(err, late);
+    const late = await observeLate(ending, 1_000);
+    const raw = { first: err, late };
+    if (err && typeof err === "object") hideSecondary(err, late);
     return { account: closeAccount("owner-client.end", err, connected), raw };
   }
 }
@@ -472,7 +504,13 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         return pool;
       },
       async close(): Promise<void> {
-        const closing = [...pools.values()].map((pool) => bounded("pool.close", pool.close()));
+        const closing = [...pools.values()].map((pool) => {
+          try {
+            return bounded("pool.close", Promise.resolve(pool.close()));
+          } catch (sync) {
+            return Promise.reject({ status: "sync" as const, reason: sync });
+          }
+        });
         pools.clear();
         const results = await Promise.allSettled(closing);
         const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
