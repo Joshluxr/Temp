@@ -60,3 +60,17 @@ export interface Quote07Output {
   readonly quoteId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Quote02CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Quote02Input {
+  readonly inverseWouldMissRequestedMinorAmount: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Quote02Output {
+  readonly payoutMissesRequestedMinor: true;
+  readonly quoteId: UUID;
+  readonly traceEvents: readonly string[];
+}
