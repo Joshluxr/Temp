@@ -103,7 +103,10 @@ function cleanupError(accounts: readonly CloseAccount[], raw: unknown): Error {
   return error;
 }
 
-function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], raw: unknown): T {
+function retainCleanup<T>(owner: object, primary: T, accounts: readonly CloseAccount[], raw: unknown): T {
+  hideSecondary(owner, accounts);
+  hideSecondary(owner, raw);
+  hideSecondary(owner, primary);
   if ((typeof primary === "object" && primary !== null) || typeof primary === "function") {
     hideSecondary(primary as object, accounts);
     hideSecondary(primary as object, raw);
@@ -235,7 +238,7 @@ async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => P
     const ended = await endOwnerClient(client, connected);
     if (ended.account) {
       if (failed) {
-        retainCleanup(primary, [ended.account], ended.raw);
+        retainCleanup(client, primary, [ended.account], ended.raw);
       } else {
         throw cleanupError([ended.account], ended.raw);
       }
@@ -400,6 +403,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     retainedBindings: [] as Array<{ loginName: string; loginOid: string; bookId: string; actorId: string }>,
   };
   let connected = false;
+  let failed = false;
   let primary: unknown;
   try {
     await client.connect();
@@ -582,23 +586,21 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       retainedLoginOids: [...provisioned.retainedLoginOids],
       retainedBindings: [...provisioned.retainedBindings],
     };
-    if (err && typeof err === "object") {
-      primary = err;
-      hideSecondary(err, inventory);
-    } else {
-      const boxed = new Error("setup failed");
-      hideSecondary(boxed, inventory);
-      hideSecondary(boxed, err);
-      primary = boxed;
+    failed = true;
+    primary = err;
+    hideSecondary(client, inventory);
+    hideSecondary(client, err);
+    if ((typeof err === "object" && err !== null) || typeof err === "function") {
+      hideSecondary(err as object, inventory);
     }
-    throw primary;
+    throw err;
   } finally {
     const ended = await endOwnerClient(client, connected);
     if (ended.account) {
-      if (primary !== undefined) {
-        retainCleanup(primary, [ended.account], ended.raw);
-        if (primary && typeof primary === "object") {
-          hideSecondary(primary, { ...provisioned });
+      if (failed) {
+        retainCleanup(client, primary, [ended.account], ended.raw);
+        if ((typeof primary === "object" && primary !== null) || typeof primary === "function") {
+          hideSecondary(primary as object, { ...provisioned });
         }
       } else {
         const error = cleanupError([ended.account], ended.raw);

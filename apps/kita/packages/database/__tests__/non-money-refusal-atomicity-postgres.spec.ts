@@ -144,6 +144,8 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
       notePrivate(cleanup, endErr);
       const hideable =
         (typeof primary === "object" && primary !== null) || typeof primary === "function";
+      notePrivate(client, cleanup);
+      notePrivate(client, endErr);
       if (failed && hideable) {
         notePrivate(primary as object, cleanup);
         notePrivate(primary as object, endErr);
@@ -494,7 +496,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           const client = await pool.connect();
           acquired += 1;
           if (abortOccurred) {
-            client.release();
+            try {
+              client.release();
+            } catch (releaseErr) {
+              if ((typeof aborted === "object" && aborted !== null) || typeof aborted === "function") {
+                notePrivate(aborted as object, releaseErr);
+              } else {
+                notePrivate(client, releaseErr);
+              }
+            }
             throw aborted;
           }
           return {
@@ -510,6 +520,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               }
               if (sql.includes("record_non_money_refusal") && !sequence.includes("function-a")) {
                 const result = await client.query(sql, params);
+                if (abortOccurred) throw aborted;
                 sequence.push("function-a");
                 afterA.resolve();
                 await continueB.promise;
@@ -657,6 +668,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const seqB: string[] = [];
     const backends: Record<string, { pid: number; start: string }> = {};
     let victimSide: "A" | "B" | undefined;
+    let victimRollbackAck = false;
 
     function wrap(pool: ReturnType<typeof createPool>, side: "A" | "B"): PoolLike {
       const seq = side === "A" ? seqA : seqB;
@@ -756,6 +768,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
                 if (sql.startsWith("ROLLBACK")) {
                   seq.push(`rollback:${attempt}`);
+                  if (attempt === 1 && victimSide === side) victimRollbackAck = true;
                 }
                 if (sql.includes("pg_advisory_xact_lock") && !recorded) {
                   seq.push(`lock1:${attempt}`);
@@ -809,7 +822,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
               try {
                 client.release(err);
                 seq.push(`release:${attempt}`);
-                if (attempt === 1 && victimSide === side) victimRolledBack.resolve();
+                if (attempt === 1 && victimSide === side && victimRollbackAck) {
+                  victimRolledBack.resolve();
+                }
               } catch (releaseErr) {
                 const original = releaseErr;
                 const entry: (typeof codes)[number] = {
