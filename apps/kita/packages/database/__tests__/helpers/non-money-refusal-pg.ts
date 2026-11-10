@@ -166,7 +166,7 @@ async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise
   try {
     return await Promise.race([work, timeout]);
   } catch (err) {
-    const late = await observeLate(work, 1_000);
+    const late: LateOutcome = { status: "pending" };
     const watchdog = err === timeoutErr;
     if (!watchdog) {
       if (err && typeof err === "object") {
@@ -222,7 +222,7 @@ async function endOwnerClient(
     await bounded("owner-client.end", ending, 24_000);
     return { ledger };
   } catch (err) {
-    const late = await observeLate(ending, 1_000);
+    const late: LateOutcome = { status: "pending" };
     const raw = { first: err, late, ledger };
     if (err && typeof err === "object") {
       hideSecondary(err, ledger);
@@ -636,8 +636,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     if (!observedBooks.rows.every((row) => row.status === "disabled")) {
       throw new Error("HOLD: provisioned books are not independently disabled");
     }
-    if (new Set(observedBooks.rows.map((row) => row.id)).size !== 2) {
-      throw new Error("HOLD: provisioned book ids are not distinct");
+    const observedBookIds = new Set(observedBooks.rows.map((row) => row.id));
+    if (observedBookIds.size !== 2 || !observedBookIds.has(bookAId) || !observedBookIds.has(bookCId)) {
+      throw new Error("HOLD: observed books do not match the retained disabled pair");
     }
     provisioned.booksObserved += observedBooks.rows.length;
 
@@ -655,15 +656,13 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     if (observedBindings.rows.length !== 3) {
       throw new Error("HOLD: immutable binding cardinality is not three");
     }
-    const expectedBindings = [
-      { loginName: loginA.name, bookId: bookAId, actorId: loginA.actorId },
-      { loginName: loginB.name, bookId: bookAId, actorId: loginB.actorId },
-      { loginName: loginC.name, bookId: bookCId, actorId: loginC.actorId },
-    ];
+    const expectedBindings = provisioned.retainedBindings;
+    if (expectedBindings.length !== 3) throw new Error("HOLD: retained binding cardinality is not three");
     for (const expected of expectedBindings) {
       const matched = observedBindings.rows.filter(
         (row) =>
           row.login_name === expected.loginName &&
+          row.login_oid === expected.loginOid &&
           row.book_id === expected.bookId &&
           row.actor_id === expected.actorId,
       );
@@ -673,7 +672,24 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       throw new Error("HOLD: unbound login unexpectedly bound");
     }
     provisioned.bindingsObserved += observedBindings.rows.length;
-    provisioned.grantsObserved += 4;
+    const observedGrants = await client.query<{ member: string; grantor: string }>(
+      `SELECT r.rolname AS member, grantor.rolname AS grantor
+         FROM pg_auth_members m
+         JOIN pg_roles r ON r.oid = m.member
+         JOIN pg_roles g ON g.oid = m.roleid
+         JOIN pg_roles grantor ON grantor.oid = m.grantor
+        WHERE g.rolname = 'kita_refusal_recorder'
+          AND r.rolname = ANY($1::text[])`,
+      [[loginA.name, loginB.name, loginC.name, loginUnbound.name]],
+    );
+    if (observedGrants.rows.length !== 4) {
+      throw new Error("HOLD: recorder grant observation cardinality is not four");
+    }
+    const expectedGrantNames = new Set([loginA.name, loginB.name, loginC.name, loginUnbound.name]);
+    if (observedGrants.rows.some((row) => !expectedGrantNames.has(row.member))) {
+      throw new Error("HOLD: unexpected recorder grant member");
+    }
+    provisioned.grantsObserved += observedGrants.rows.length;
 
     const registry = createRefusalPoolRegistry((url) =>
       createPool({

@@ -532,6 +532,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           const wanted = new Set((params?.[0] as string[] | undefined) ?? []);
           return { rows: issuedBindings.filter((row) => wanted.has(row.login_name)) };
         }
+        if (sql.includes("pg_auth_members") && sql.includes("kita_refusal_recorder")) {
+          const wanted = new Set((params?.[0] as string[] | undefined) ?? []);
+          return {
+            rows: [...issuedOids.keys()]
+              .filter((name) => wanted.has(name))
+              .map((name) => ({ member: name, grantor: "kita_test" })),
+          };
+        }
         return { rows: [], rowCount: 0 };
       };
       class FakeClient {
@@ -600,7 +608,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         settle(heldEnd);
         await Promise.allSettled([
           held,
-          endStarted,
+          driverEnds > 0 ? endStarted : Promise.resolve(),
           firstClose ?? Promise.resolve(),
           concurrentClose ?? Promise.resolve(),
           fixtures?.close() ?? Promise.resolve(),
@@ -992,7 +1000,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 if (
                   entry.code === "40P01" &&
                   attempt === 1 &&
-                  sql.includes("pg_advisory_xact_lock")
+                  sql.includes("pg_advisory_xact_lock") &&
+                  Array.isArray(params) &&
+                  params.length === 2
                 ) {
                   victimSide = side;
                 }
