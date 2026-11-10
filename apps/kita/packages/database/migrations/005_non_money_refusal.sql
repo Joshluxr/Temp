@@ -211,7 +211,10 @@ BEGIN
 END;
 $$;
 
+GRANT kita_refusal_definer TO CURRENT_USER WITH INHERIT TRUE, SET TRUE;
+GRANT CREATE ON SCHEMA kita TO kita_refusal_definer;
 ALTER FUNCTION kita.record_non_money_refusal(text, text) OWNER TO kita_refusal_definer;
+REVOKE CREATE ON SCHEMA kita FROM kita_refusal_definer;
 
 REVOKE ALL ON FUNCTION kita.record_non_money_refusal(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION kita.record_non_money_refusal(text, text) TO kita_refusal_recorder;
@@ -227,5 +230,7 @@ GRANT SELECT (
 GRANT INSERT (
   book_id, actor_id, operation, key, request_hash, state, resource_id, response
 ) ON kita.command_keys TO kita_refusal_definer;
+
+REVOKE kita_refusal_definer FROM CURRENT_USER;
 
 COMMIT;
