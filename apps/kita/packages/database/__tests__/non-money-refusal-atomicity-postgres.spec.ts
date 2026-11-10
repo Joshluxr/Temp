@@ -408,6 +408,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       const held = new Promise<void>((resolve, reject) => {
         settle = (err?: unknown) => (err === undefined ? resolve() : reject(err));
       });
+      void held.then(
+        () => undefined,
+        () => undefined,
+      );
       const endStarted = new Promise<void>((resolve) => {
         sawEnd = resolve;
       });
@@ -450,11 +454,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         if (sql.includes("GRANT kita_refusal_recorder")) {
           return { rows: [{ sql: "GRANT kita_refusal_recorder TO kita_refusal_fake" }] };
         }
-        if (sql.includes("FROM pg_catalog.pg_roles") && sql.includes("oid")) {
-          return { rows: [{ oid: String(10_000 + bookSeq) }] };
-        }
         if (sql.includes("INSERT INTO kita.non_money_refusal_principals")) {
           return { rowCount: 1, rows: [] };
+        }
+        if (sql.includes("oid::text AS oid") || sql.includes("AS oid FROM pg_catalog.pg_roles")) {
+          return { rows: [{ oid: String(10_000 + bookSeq) }] };
         }
         return { rows: [], rowCount: 0 };
       };
