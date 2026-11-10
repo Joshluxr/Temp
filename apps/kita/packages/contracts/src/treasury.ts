@@ -18,3 +18,17 @@ export interface Fin05Output {
   readonly reservationId: UUID;
   readonly traceEvents: readonly string[];
 }
+
+export type Fin06CommandContext = Pick<WorkerContext, 'workId' | 'attemptGeneration' | 'trace'>;
+
+export interface Fin06Input {
+  readonly customerTermsDriftFromTradeAllocation: boolean;
+  readonly journalPosting?: never;
+  readonly transferAuthorization?: never;
+}
+
+export interface Fin06Output {
+  readonly customerTermsDrifted: true;
+  readonly allocationId: UUID;
+  readonly traceEvents: readonly string[];
+}
