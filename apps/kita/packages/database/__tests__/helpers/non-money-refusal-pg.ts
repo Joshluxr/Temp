@@ -319,6 +319,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     principalsUncertain: 0,
     retainedBookIds: [] as string[],
     retainedLoginNames: [] as string[],
+    attemptedLoginNames: [] as string[],
     retainedLoginOids: [] as string[],
     retainedBindings: [] as Array<{ loginName: string; loginOid: string; bookId: string; actorId: string }>,
   };
@@ -333,6 +334,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     }
     const suffix = randomBytes(4).toString("hex");
     async function insertDisabledBook(legalEntity: string): Promise<string> {
+      const acknowledgedBefore = provisioned.booksAcknowledged;
       provisioned.booksAttempted += 1;
       try {
         const inserted = await client.query<{ id: string }>(
@@ -341,18 +343,12 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
           [legalEntity],
         );
         const id = inserted.rows[0]?.id;
-        if (!id) {
-          provisioned.booksUncertain += 1;
-          throw new Error("HOLD: book insert returned no id");
-        }
+        if (!id) throw new Error("HOLD: book insert returned no id");
         provisioned.booksAcknowledged += 1;
         provisioned.retainedBookIds.push(id);
         return id;
       } catch (err) {
-        if (provisioned.booksAcknowledged < provisioned.booksAttempted) {
-          const last = provisioned.retainedBookIds[provisioned.retainedBookIds.length - 1];
-          if (!last) provisioned.booksUncertain += 1;
-        }
+        if (provisioned.booksAcknowledged === acknowledgedBefore) provisioned.booksUncertain += 1;
         throw err;
       }
     }
@@ -365,7 +361,11 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       bookId: string | null,
     ): Promise<RestrictedLogin> {
       const secret = password();
+      const loginsAckBefore = provisioned.loginsAcknowledged;
+      const grantsAckBefore = provisioned.grantsAcknowledged;
+      const principalsAckBefore = provisioned.principalsAcknowledged;
       provisioned.loginsAttempted += 1;
+      provisioned.attemptedLoginNames.push(name);
       try {
       const createSql = await client.query<{ sql: string }>(
         `SELECT format(
@@ -382,10 +382,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         [name],
       );
       const loginOid = oidRow.rows[0]?.oid;
-      if (!loginOid) {
-        provisioned.loginsUncertain += 1;
-        throw new Error("HOLD: login oid missing after CREATE ROLE");
-      }
+      if (!loginOid) throw new Error("HOLD: login oid missing after CREATE ROLE");
       provisioned.retainedLoginOids.push(loginOid);
       provisioned.grantsAttempted += 1;
       const grantSql = await client.query<{ sql: string }>(
@@ -408,9 +405,14 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       }
       return { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
       } catch (err) {
-        if (provisioned.loginsAcknowledged < provisioned.loginsAttempted) provisioned.loginsUncertain += 1;
-        if (provisioned.grantsAcknowledged < provisioned.grantsAttempted) provisioned.grantsUncertain += 1;
-        if (provisioned.principalsAcknowledged < provisioned.principalsAttempted) {
+        if (provisioned.loginsAcknowledged === loginsAckBefore) provisioned.loginsUncertain += 1;
+        if (provisioned.grantsAcknowledged === grantsAckBefore && provisioned.grantsAttempted > grantsAckBefore) {
+          provisioned.grantsUncertain += 1;
+        }
+        if (
+          provisioned.principalsAcknowledged === principalsAckBefore &&
+          provisioned.principalsAttempted > principalsAckBefore
+        ) {
           provisioned.principalsUncertain += 1;
         }
         throw err;
