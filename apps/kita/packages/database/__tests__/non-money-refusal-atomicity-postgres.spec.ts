@@ -55,14 +55,29 @@ function expectedHash(tag: string): string {
   return `rr1:${createHash("sha256").update(`{"requestTag":"${tag}","schemaVersion":1}`, "utf8").digest("hex")}`;
 }
 
-function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (err: unknown) => void } {
+function timedDeferred<T = void>(name: string, ms = 20_000): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (err: unknown) => void;
+} {
   let resolve!: (value: T) => void;
   let reject!: (err: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
   });
-  return { promise, resolve, reject };
+  const timer = setTimeout(() => reject(new Error(`timeout:${name}`)), ms);
+  return {
+    promise,
+    resolve: (value) => {
+      clearTimeout(timer);
+      resolve(value);
+    },
+    reject: (err) => {
+      clearTimeout(timer);
+      reject(err);
+    },
+  };
 }
 
 async function fetchReservedRow(
@@ -85,14 +100,50 @@ async function fetchReservedRow(
        WHERE book_id = $1 AND actor_id = $2 AND operation = 'recordNonMoneyRefusal.v1' AND key = $3`,
       [bookId, actorId, key],
     );
+    expect(result.rows.length).toBeLessThanOrEqual(1);
     return result.rows[0];
   } finally {
     await client.end();
   }
 }
 
+function expectRow(row: ReservedRow | undefined, bookId: string, actorId: string, key: string, tag: string): ReservedRow {
+  if (!row) throw new Error(`missing reserved row for ${key}`);
+  expect(row.book_id).toBe(bookId);
+  expect(row.actor_id).toBe(actorId);
+  expect(row.operation).toBe("recordNonMoneyRefusal.v1");
+  expect(row.key).toBe(key);
+  expect(row.state).toBe("rejected");
+  expect(row.resource_id).toBeNull();
+  expect(row.response).toEqual(STORED);
+  expect(row.request_hash).toBe(expectedHash(tag));
+  expect(row.created_at.length).toBeGreaterThan(0);
+  expect(row.id.length).toBeGreaterThan(0);
+  return row;
+}
+
+async function observeIdentity(client: PoolClientLike, expectedLogin: string): Promise<{ pid: number; start: string }> {
+  const ident = await client.query(
+    `SELECT session_user AS session_user, current_user AS current_user,
+            pg_backend_pid() AS pid,
+            current_setting('transaction_isolation') AS isolation,
+            current_setting('synchronous_commit') AS synchronous_commit,
+            current_setting('session_replication_role') AS replication_role,
+            current_setting('statement_timeout') AS statement_timeout,
+            (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
+  );
+  const row = ident.rows[0];
+  expect(row?.session_user).toBe(expectedLogin);
+  expect(row?.current_user).toBe(expectedLogin);
+  expect(row?.isolation).toBe("serializable");
+  expect(row?.synchronous_commit).toBe("on");
+  expect(row?.replication_role).toBe("origin");
+  return { pid: Number(row?.pid), start: String(row?.start) };
+}
+
 describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", () => {
-  let fx: RefusalPgFixtures;
+  let fx: RefusalPgFixtures | undefined;
+  const pending: Promise<unknown>[] = [];
 
   beforeAll(async () => {
     requireRefusalOwnerUrl();
@@ -100,40 +151,62 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
   });
 
   afterAll(async () => {
-    await fx.close();
+    await Promise.allSettled(pending);
+    await fx?.close();
   });
 
   it("Atomic refusal rollback on native KRF02", async () => {
+    if (!fx) throw new Error("fixtures missing");
     const keyA = freshKey();
     const keyB = freshKey();
     const tagA = "atom-a";
     const tagB = "atom-b";
     const pool = createPool({ databaseUrl: fx.loginA.url, poolMax: 2, statementTimeoutMs: 15_000 });
+    const afterA = timedDeferred("afterA");
+    const continueB = timedDeferred("continueB");
     try {
       await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyB, requestTag: tagB })).resolves.toEqual(STORED);
-      const rowB = await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB);
-      if (!rowB) throw new Error("missing committed B");
+      const rowB = expectRow(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
+        fx.bookA,
+        fx.loginA.actorId,
+        keyB,
+        tagB,
+      );
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
-      let attempts = 0;
-      let krf: unknown;
-      const afterA = deferred();
-      const continueB = deferred();
+      let acquired = 0;
+      const sequence: string[] = [];
+      let driverErr: unknown;
       const wrapping: PoolLike = {
         async connect() {
-          attempts += 1;
+          acquired += 1;
           const client = await pool.connect();
-          let sawA = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
-              const result = await client.query(sql, params);
-              if (sql.includes("record_non_money_refusal") && !sawA) {
-                sawA = true;
+              if (sql.startsWith("BEGIN")) sequence.push("begin");
+              if (sql.startsWith("COMMIT")) sequence.push("commit");
+              if (sql.startsWith("ROLLBACK")) sequence.push("rollback");
+              if (sql.startsWith("BEGIN")) {
+                const result = await client.query(sql, params);
+                await observeIdentity(client, fx!.loginA.name);
+                return result;
+              }
+              if (sql.includes("record_non_money_refusal") && !sequence.includes("function-a")) {
+                const result = await client.query(sql, params);
+                sequence.push("function-a");
                 afterA.resolve();
                 await continueB.promise;
+                return result;
               }
-              return result;
+              try {
+                return await client.query(sql, params);
+              } catch (err) {
+                if (sql.includes("record_non_money_refusal")) driverErr = err;
+                throw err;
+              }
             },
             release(err?: unknown) {
+              sequence.push("release");
               client.release(err);
             },
           } satisfies PoolClientLike;
@@ -143,28 +216,42 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       };
       const running = withSerializable(wrapping, async (client) => {
         await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [keyA, tagA]);
-        try {
-          await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [keyB, "atom-b-other"]);
-        } catch (err) {
-          krf = err;
-          throw err;
-        }
+        await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [keyB, "atom-b-other"]);
         return STORED;
       });
+      pending.push(running);
       await afterA.promise;
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
-      expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
+      expect(
+        expectRow(
+          await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
+          fx.bookA,
+          fx.loginA.actorId,
+          keyB,
+          tagB,
+        ),
+      ).toEqual(rowB);
       continueB.resolve();
-      await expect(running).rejects.toMatchObject({ code: "KRF02" });
-      expect((krf as { code?: string }).code).toBe("KRF02");
-      expect(krf).toBe((await Promise.resolve(krf)) as unknown);
-      expect(attempts).toBe(1);
+      let helperErr: unknown;
+      try {
+        await running;
+      } catch (err) {
+        helperErr = err;
+      }
+      expect(helperErr).toBe(driverErr);
+      expect((helperErr as { code?: string }).code).toBe("KRF02");
+      expect(acquired).toBe(1);
+      expect(sequence).toEqual(["begin", "function-a", "rollback", "release"]);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
       await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
-      const rowA = await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA);
-      if (!rowA) throw new Error("missing recovered A");
-      expect(rowA.request_hash).toBe(expectedHash(tagA));
+      const rowA = expectRow(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
+        fx.bookA,
+        fx.loginA.actorId,
+        keyA,
+        tagA,
+      );
       await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
       await expect(recordNonMoneyRefusal(pool, { idempotencyKey: keyA, requestTag: "atom-a-other" })).resolves.toEqual(
         MISMATCH,
@@ -172,17 +259,44 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).toEqual(rowA);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
     } finally {
+      afterA.reject(new Error("cleanup"));
+      continueB.reject(new Error("cleanup"));
       await pool.close();
     }
   });
 
   it("Native 40P01 rolls back refusal and replays the full callback", async () => {
+    if (!fx) throw new Error("fixtures missing");
     const keyA = freshKey();
     const keyB = freshKey();
     const tagA = "dl-a";
     const tagB = "dl-b";
     const lockA = 100000 + (randomBytes(2).readUInt16BE(0) % 50000);
     const lockB = 200000 + (randomBytes(2).readUInt16BE(0) % 50000);
+    const holders = await (async () => {
+      const client = new pg.Client({
+        connectionString: fx!.ownerUrl,
+        connectionTimeoutMillis: 10_000,
+        statement_timeout: 15_000,
+      });
+      await client.connect();
+      try {
+        const result = await client.query(
+          `SELECT count(*)::int AS n FROM pg_locks
+           WHERE locktype = 'advisory' AND classid = $1 AND objid = 1`,
+          [lockA],
+        );
+        const resultB = await client.query(
+          `SELECT count(*)::int AS n FROM pg_locks
+           WHERE locktype = 'advisory' AND classid = $1 AND objid = 1`,
+          [lockB],
+        );
+        return Number(result.rows[0]?.n) + Number(resultB.rows[0]?.n);
+      } finally {
+        await client.end();
+      }
+    })();
+    expect(holders).toBe(0);
     const poolA = createPool({
       databaseUrl: fx.loginA.url,
       poolMax: 1,
@@ -195,49 +309,71 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       statementTimeoutMs: 20_000,
       connectionTimeoutMs: 10_000,
     });
-    const firstA = deferred();
-    const firstB = deferred();
-    const goSecond = deferred();
-    const survivorHeld = deferred();
-    const allowSurvivorCommit = deferred();
-    const allowVictimRetry = deferred();
-    const codes: string[] = [];
-    let attemptsA = 0;
-    let attemptsB = 0;
+    const firstA = timedDeferred("firstA");
+    const firstB = timedDeferred("firstB");
+    const goSecond = timedDeferred("goSecond");
+    const victimRolledBack = timedDeferred("victimRolledBack");
+    const allowSurvivorCommit = timedDeferred("allowSurvivorCommit");
+    const allowVictimRetry = timedDeferred("allowVictimRetry");
+    const codes: Array<{ side: string; attempt: number; code: string }> = [];
+    let acquiredA = 0;
+    let acquiredB = 0;
+    let gatedA = 0;
+    let gatedB = 0;
+    const seqA: string[] = [];
+    const seqB: string[] = [];
+    let victimPid: number | undefined;
 
     function wrap(pool: ReturnType<typeof createPool>, side: "A" | "B"): PoolLike {
+      const seq = side === "A" ? seqA : seqB;
       return {
         async connect() {
-          if (side === "A") attemptsA += 1;
-          else attemptsB += 1;
-          const attempt = side === "A" ? attemptsA : attemptsB;
-          if (attempt === 2) await allowVictimRetry.promise;
+          if (side === "A") gatedA += 1;
+          else gatedB += 1;
+          const next = (side === "A" ? gatedA : gatedB);
+          if (next === 2) await allowVictimRetry.promise;
           const client = await pool.connect();
+          if (side === "A") acquiredA += 1;
+          else acquiredB += 1;
+          const attempt = side === "A" ? acquiredA : acquiredB;
           let recorded = false;
-          let secondLock = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
+              if (sql.startsWith("BEGIN")) {
+                const result = await client.query(sql, params);
+                seq.push(`begin:${attempt}`);
+                const ident = await observeIdentity(client, fx!.loginA.name);
+                if (attempt === 1) victimPid = ident.pid;
+                return result;
+              }
               try {
                 const result = await client.query(sql, params);
+                if (sql.startsWith("COMMIT")) seq.push(`commit:${attempt}`);
+                if (sql.startsWith("ROLLBACK")) {
+                  seq.push(`rollback:${attempt}`);
+                  if (attempt === 1) victimRolledBack.resolve();
+                }
                 if (sql.includes("record_non_money_refusal") && attempt === 1 && !recorded) {
                   recorded = true;
+                  seq.push(`function:${attempt}`);
                   if (side === "A") firstA.resolve();
                   else firstB.resolve();
                   await goSecond.promise;
                 }
-                if (sql.includes("pg_advisory_xact_lock") && attempt === 1 && recorded && !secondLock) {
-                  secondLock = true;
-                  survivorHeld.resolve();
+                if (sql.includes("pg_advisory_xact_lock") && attempt === 1 && recorded) {
+                  seq.push(`lock2:${attempt}`);
+                  await victimRolledBack.promise;
                   await allowSurvivorCommit.promise;
                 }
                 return result;
               } catch (err) {
                 const code = (err as { code?: string }).code;
-                if (code) codes.push(code);
+                if (code) codes.push({ side, attempt, code });
                 throw err;
               }
             },
             release(err?: unknown) {
+              seq.push(`release:${attempt}`);
               client.release(err);
             },
           } satisfies PoolClientLike;
@@ -259,18 +395,26 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       await client.query("SELECT pg_advisory_xact_lock($1, $2)", [lockA, 1]);
       return body.rows[0]?.body;
     });
-
+    pending.push(runA, runB);
+    const abort = (err: unknown) => {
+      firstA.reject(err);
+      firstB.reject(err);
+      goSecond.reject(err);
+      victimRolledBack.reject(err);
+      allowSurvivorCommit.reject(err);
+      allowVictimRetry.reject(err);
+    };
     try {
       await Promise.all([firstA.promise, firstB.promise]);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
       goSecond.resolve();
-      const deadlockDeadline = Date.now() + 15_000;
-      while (!codes.includes("40P01") && Date.now() < deadlockDeadline) {
+      const deadline = Date.now() + 15_000;
+      while (!codes.some((c) => c.code === "40P01") && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 25));
       }
-      expect(codes).toContain("40P01");
-      await survivorHeld.promise;
+      expect(codes.some((c) => c.code === "40P01" && c.attempt === 1)).toBe(true);
+      await victimRolledBack.promise;
       allowSurvivorCommit.resolve();
       const settled = await Promise.race([
         runA.then((body) => ({ side: "A" as const, body })),
@@ -284,15 +428,24 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       allowVictimRetry.resolve();
       await expect(runA).resolves.toEqual(STORED);
       await expect(runB).resolves.toEqual(STORED);
-      expect(attemptsA + attemptsB).toBe(3);
-      expect(Math.max(attemptsA, attemptsB)).toBe(2);
-      expect(Math.min(attemptsA, attemptsB)).toBe(1);
-      expect(codes.filter((c) => c === "40P01")).toHaveLength(1);
-      const rowA = await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA);
-      const rowB = await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB);
-      if (!rowA || !rowB) throw new Error("missing deadlock recovery rows");
-      expect(rowA.request_hash).toBe(expectedHash(tagA));
-      expect(rowB.request_hash).toBe(expectedHash(tagB));
+      expect(acquiredA + acquiredB).toBe(3);
+      expect(Math.max(acquiredA, acquiredB)).toBe(2);
+      expect(Math.min(acquiredA, acquiredB)).toBe(1);
+      expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
+      const rowA = expectRow(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
+        fx.bookA,
+        fx.loginA.actorId,
+        keyA,
+        tagA,
+      );
+      const rowB = expectRow(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
+        fx.bookA,
+        fx.loginA.actorId,
+        keyB,
+        tagB,
+      );
       const replay = createPool({ databaseUrl: fx.loginA.url, poolMax: 2, statementTimeoutMs: 15_000 });
       try {
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
@@ -308,13 +461,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       }
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).toEqual(rowA);
       expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
+      expect(seqA.join(",")).toMatch(/begin:1/);
+      expect(seqB.join(",")).toMatch(/begin:1/);
+      expect(victimPid).toBeGreaterThan(0);
+    } catch (err) {
+      abort(err);
+      throw err;
     } finally {
-      firstA.resolve();
-      firstB.resolve();
-      goSecond.resolve();
-      survivorHeld.resolve();
-      allowSurvivorCommit.resolve();
-      allowVictimRetry.resolve();
+      abort(new Error("cleanup"));
+      await Promise.allSettled([runA, runB]);
       await poolA.close();
       await poolB.close();
     }
