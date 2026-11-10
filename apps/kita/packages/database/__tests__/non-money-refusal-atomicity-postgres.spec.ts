@@ -63,6 +63,21 @@ function expectedHash(tag: string): string {
   return `rr1:${createHash("sha256").update(`{"requestTag":"${tag}","schemaVersion":1}`, "utf8").digest("hex")}`;
 }
 
+function parsePgDurationMs(raw: unknown): number {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    throw new Error("HOLD: duration missing");
+  }
+  const text = raw.trim().toLowerCase();
+  const match = /^(\d+)(us|ms|s|min|h)?$/.exec(text);
+  if (!match) throw new Error("HOLD: duration unparseable");
+  const n = Number(match[1]);
+  const unit = match[2] ?? "ms";
+  const ms =
+    unit === "us" ? n / 1000 : unit === "ms" ? n : unit === "s" ? n * 1000 : unit === "min" ? n * 60_000 : n * 3_600_000;
+  if (!(ms > 0) || !Number.isFinite(ms)) throw new Error("HOLD: duration not positive");
+  return ms;
+}
+
 function timedDeferred<T = void>(name: string, ms = 20_000): {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -120,10 +135,15 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
     try {
       await client.end();
     } catch (endErr) {
-      const code =
-        typeof endErr === "object" && endErr !== null && "code" in endErr
-          ? String((endErr as { code?: unknown }).code ?? "CLOSE_FAILED")
-          : "CLOSE_FAILED";
+      let code = "CLOSE_FAILED";
+      try {
+        if (typeof endErr === "object" && endErr !== null && "code" in endErr) {
+          const value = (endErr as { code?: unknown }).code;
+          if (typeof value === "string" && value.length > 0) code = value;
+        }
+      } catch {
+        code = "CLOSE_FAILED";
+      }
       const cleanup = new Error(`observer close failed stage=owner-client.end code=${code} connected=${connected}`);
       notePrivate(cleanup, endErr);
       if (primary && typeof primary === "object") {
@@ -226,12 +246,15 @@ async function observeIdentity(
   if (!Number.isInteger(pid) || pid <= 0) {
     throw new Error("HOLD: backend pid missing");
   }
-  const statementMs = Number.parseInt(String(row.statement_timeout), 10);
-  const lockMs = Number.parseInt(String(row.lock_timeout), 10);
-  const deadlockMs = Number.parseInt(String(row.deadlock_timeout), 10);
-  expect(Number.isFinite(statementMs) && statementMs > 0).toBe(true);
-  expect(Number.isFinite(lockMs)).toBe(true);
-  expect(Number.isFinite(deadlockMs) && deadlockMs > 0).toBe(true);
+  const statementMs = parsePgDurationMs(row.statement_timeout);
+  const lockMs = parsePgDurationMs(row.lock_timeout);
+  const deadlockMs = parsePgDurationMs(row.deadlock_timeout);
+  if (!(statementMs > 0 && lockMs > 0 && deadlockMs > 0)) {
+    throw new Error("HOLD: timeout budget is not positive");
+  }
+  if (!(deadlockMs <= lockMs && lockMs <= statementMs)) {
+    throw new Error("HOLD: timeout budgets are incompatible");
+  }
   return { pid, start: row.start, oid: row.login_oid };
 }
 
@@ -469,11 +492,13 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       let abortOccurred = false;
       const wrapping: PoolLike = {
         async connect() {
+          if (abortOccurred) throw aborted ?? new Error("aborted");
           requested += 1;
           const client = await pool.connect();
           acquired += 1;
           return {
             async query(sql: string, params?: readonly unknown[]) {
+              if (abortOccurred && !sql.startsWith("ROLLBACK")) throw aborted ?? new Error("aborted");
               if (sql.startsWith("BEGIN")) {
                 const result = await client.query(sql, params);
                 sequence.push("begin");
@@ -645,6 +670,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           let recorded = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
+              if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort ?? new Error("aborted");
               if (sql.startsWith("BEGIN")) {
                 const result = await client.query(sql, params);
                 seq.push(`begin:${attempt}`);
