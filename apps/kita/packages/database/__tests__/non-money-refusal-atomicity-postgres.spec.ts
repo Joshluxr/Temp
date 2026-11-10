@@ -8,6 +8,7 @@ import { withSerializable } from "../src/transaction.js";
 import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.js";
 import {
   countReservedRows,
+  createRefusalPoolRegistry,
   ownerClient,
   postgresSuiteSelected,
   provisionRefusalFixtures,
@@ -403,69 +404,49 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
   it("Atomic refusal rollback on native KRF02", async () => {
     {
       let driverEnds = 0;
-      let helperCloses = 0;
       let settle!: (err?: unknown) => void;
+      let sawEnd!: () => void;
       const held = new Promise<void>((resolve, reject) => {
         settle = (err?: unknown) => (err === undefined ? resolve() : reject(err));
       });
-      const pools = new Map<string, ReturnType<typeof createPool>>();
-      let closing = false;
-      let closeReport: Promise<void> | undefined;
-      const fixtures = {
-        poolFor(url: string) {
-          if (closing) {
-            throw new Error("HOLD: fixture closing; pool acquisition refused");
-          }
-          const existing = pools.get(url);
-          if (existing) return existing;
-          const pool = createPool(
-            { databaseUrl: url, poolMax: 1 },
-            {
-              driver: {
-                createPool() {
-                  return {
-                    connect: async () => ({
-                      query: async () => ({ rows: [] }),
-                      release() {},
-                    }),
+      const endStarted = new Promise<void>((resolve) => {
+        sawEnd = resolve;
+      });
+      const fixtures = createRefusalPoolRegistry((url) =>
+        createPool(
+          { databaseUrl: url, poolMax: 1 },
+          {
+            driver: {
+              createPool() {
+                return {
+                  connect: async () => ({
                     query: async () => ({ rows: [] }),
-                    async end() {
-                      driverEnds += 1;
-                      await held;
-                    },
-                  };
-                },
+                    release() {},
+                  }),
+                  query: async () => ({ rows: [] }),
+                  async end() {
+                    driverEnds += 1;
+                    sawEnd();
+                    await held;
+                  },
+                };
               },
             },
-          );
-          pools.set(url, pool);
-          return pool;
-        },
-        async close() {
-          closing = true;
-          helperCloses += closeReport ? 0 : 1;
-          if (closeReport) return closeReport;
-          closeReport = (async () => {
-            const owned = [...pools.values()];
-            await Promise.all(owned.map((pool) => pool.close()));
-          })();
-          return closeReport;
-        },
-      };
-      const controlled = fixtures.poolFor("postgres://kita-refusal-fake/local");
-      const checkout = await controlled.connect();
-      checkout.release();
+          },
+        ),
+      );
+      fixtures.poolFor("postgres://kita-refusal-fake/local");
       const firstClose = fixtures.close();
       const concurrentClose = fixtures.close();
+      expect(concurrentClose).toBe(firstClose);
       expect(() => fixtures.poolFor("postgres://kita-refusal-fake/other")).toThrow(/fixture closing/);
+      await endStarted;
       expect(driverEnds).toBe(1);
-      expect(helperCloses).toBe(1);
       const heldEnd = new Error("held-end-failed");
       settle(heldEnd);
       await expect(firstClose).rejects.toBe(heldEnd);
       await expect(concurrentClose).rejects.toBe(heldEnd);
       expect(driverEnds).toBe(1);
-      expect(helperCloses).toBe(1);
       const repeated = await Promise.allSettled([fixtures.close(), fixtures.close()]);
       expect(repeated[0]?.status).toBe("rejected");
       expect(repeated[1]?.status).toBe("rejected");

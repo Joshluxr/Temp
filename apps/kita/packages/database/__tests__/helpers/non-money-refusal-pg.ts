@@ -379,6 +379,66 @@ export async function countReservedRows(
   });
 }
 
+export function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
+  poolFor(url: string): ManagedPool;
+  close(): Promise<void>;
+} {
+  const pools = new Map<string, ManagedPool>();
+  const originalCloses = new Map<string, { work: Promise<unknown>; ledger: CloseLedger }>();
+  let closing = false;
+  let closeReport: Promise<void> | undefined;
+  return {
+    poolFor(url: string): ManagedPool {
+      if (closing) {
+        throw new Error("HOLD: fixture closing; pool acquisition refused");
+      }
+      const existing = pools.get(url);
+      if (existing) return existing;
+      const pool = build(url);
+      pools.set(url, pool);
+      return pool;
+    },
+    async close(): Promise<void> {
+      closing = true;
+      if (closeReport) return closeReport;
+      closeReport = (async () => {
+        const owned = [...pools.entries()];
+        const ledgers = owned.map(([url, pool]) => {
+          const prior = originalCloses.get(url);
+          if (prior) return { url, work: prior.work, ledger: prior.ledger };
+          let work: Promise<void>;
+          try {
+            work = Promise.resolve(pool.close());
+          } catch (sync) {
+            work = Promise.reject({ status: "sync" as const, reason: sync });
+          }
+          const ledger = watchUntilSettled(work);
+          originalCloses.set(url, { work, ledger });
+          void work.then(
+            () => {
+              pools.delete(url);
+            },
+            () => {
+              pools.delete(url);
+            },
+          );
+          return { url, work, ledger };
+        });
+        const observed = await Promise.allSettled(
+          ledgers.map((item) => bounded("pool.close", item.work, 21_000)),
+        );
+        const rejected = observed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (rejected.length === 0) return;
+        const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
+        const error = cleanupError(accounts, rejected.map((result) => result.reason));
+        hideSecondary(error, ledgers.map((item) => item.ledger));
+        throw error;
+      })();
+      return closeReport;
+    },
+  };
+}
+
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   await assertRefusalSecurityPreflight();
   const ownerUrl = requireRefusalOwnerUrl();
@@ -511,10 +571,14 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     const loginC = await makeLogin(`kita_refusal_test_c_${suffix}`, `refusal-service:c-${suffix}`, bookCId);
     const loginUnbound = await makeLogin(`kita_refusal_test_unbound_${suffix}`, null, null);
 
-    const pools = new Map<string, ManagedPool>();
-    const originalCloses = new Map<string, { work: Promise<unknown>; ledger: CloseLedger }>();
-    let closing = false;
-    let closeReport: Promise<void> | undefined;
+    const registry = createRefusalPoolRegistry((url) =>
+      createPool({
+        databaseUrl: url,
+        poolMax: 4,
+        statementTimeoutMs: 15_000,
+        connectionTimeoutMs: 10_000,
+      }),
+    );
     return {
       ownerUrl,
       bookA: bookAId,
@@ -523,59 +587,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       loginB,
       loginC,
       loginUnbound,
-      poolFor(url: string): ManagedPool {
-        if (closing) {
-          throw new Error("HOLD: fixture closing; pool acquisition refused");
-        }
-        const existing = pools.get(url);
-        if (existing) return existing;
-        const pool = createPool({
-          databaseUrl: url,
-          poolMax: 4,
-          statementTimeoutMs: 15_000,
-          connectionTimeoutMs: 10_000,
-        });
-        pools.set(url, pool);
-        return pool;
-      },
-      async close(): Promise<void> {
-        closing = true;
-        if (closeReport) return closeReport;
-        closeReport = (async () => {
-          const owned = [...pools.entries()];
-          const ledgers = owned.map(([url, pool]) => {
-            const prior = originalCloses.get(url);
-            if (prior) return { url, work: prior.work, ledger: prior.ledger };
-            let work: Promise<void>;
-            try {
-              work = Promise.resolve(pool.close());
-            } catch (sync) {
-              work = Promise.reject({ status: "sync" as const, reason: sync });
-            }
-            const ledger = watchUntilSettled(work);
-            originalCloses.set(url, { work, ledger });
-            void work.then(
-              () => {
-                pools.delete(url);
-              },
-              () => {
-                pools.delete(url);
-              },
-            );
-            return { url, work, ledger };
-          });
-          const observed = await Promise.allSettled(
-            ledgers.map((item) => bounded("pool.close", item.work, 21_000)),
-          );
-          const rejected = observed.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-          if (rejected.length === 0) return;
-          const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
-          const error = cleanupError(accounts, rejected.map((result) => result.reason));
-          hideSecondary(error, ledgers.map((item) => item.ledger));
-          throw error;
-        })();
-        return closeReport;
-      },
+      poolFor: (url: string) => registry.poolFor(url),
+      close: () => registry.close(),
     };
   } catch (err) {
     const inventory = {
