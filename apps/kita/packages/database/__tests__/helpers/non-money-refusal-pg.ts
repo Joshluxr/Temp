@@ -68,6 +68,49 @@ const CLIENT_TIMEOUT = {
   statement_timeout: 15_000,
 } as const;
 
+type CloseAccount = {
+  readonly stage: string;
+  readonly code: string;
+  readonly connected: boolean;
+};
+
+function closeAccount(stage: string, err: unknown, connected: boolean): CloseAccount {
+  const code =
+    typeof err === "object" && err !== null && "code" in err && typeof (err as { code?: unknown }).code === "string"
+      ? (err as { code: string }).code
+      : "CLOSE_FAILED";
+  return { stage, code, connected };
+}
+
+function cleanupError(accounts: readonly CloseAccount[], cause: unknown): Error {
+  const summary = accounts.map((a) => `${a.stage}:${a.code}:connected=${a.connected}`).join(";");
+  const error = new Error(`cleanup failed ${summary}`);
+  (error as { closeAccounts?: readonly CloseAccount[] }).closeAccounts = accounts;
+  (error as { cause?: unknown }).cause = cause;
+  return error;
+}
+
+function retainCleanup<T>(primary: T, accounts: readonly CloseAccount[], cause: unknown): T {
+  if (primary && typeof primary === "object") {
+    const bag = primary as { closeAccounts?: CloseAccount[]; secondaryClose?: unknown };
+    bag.closeAccounts = [...(bag.closeAccounts ?? []), ...accounts];
+    bag.secondaryClose = cause;
+    return primary;
+  }
+  const error = cleanupError(accounts, cause);
+  (error as { primary?: unknown }).primary = primary;
+  throw error;
+}
+
+async function endOwnerClient(client: pg.Client, connected: boolean): Promise<CloseAccount | undefined> {
+  try {
+    await client.end();
+    return undefined;
+  } catch (err) {
+    return closeAccount("owner-client.end", err, connected);
+  }
+}
+
 export function ownerClient(ownerUrl: string): pg.Client {
   return new pg.Client({
     connectionString: ownerUrl,
@@ -76,11 +119,32 @@ export function ownerClient(ownerUrl: string): pg.Client {
   });
 }
 
-export async function assertRefusalSecurityPreflight(): Promise<void> {
-  const ownerUrl = requireRefusalOwnerUrl();
+async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
   const client = ownerClient(ownerUrl);
+  let connected = false;
+  let primary: unknown;
   try {
     await client.connect();
+    connected = true;
+    return await fn(client);
+  } catch (err) {
+    primary = err;
+    throw err;
+  } finally {
+    const account = await endOwnerClient(client, connected);
+    if (account) {
+      if (primary !== undefined) {
+        retainCleanup(primary, [account], account);
+      } else {
+        throw cleanupError([account], account);
+      }
+    }
+  }
+}
+
+export async function assertRefusalSecurityPreflight(): Promise<void> {
+  const ownerUrl = requireRefusalOwnerUrl();
+  await withOwnerClient(ownerUrl, async (client) => {
     const row = (
       await client.query<{
         server_version_num: string;
@@ -156,13 +220,7 @@ export async function assertRefusalSecurityPreflight(): Promise<void> {
       throw new Error("HOLD: installed 006 body hash mismatch");
     }
     if (row.temp_grant !== "0") throw new Error("HOLD: temporary definer membership is present");
-  } finally {
-    try {
-      await client.end();
-    } catch {
-      /* connect may have failed */
-    }
-  }
+  });
 }
 
 function quoteIdent(name: string): string {
@@ -189,9 +247,7 @@ export async function fetchReservedHash(
   actorId: string,
   key: string,
 ): Promise<string | undefined> {
-  const client = ownerClient(ownerUrl);
-  try {
-    await client.connect();
+  return withOwnerClient(ownerUrl, async (client) => {
     const result = await client.query<{ request_hash: string }>(
       `SELECT request_hash
        FROM kita.command_keys
@@ -199,13 +255,7 @@ export async function fetchReservedHash(
       [bookId, actorId, key],
     );
     return result.rows[0]?.request_hash;
-  } finally {
-    try {
-      await client.end();
-    } catch {
-      /* connect may have failed */
-    }
-  }
+  });
 }
 
 export async function countReservedRows(
@@ -214,9 +264,7 @@ export async function countReservedRows(
   actorId: string,
   key: string,
 ): Promise<number> {
-  const client = ownerClient(ownerUrl);
-  try {
-    await client.connect();
+  return withOwnerClient(ownerUrl, async (client) => {
     const result = await client.query<{ n: string }>(
       `SELECT count(*)::text AS n
        FROM kita.command_keys
@@ -224,21 +272,24 @@ export async function countReservedRows(
       [bookId, actorId, key],
     );
     return Number(result.rows[0]?.n ?? "0");
-  } finally {
-    try {
-      await client.end();
-    } catch {
-      /* connect may have failed */
-    }
-  }
+  });
 }
 
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   await assertRefusalSecurityPreflight();
   const ownerUrl = requireRefusalOwnerUrl();
   const client = ownerClient(ownerUrl);
+  const provisioned = {
+    books: 0,
+    logins: 0,
+    principals: 0,
+    grants: 0,
+  };
+  let connected = false;
+  let primary: unknown;
   try {
     await client.connect();
+    connected = true;
     const version = await client.query<{ version: string }>("SELECT version()");
     if (!version.rows[0]?.version.includes("PostgreSQL 18.")) {
       throw new Error(`expected PostgreSQL 18, got ${version.rows[0]?.version ?? "unknown"}`);
@@ -256,6 +307,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     );
     const bookAId = bookA.rows[0].id;
     const bookCId = bookC.rows[0].id;
+    provisioned.books = 2;
 
     async function makeLogin(
       name: string,
@@ -271,11 +323,13 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         [name, secret],
       );
       await client.query(createSql.rows[0].sql);
+      provisioned.logins += 1;
       const grantSql = await client.query<{ sql: string }>(
         `SELECT format('GRANT kita_refusal_recorder TO %I WITH INHERIT TRUE, SET FALSE', $1::text) AS sql`,
         [name],
       );
       await client.query(grantSql.rows[0].sql);
+      provisioned.grants += 1;
       if (actorId !== null && bookId !== null) {
         await client.query(
           `INSERT INTO kita.non_money_refusal_principals (login_oid, login_name, book_id, actor_id)
@@ -284,6 +338,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
            WHERE r.rolname = $3`,
           [bookId, actorId, name],
         );
+        provisioned.principals += 1;
       }
       return { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
     }
@@ -318,15 +373,33 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         const closing = [...pools.values()].map((pool) => pool.close());
         pools.clear();
         const results = await Promise.allSettled(closing);
-        const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
-        if (rejected) throw rejected.reason;
+        const rejected = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (rejected.length === 0) return;
+        const accounts = rejected.map((result, index) => closeAccount(`pool.close[${index}]`, result.reason, true));
+        const error = cleanupError(accounts, rejected[0]?.reason);
+        (error as { closeFailures?: unknown[] }).closeFailures = rejected.map((result) => result.reason);
+        throw error;
       },
     };
+  } catch (err) {
+    primary = err;
+    if (err && typeof err === "object") {
+      (err as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
+    }
+    throw err;
   } finally {
-    try {
-      await client.end();
-    } catch {
-      /* connect may have failed */
+    const account = await endOwnerClient(client, connected);
+    if (account) {
+      if (primary !== undefined) {
+        retainCleanup(primary, [account], account);
+        if (primary && typeof primary === "object") {
+          (primary as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
+        }
+      } else {
+        const error = cleanupError([account], account);
+        (error as { provisioned?: typeof provisioned }).provisioned = { ...provisioned };
+        throw error;
+      }
     }
   }
 }

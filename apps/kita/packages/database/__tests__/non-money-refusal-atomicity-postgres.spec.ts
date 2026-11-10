@@ -8,6 +8,7 @@ import { withSerializable } from "../src/transaction.ts";
 import { recordNonMoneyRefusal } from "../src/non-money-refusal-store.ts";
 import {
   countReservedRows,
+  ownerClient,
   postgresSuiteSelected,
   provisionRefusalFixtures,
   requireRefusalOwnerUrl,
@@ -59,14 +60,24 @@ function timedDeferred<T = void>(name: string, ms = 20_000): {
   promise: Promise<T>;
   resolve: (value: T) => void;
   reject: (err: unknown) => void;
+  outcome: () => PromiseSettledResult<T> | undefined;
 } {
   let resolve!: (value: T) => void;
   let reject!: (err: unknown) => void;
+  let settled: PromiseSettledResult<T> | undefined;
   const promise = new Promise<T>((res, rej) => {
     resolve = res;
     reject = rej;
   });
   const timer = setTimeout(() => reject(new Error(`timeout:${name}`)), ms);
+  void promise.then(
+    (value) => {
+      settled = { status: "fulfilled", value };
+    },
+    (reason: unknown) => {
+      settled = { status: "rejected", reason };
+    },
+  );
   return {
     promise,
     resolve: (value) => {
@@ -77,7 +88,40 @@ function timedDeferred<T = void>(name: string, ms = 20_000): {
       clearTimeout(timer);
       reject(err);
     },
+    outcome: () => settled,
   };
+}
+
+async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
+  const client = ownerClient(ownerUrl);
+  let connected = false;
+  let primary: unknown;
+  try {
+    await client.connect();
+    connected = true;
+    return await fn(client);
+  } catch (err) {
+    primary = err;
+    throw err;
+  } finally {
+    try {
+      await client.end();
+    } catch (endErr) {
+      const code =
+        typeof endErr === "object" && endErr !== null && "code" in endErr
+          ? String((endErr as { code?: unknown }).code ?? "CLOSE_FAILED")
+          : "CLOSE_FAILED";
+      const cleanup = new Error(`observer close failed stage=owner-client.end code=${code} connected=${connected}`);
+      if (primary && typeof primary === "object") {
+        (primary as { closeAccounts?: unknown[] }).closeAccounts = [
+          ...((primary as { closeAccounts?: unknown[] }).closeAccounts ?? []),
+          { stage: "owner-client.end", code, connected },
+        ];
+      } else if (!primary) {
+        throw cleanup;
+      }
+    }
+  }
 }
 
 async function fetchReservedRow(
@@ -86,13 +130,7 @@ async function fetchReservedRow(
   actorId: string,
   key: string,
 ): Promise<ReservedRow | undefined> {
-  const client = new pg.Client({
-    connectionString: ownerUrl,
-    connectionTimeoutMillis: 10_000,
-    statement_timeout: 15_000,
-  });
-  await client.connect();
-  try {
+  return withOwnerObserver(ownerUrl, async (client) => {
     const result = await client.query<ReservedRow>(
       `SELECT id::text, book_id::text, actor_id, operation, key, request_hash, state,
               resource_id::text, response, created_at::text
@@ -102,9 +140,7 @@ async function fetchReservedRow(
     );
     expect(result.rows.length).toBeLessThanOrEqual(1);
     return result.rows[0];
-  } finally {
-    await client.end();
-  }
+  });
 }
 
 function expectRow(row: ReservedRow | undefined, bookId: string, actorId: string, key: string, tag: string): ReservedRow {
@@ -122,7 +158,10 @@ function expectRow(row: ReservedRow | undefined, bookId: string, actorId: string
   return row;
 }
 
-async function observeIdentity(client: PoolClientLike, expectedLogin: string): Promise<{ pid: number; start: string }> {
+async function observeIdentity(
+  client: PoolClientLike,
+  expectedLogin: string,
+): Promise<{ pid: number; start: string; oid: string }> {
   const ident = await client.query(
     `SELECT session_user AS session_user, current_user AS current_user,
             pg_backend_pid() AS pid,
@@ -130,6 +169,11 @@ async function observeIdentity(client: PoolClientLike, expectedLogin: string): P
             current_setting('synchronous_commit') AS synchronous_commit,
             current_setting('session_replication_role') AS replication_role,
             current_setting('statement_timeout') AS statement_timeout,
+            current_setting('lock_timeout') AS lock_timeout,
+            current_setting('deadlock_timeout') AS deadlock_timeout,
+            (SELECT oid::text FROM pg_roles WHERE rolname = current_user) AS login_oid,
+            (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS rolsuper,
+            (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'MEMBER')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
   );
   const row = ident.rows[0];
@@ -138,7 +182,75 @@ async function observeIdentity(client: PoolClientLike, expectedLogin: string): P
   expect(row?.isolation).toBe("serializable");
   expect(row?.synchronous_commit).toBe("on");
   expect(row?.replication_role).toBe("origin");
-  return { pid: Number(row?.pid), start: String(row?.start) };
+  expect(String(row?.statement_timeout).length).toBeGreaterThan(0);
+  expect(row?.statement_timeout).not.toBe("0");
+  expect(row?.rolsuper).toBe(false);
+  expect(row?.recorder_member).toBe(true);
+  expect(String(row?.login_oid).length).toBeGreaterThan(0);
+  return { pid: Number(row?.pid), start: String(row?.start), oid: String(row?.login_oid) };
+}
+
+async function assertSuitePreflight(ownerUrl: string): Promise<void> {
+  await withOwnerObserver(ownerUrl, async (client) => {
+    const row = (
+      await client.query<{
+        server_version_num: string;
+        current_database: string;
+        session_user: string;
+        current_user: string;
+        rolsuper: boolean;
+        rolcreaterole: boolean;
+        replication_role: string;
+        temp_grant: string;
+      }>(
+        `SELECT current_setting('server_version_num') AS server_version_num,
+                current_database() AS current_database,
+                session_user, current_user,
+                (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) AS rolsuper,
+                (SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user) AS rolcreaterole,
+                current_setting('session_replication_role') AS replication_role,
+                (SELECT count(*)::text
+                   FROM pg_auth_members m
+                   JOIN pg_roles r ON r.oid = m.member
+                   JOIN pg_roles g ON g.oid = m.roleid
+                   JOIN pg_roles grantor ON grantor.oid = m.grantor
+                  WHERE r.rolname = 'kita_test'
+                    AND g.rolname = 'kita_refusal_definer'
+                    AND grantor.rolname = 'kita_test') AS temp_grant`,
+      )
+    ).rows[0];
+    if (!row) throw new Error("HOLD: suite preflight returned no row");
+    if (row.server_version_num !== "180006") throw new Error("HOLD: not PostgreSQL 18.6");
+    if (row.current_database !== "kita_core_test") throw new Error("HOLD: wrong database");
+    if (row.session_user !== "kita_test" || row.current_user !== "kita_test") {
+      throw new Error("HOLD: owner session is not kita_test");
+    }
+    if (row.rolsuper || !row.rolcreaterole) throw new Error("HOLD: installer attributes unexpected");
+    if (row.replication_role !== "origin") throw new Error("HOLD: session_replication_role is not origin");
+    if (row.temp_grant !== "0") throw new Error("HOLD: temporary definer membership is present");
+  });
+}
+
+async function advisoryNamespace(
+  ownerUrl: string,
+  expected: ReadonlyArray<{ classid: number; objid: number }>,
+): Promise<Array<{ database: string; classid: string; objid: string; objsubid: string; pid: number; granted: boolean }>> {
+  return withOwnerObserver(ownerUrl, async (client) => {
+    const result = await client.query<{
+      database: string;
+      classid: string;
+      objid: string;
+      objsubid: string;
+      pid: number;
+      granted: boolean;
+    }>(
+      `SELECT database::text, classid::text, objid::text, objsubid::text, pid, granted
+       FROM pg_locks
+       WHERE locktype = 'advisory'`,
+    );
+    void expected;
+    return result.rows;
+  });
 }
 
 describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", () => {
@@ -146,13 +258,25 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
   const pending: Promise<unknown>[] = [];
 
   beforeAll(async () => {
-    requireRefusalOwnerUrl();
+    const ownerUrl = requireRefusalOwnerUrl();
+    await assertSuitePreflight(ownerUrl);
     fx = await provisionRefusalFixtures();
   });
 
   afterAll(async () => {
-    await Promise.allSettled(pending);
-    await fx?.close();
+    const pendingResults = await Promise.allSettled(pending);
+    const closeFailures: unknown[] = [];
+    try {
+      await fx?.close();
+    } catch (err) {
+      closeFailures.push(err);
+    }
+    if (closeFailures.length > 0) {
+      const error = new Error("fixture close failed after suite");
+      (error as { closeFailures?: unknown[] }).closeFailures = closeFailures;
+      throw error;
+    }
+    void pendingResults;
   });
 
   it("Atomic refusal rollback on native KRF02", async () => {
@@ -222,6 +346,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         await client.query("SELECT kita.record_non_money_refusal($1,$2) AS body", [keyB, "atom-b-other"]);
         return STORED;
       });
+      void running.catch(() => undefined);
       pending.push(running);
       await afterA.promise;
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
@@ -265,8 +390,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     } finally {
       afterA.reject(new Error("cleanup"));
       continueB.reject(new Error("cleanup"));
-      await Promise.allSettled(pending);
-      await pool.close();
+      const drained = await Promise.allSettled(pending);
+      void drained;
+      try {
+        await pool.close();
+      } catch (closeErr) {
+        const error = new Error("application pool close failed");
+        (error as { closeFailures?: unknown[] }).closeFailures = [closeErr];
+        throw error;
+      }
     }
   });
 
@@ -278,30 +410,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const tagB = "dl-b";
     const lockA = 100000 + (randomBytes(2).readUInt16BE(0) % 50000);
     const lockB = 200000 + (randomBytes(2).readUInt16BE(0) % 50000);
-    const holders = await (async () => {
-      const client = new pg.Client({
-        connectionString: fx!.ownerUrl,
-        connectionTimeoutMillis: 10_000,
-        statement_timeout: 15_000,
-      });
-      await client.connect();
-      try {
-        const result = await client.query(
-          `SELECT count(*)::int AS n FROM pg_locks
-           WHERE locktype = 'advisory' AND classid = $1 AND objid = 1`,
-          [lockA],
-        );
-        const resultB = await client.query(
-          `SELECT count(*)::int AS n FROM pg_locks
-           WHERE locktype = 'advisory' AND classid = $1 AND objid = 1`,
-          [lockB],
-        );
-        return Number(result.rows[0]?.n) + Number(resultB.rows[0]?.n);
-      } finally {
-        await client.end();
-      }
-    })();
-    expect(holders).toBe(0);
+    const holders = await advisoryNamespace(fx.ownerUrl, [
+      { classid: lockA, objid: 1 },
+      { classid: lockB, objid: 1 },
+    ]);
+    expect(holders.filter((row) => row.classid === String(lockA) || row.classid === String(lockB))).toHaveLength(0);
     const poolA = createPool({
       databaseUrl: fx.loginA.url,
       poolMax: 1,
@@ -400,6 +513,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       await client.query("SELECT pg_advisory_xact_lock($1, $2)", [lockA, 1]);
       return body.rows[0]?.body;
     });
+    void runA.catch(() => undefined);
+    void runB.catch(() => undefined);
     pending.push(runA, runB);
     const abort = (err: unknown) => {
       firstA.reject(err);
@@ -424,27 +539,17 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).resolves.toBe(0);
       const victimBackend = backends[victimSide!];
-      expect(victimBackend?.pid).toBeGreaterThan(0);
-      const lockClient = new pg.Client({
-        connectionString: fx.ownerUrl,
-        connectionTimeoutMillis: 10_000,
-        statement_timeout: 15_000,
-      });
-      await lockClient.connect();
-      try {
-        const leftover = await lockClient.query(
-          `SELECT count(*)::int AS n
-           FROM pg_locks l
-           JOIN pg_stat_activity a ON a.pid = l.pid
-           WHERE l.locktype = 'advisory'
-             AND a.pid = $1
-             AND a.backend_start::text = $2`,
-          [victimBackend.pid, victimBackend.start],
-        );
-        expect(Number(leftover.rows[0]?.n)).toBe(0);
-      } finally {
-        await lockClient.end();
-      }
+      if (!victimBackend) throw new Error("missing victim backend identity");
+      expect(victimBackend.pid).toBeGreaterThan(0);
+      const leftover = await advisoryNamespace(fx.ownerUrl, [
+        { classid: lockA, objid: 1 },
+        { classid: lockB, objid: 1 },
+      ]);
+      expect(
+        leftover.filter(
+          (row) => row.pid === victimBackend.pid,
+        ),
+      ).toHaveLength(0);
       allowSurvivorCommit.resolve();
       const settled = await Promise.race([
         runA.then((body) => ({ side: "A" as const, body })),
@@ -452,8 +557,15 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       ]);
       expect(settled.body).toEqual(STORED);
       const survivorKey = settled.side === "A" ? keyA : keyB;
+      const survivorTag = settled.side === "A" ? tagA : tagB;
       const victimKey = settled.side === "A" ? keyB : keyA;
-      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, survivorKey)).resolves.toBe(1);
+      const survivorRow = expectRow(
+        await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, survivorKey),
+        fx.bookA,
+        fx.loginA.actorId,
+        survivorKey,
+        survivorTag,
+      );
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, victimKey)).resolves.toBe(0);
       allowVictimRetry.resolve();
       await expect(runA).resolves.toEqual(STORED);
@@ -476,6 +588,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         keyB,
         tagB,
       );
+      if (settled.side === "A") {
+        expect(rowA).toEqual(survivorRow);
+      } else {
+        expect(rowB).toEqual(survivorRow);
+      }
       const replay = createPool({ databaseUrl: fx.loginA.url, poolMax: 2, statementTimeoutMs: 15_000 });
       try {
         await expect(recordNonMoneyRefusal(replay, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
@@ -496,6 +613,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(seqA.join(",") + seqB.join(",")).toMatch(/rollback:1/);
       expect(seqA.join(",") + seqB.join(",")).toMatch(/release:1/);
       expect(seqA.join(",") + seqB.join(",")).toMatch(/commit:1/);
+      expect(seqA.join(",") + seqB.join(",")).toMatch(/commit:1|commit:2/);
+      const backendA = backends.A;
+      const backendB = backends.B;
+      if (!backendA || !backendB) throw new Error("missing first-attempt backend identities");
+      expect(backendA.pid !== backendB.pid || backendA.start !== backendB.start).toBe(true);
     } catch (err) {
       abort(err);
       throw err;
@@ -503,8 +625,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       abort(new Error("cleanup"));
       await Promise.allSettled([runA, runB]);
       const closes = await Promise.allSettled([poolA.close(), poolB.close()]);
-      const failed = closes.find((result): result is PromiseRejectedResult => result.status === "rejected");
-      if (failed) throw failed.reason;
+      const failed = closes.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failed.length > 0) {
+        const error = new Error("application pool close failed");
+        (error as { closeFailures?: unknown[] }).closeFailures = failed.map((result) => result.reason);
+        throw error;
+      }
     }
   });
 });
