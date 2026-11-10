@@ -672,24 +672,58 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       throw new Error("HOLD: unbound login unexpectedly bound");
     }
     provisioned.bindingsObserved += observedBindings.rows.length;
-    const observedGrants = await client.query<{ member: string; grantor: string }>(
-      `SELECT r.rolname AS member, grantor.rolname AS grantor
+    const expectedRecorderGrantor = "kita_test";
+    const expectedLogins = [
+      { name: loginA.name, oid: provisioned.retainedLoginOids[0] },
+      { name: loginB.name, oid: provisioned.retainedLoginOids[1] },
+      { name: loginC.name, oid: provisioned.retainedLoginOids[2] },
+      { name: loginUnbound.name, oid: provisioned.retainedLoginOids[3] },
+    ];
+    if (expectedLogins.some((login) => !login.oid)) {
+      throw new Error("HOLD: retained login oid missing before grant observation");
+    }
+    const observedGrants = await client.query<{
+      member: string;
+      member_oid: string;
+      role: string;
+      grantor: string;
+      admin_option: boolean;
+      inherit_option: boolean;
+      set_option: boolean;
+    }>(
+      `SELECT r.rolname AS member, r.oid::text AS member_oid, g.rolname AS role,
+              grantor.rolname AS grantor, m.admin_option, m.inherit_option, m.set_option
          FROM pg_auth_members m
          JOIN pg_roles r ON r.oid = m.member
          JOIN pg_roles g ON g.oid = m.roleid
          JOIN pg_roles grantor ON grantor.oid = m.grantor
-        WHERE g.rolname = 'kita_refusal_recorder'
-          AND r.rolname = ANY($1::text[])`,
-      [[loginA.name, loginB.name, loginC.name, loginUnbound.name]],
+        WHERE g.rolname = 'kita_refusal_recorder'`,
     );
-    if (observedGrants.rows.length !== 4) {
-      throw new Error("HOLD: recorder grant observation cardinality is not four");
+    for (const expected of expectedLogins) {
+      const forLogin = observedGrants.rows.filter((row) => row.member === expected.name);
+      if (forLogin.length !== 1) {
+        throw new Error("HOLD: recorder membership cardinality is not one per expected login");
+      }
+      const row = forLogin[0];
+      if (
+        !row ||
+        row.member_oid !== expected.oid ||
+        row.role !== "kita_refusal_recorder" ||
+        row.grantor !== expectedRecorderGrantor ||
+        row.admin_option !== false ||
+        row.inherit_option !== true ||
+        row.set_option !== false
+      ) {
+        throw new Error("HOLD: recorder membership grantor or options mismatch");
+      }
     }
-    const expectedGrantNames = new Set([loginA.name, loginB.name, loginC.name, loginUnbound.name]);
-    if (observedGrants.rows.some((row) => !expectedGrantNames.has(row.member))) {
-      throw new Error("HOLD: unexpected recorder grant member");
+    const unexpectedMembers = observedGrants.rows.filter(
+      (row) => !expectedLogins.some((login) => login.name === row.member),
+    );
+    if (unexpectedMembers.length > 0) {
+      throw new Error("HOLD: unexpected recorder membership row");
     }
-    provisioned.grantsObserved += observedGrants.rows.length;
+    provisioned.grantsObserved += expectedLogins.length;
 
     const registry = createRefusalPoolRegistry((url) =>
       createPool({

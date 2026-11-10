@@ -451,6 +451,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       let bookSeq = 0;
       let roleSeq = 0;
       const issuedOids = new Map<string, string>();
+      const executedCreates = new Set<string>();
+      const executedGrants = new Set<string>();
       const issuedBooks: Array<{ id: string; status: string; legal: string }> = [];
       const issuedBindings: Array<{
         login_name: string;
@@ -492,17 +494,41 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         }
         if (sql.includes("CREATE ROLE %I")) {
           const loginName = String(params?.[0] ?? "");
-          return { rows: [{ sql: `CREATE ROLE ${loginName} LOGIN` }] };
+          return {
+            rows: [
+              {
+                sql: `CREATE ROLE "${loginName}" LOGIN PASSWORD 'redacted' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS`,
+              },
+            ],
+          };
         }
         if (sql.includes("GRANT kita_refusal_recorder TO %I")) {
           const loginName = String(params?.[0] ?? "");
-          return { rows: [{ sql: `GRANT kita_refusal_recorder TO ${loginName}` }] };
+          return {
+            rows: [
+              {
+                sql: `GRANT kita_refusal_recorder TO "${loginName}" WITH INHERIT TRUE, SET FALSE`,
+              },
+            ],
+          };
         }
-        if (sql.startsWith("CREATE ROLE ") || (sql.includes("CREATE ROLE") && !sql.includes("%I"))) {
+        const createExec = /^CREATE ROLE "([A-Za-z0-9_]+)" LOGIN PASSWORD 'redacted' NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS$/.exec(
+          sql,
+        );
+        if (createExec?.[1]) {
+          executedCreates.add(createExec[1]);
           return { rows: [], rowCount: 0 };
         }
-        if (sql.startsWith("GRANT kita_refusal_recorder TO ") && !sql.includes("%I")) {
+        const grantExec = /^GRANT kita_refusal_recorder TO "([A-Za-z0-9_]+)" WITH INHERIT TRUE, SET FALSE$/.exec(sql);
+        if (grantExec?.[1]) {
+          if (!executedCreates.has(grantExec[1])) {
+            throw new Error("HOLD: GRANT executed before CREATE");
+          }
+          executedGrants.add(grantExec[1]);
           return { rows: [], rowCount: 0 };
+        }
+        if ((sql.includes("CREATE ROLE") && !sql.includes("%I")) || (sql.includes("GRANT kita_refusal_recorder") && !sql.includes("%I"))) {
+          throw new Error("HOLD: unrecognized CREATE/GRANT mutation");
         }
         if (sql.includes("INSERT INTO kita.non_money_refusal_principals")) {
           const bookId = String(params?.[0] ?? "");
@@ -515,6 +541,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         }
         if (sql.includes("oid::text AS oid") || sql.includes("AS oid FROM pg_catalog.pg_roles")) {
           const loginName = String(params?.[0] ?? "");
+          if (!executedCreates.has(loginName)) return { rows: [], rowCount: 0 };
+          const existing = issuedOids.get(loginName);
+          if (existing) return { rows: [{ oid: existing }] };
           roleSeq += 1;
           const oid = String(20_000 + roleSeq);
           issuedOids.set(loginName, oid);
@@ -533,11 +562,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           return { rows: issuedBindings.filter((row) => wanted.has(row.login_name)) };
         }
         if (sql.includes("pg_auth_members") && sql.includes("kita_refusal_recorder")) {
-          const wanted = new Set((params?.[0] as string[] | undefined) ?? []);
           return {
-            rows: [...issuedOids.keys()]
-              .filter((name) => wanted.has(name))
-              .map((name) => ({ member: name, grantor: "kita_test" })),
+            rows: [...executedGrants].map((name) => ({
+              member: name,
+              member_oid: issuedOids.get(name),
+              role: "kita_refusal_recorder",
+              grantor: "kita_test",
+              admin_option: false,
+              inherit_option: true,
+              set_option: false,
+            })),
           };
         }
         return { rows: [], rowCount: 0 };
@@ -841,6 +875,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       pid?: number | undefined;
       start?: string | undefined;
       sql?: string | undefined;
+      params?: unknown[];
       original?: unknown;
     }> = [];
     let acquiredA = 0;
@@ -981,6 +1016,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   seq.push(`lock2:${attempt}`);
                 }
                 const original = err;
+                const forwardedParams = Array.isArray(params) ? [...params] : [];
                 const entry: (typeof codes)[number] = {
                   side,
                   attempt,
@@ -988,6 +1024,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   pid: backends[side]?.pid,
                   start: backends[side]?.start,
                   sql,
+                  params: forwardedParams,
                   original,
                 };
                 codes.push(entry);
@@ -997,12 +1034,18 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 } catch {
                   /* retain original without code */
                 }
+                const opposing = side === "A" ? [lockB, 1] : [lockA, 1];
                 if (
+                  victimSide === undefined &&
                   entry.code === "40P01" &&
                   attempt === 1 &&
-                  sql.includes("pg_advisory_xact_lock") &&
-                  Array.isArray(params) &&
-                  params.length === 2
+                  recorded &&
+                  sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+                  forwardedParams.length === 2 &&
+                  forwardedParams[0] === opposing[0] &&
+                  forwardedParams[1] === opposing[1] &&
+                  backends[side]?.pid !== undefined &&
+                  backends[side]?.start !== undefined
                 ) {
                   victimSide = side;
                 }
