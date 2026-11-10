@@ -595,6 +595,7 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
       sequence: [] as string[],
     };
     let attempt = 0;
+    const closers: Promise<void>[] = [];
     const pool: PoolLike = {
       async connect() {
         stats.checkouts += 1;
@@ -617,34 +618,37 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
               expect(snap.rows[0]?.synchronous_commit).toBe("on");
               snapshot.resolve();
               await winner.promise;
-              try {
-                const result = await client.query(sql, params ? [...params] : undefined);
-                return { rows: result.rows, rowCount: result.rowCount ?? 0 };
-              } catch (err) {
-                stats.firstSqlState = (err as { code?: string }).code;
-                stats.firstConstraint = (err as { constraint?: string }).constraint;
-                stats.sequence.push(`error:${stats.firstSqlState}`);
-                throw err;
-              }
             }
             if (sql.startsWith("BEGIN")) stats.sequence.push(`begin:${mine}`);
             if (sql.startsWith("COMMIT")) stats.sequence.push(`commit:${mine}`);
             if (sql.startsWith("ROLLBACK")) stats.sequence.push(`rollback:${mine}`);
-            const result = await client.query(sql, params ? [...params] : undefined);
-            return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+            try {
+              const result = await client.query(sql, params ? [...params] : undefined);
+              return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+            } catch (err) {
+              const code = (err as { code?: string }).code;
+              if (stats.firstSqlState === undefined) {
+                stats.firstSqlState = code;
+                stats.firstConstraint = (err as { constraint?: string }).constraint;
+              }
+              stats.sequence.push(`error:${mine}:${code}`);
+              throw err;
+            }
           },
           release() {
             stats.sequence.push(`release:${mine}`);
             if (!closed) {
-              void client.end();
               closed = true;
+              closers.push(client.end());
             }
           },
         };
         return wrapped;
       },
       query: async () => ({ rows: [] }),
-      end: async () => {},
+      end: async () => {
+        await Promise.all(closers);
+      },
     };
     return {
       pool,
@@ -703,21 +707,35 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
       if (!winner) throw new Error("winner row missing before first attempt proceeds");
       expect(winner.request_hash).toBe(expectedHash(tag));
       coord.markWinnerCommitted();
-      await expect(app).resolves.toEqual(UNCONFIRMED);
-      expect(coord.stats.firstSqlState).toBe("23505");
-      expect(coord.stats.firstConstraint).toBe("command_keys_book_id_actor_id_operation_key_key");
-      expect(coord.stats.checkouts).toBe(1);
+      await expect(app).resolves.toEqual(STORED);
+      expect(coord.stats.firstSqlState).toBe("40001");
+      expect(coord.stats.checkouts).toBe(2);
       expect(coord.stats.sequence.join(",")).toContain("begin:1");
-      expect(coord.stats.sequence.join(",")).toContain("error:23505");
+      expect(coord.stats.sequence.join(",")).toContain("error:1:40001");
       expect(coord.stats.sequence.join(",")).toContain("rollback:1");
       expect(coord.stats.sequence.join(",")).toContain("release:1");
+      expect(coord.stats.sequence.join(",")).toContain("begin:2");
+      expect(coord.stats.sequence.join(",")).toContain("commit:2");
+      expect(coord.stats.sequence.join(",")).toContain("release:2");
       const recovered = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
-      if (!recovered) throw new Error("missing winner after 23505");
+      if (!recovered) throw new Error("missing row after recovery");
       expectPreserved(winner, recovered);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key)).resolves.toBe(1);
+      const replayPool = fx.poolFor(fx.loginA.url);
+      await expect(recordNonMoneyRefusal(replayPool, { idempotencyKey: key, requestTag: tag })).resolves.toEqual(
+        STORED,
+      );
+      await expect(
+        recordNonMoneyRefusal(replayPool, { idempotencyKey: key, requestTag: "stale-same-other" }),
+      ).resolves.toEqual(MISMATCH);
+      const after = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
+      if (!after) throw new Error("missing row after replay");
+      expectPreserved(winner, after);
     } catch (err) {
       coord.failCoordination(err);
       throw err;
+    } finally {
+      await coord.pool.end();
     }
   });
 
@@ -735,17 +753,24 @@ describe.skipIf(!selected)("non-money refusal PostgreSQL 18 evidence", () => {
       if (!winner) throw new Error("winner row missing before first attempt proceeds");
       expect(winner.request_hash).toBe(expectedHash(winnerTag));
       coord.markWinnerCommitted();
-      await expect(app).resolves.toEqual(UNCONFIRMED);
-      expect(coord.stats.firstSqlState).toBe("23505");
-      expect(coord.stats.firstConstraint).toBe("command_keys_book_id_actor_id_operation_key_key");
-      expect(coord.stats.checkouts).toBe(1);
+      await expect(app).resolves.toEqual(MISMATCH);
+      expect(coord.stats.firstSqlState).toBe("40001");
+      expect(coord.stats.checkouts).toBe(2);
+      expect(coord.stats.sequence.join(",")).toContain("error:1:40001");
+      expect(coord.stats.sequence.join(",")).toContain("rollback:1");
+      expect(coord.stats.sequence.join(",")).toContain("release:1");
+      expect(coord.stats.sequence.join(",")).toContain("error:2:KRF02");
+      expect(coord.stats.sequence.join(",")).toContain("rollback:2");
+      expect(coord.stats.sequence.join(",")).toContain("release:2");
       const recovered = await fetchReservedRow(fx.bookA, fx.loginA.actorId, key);
-      if (!recovered) throw new Error("missing winner after changed-tag 23505");
+      if (!recovered) throw new Error("missing row after mismatch recovery");
       expectPreserved(winner, recovered);
       await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, key)).resolves.toBe(1);
     } catch (err) {
       coord.failCoordination(err);
       throw err;
+    } finally {
+      await coord.pool.end();
     }
   });
 });
