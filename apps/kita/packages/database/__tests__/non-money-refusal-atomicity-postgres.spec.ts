@@ -954,9 +954,14 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             async query(sql: string, params?: readonly unknown[]) {
               let forwardedAtCall: unknown[] | undefined;
               try {
-                if (Array.isArray(params)) forwardedAtCall = params.slice();
+                if (Array.isArray(params) && Number.isInteger(params.length) && params.length >= 0) {
+                  const copy: unknown[] = [];
+                  for (let i = 0; i < params.length; i += 1) copy.push(params[i]);
+                  forwardedAtCall = copy;
+                }
               } catch (snapshotErr) {
-                notePrivate({ sql }, snapshotErr);
+                notePrivate(client, snapshotErr);
+                notePrivate(codes, snapshotErr);
                 forwardedAtCall = undefined;
               }
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
@@ -1076,6 +1081,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   attempt === 1 &&
                   firstLockAck &&
                   recorderAck &&
+                  seq.includes("begin:1") &&
+                  seq.includes("lock1:1") &&
+                  seq.includes("function:1") &&
                   sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
                   forwardedAtCall !== undefined &&
                   forwardedAtCall.length === 2 &&
@@ -1248,6 +1256,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(gatedB).toBe(acquiredB);
       expect(Math.max(acquiredA, acquiredB)).toBe(2);
       expect(Math.min(acquiredA, acquiredB)).toBe(1);
+      expect(codes).toHaveLength(1);
+      expect(codes[0]).toBe(victimEntry);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
       expect(codes.filter((c) => c.code === "40P01")[0]).toBe(victimEntry);
       const rowA = expectRow(
