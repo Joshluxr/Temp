@@ -1,23 +1,21 @@
 BATCH-OK
 
-Authorize exactly T-GROW-01: vestPoints PURE checker.
+Authorize only T-GROW-02: reservePoints as a pure, fail-closed checker.
+
+T-GROW-01 landed: duplicatePayoutCallbackAwardsTwice returns POLICY_UNAVAILABLE 409; otherwise 503. TEST-GROW-01: 2 passed.
 
 Allowed implementation files only:
-- packages/domain/rewards/vest-points.ts
-- tests/features/test-grow-01.spec.ts
-- packages/contracts/src/rewards.ts — additive Grow01 types only.
+- packages/domain/rewards/reserve-points.ts
+- tests/features/test-grow-02.spec.ts
+- packages/contracts/src/rewards.ts — additive Grow02 types only
 
-Required behavior:
-- Never return ok:true and never award points on a duplicate payout callback.
-- duplicatePayoutCallbackAwardsTwice === true => POLICY_UNAVAILABLE, HTTP 409. Policy: "Duplicate payout callback awards once."
-- Otherwise => dependency_unavailable, HTTP 503, because the points store is not implemented (T-REWARD-01 HOLD).
-- Reuse Grow04CommandContext or a WorkerContext pick named Grow01CommandContext.
-- Pure checker only: no DB access, no money operations, no executeCommand, and no points issuance. The checker does not award points in either branch.
+Exact checker behavior:
+- concurrentRedemptionExpiryOverspend === true: return INSUFFICIENT_FUNDS, HTTP 409. Concurrent redemption/expiry cannot overspend a lot.
+- Otherwise: return dependency_unavailable, HTTP 503, because the points store is not implemented (T-REWARD-01 remains HOLD).
+- Never return ok:true. Never reserve, redeem, expire, or mutate points; concurrent redemption/expiry must never overspend a lot.
+- Pure checker only: no DB access, no money operations, no executeCommand, and never convert units to fiat.
+- Reuse Grow01CommandContext or Grow04CommandContext, or a WorkerContext pick named Grow02CommandContext. Do not expand shared context or contracts beyond additive Grow02 types.
 
-Validation in tests/features/test-grow-01.spec.ts must cover duplicatePayoutCallbackAwardsTwice === true returning POLICY_UNAVAILABLE 409, the otherwise branch returning dependency_unavailable 503, and absence of ok:true or points awards in either branch. No additional implementation files or scope are authorized. Any implementation requiring broader scope is HOLD.
+TEST-GROW-02 must cover the exact true => 409 branch and the otherwise => 503 branch, with no successful result or side effects. This authorization does not implement the points store or authorize any held task.
 
-Landed status supplied by operator:
-T-WAL-01: projectionLedgerDisagree => CAPABILITY_UNAVAILABLE, HTTP 409; otherwise HTTP 503. TEST-WAL-01: 2 passed. PR #66.
-
-Holds remain unchanged:
-T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
+HOLD: T-ADM-03, T-ADM-06, T-ADM-08, T-CORE-02, T-QUOTE-01, T-FIN-01, T-REWARD-01, T-PLAT-08, T-EXT-02, T-EXT-04, T-GROW-06, T-TX-01, T-TX-05, T-TX-06, T-TX-10, T-FUND-02, T-FUND-03, T-LEDGER-02.
