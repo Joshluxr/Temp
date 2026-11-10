@@ -16,6 +16,13 @@ import {
 } from "./helpers/non-money-refusal-pg.ts";
 
 const selected = postgresSuiteSelected();
+const privateNotes = new WeakMap<object, unknown[]>();
+
+function notePrivate(owner: object, value: unknown): void {
+  const prior = privateNotes.get(owner) ?? [];
+  prior.push(value);
+  privateNotes.set(owner, prior);
+}
 const STORED = {
   ok: false as const,
   error: {
@@ -101,8 +108,14 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
     connected = true;
     return await fn(client);
   } catch (err) {
-    primary = err;
-    throw err;
+    if (err && typeof err === "object") {
+      primary = err;
+    } else {
+      const boxed = new Error("observer failed");
+      notePrivate(boxed, err);
+      primary = boxed;
+    }
+    throw primary;
   } finally {
     try {
       await client.end();
@@ -112,11 +125,17 @@ async function withOwnerObserver<T>(ownerUrl: string, fn: (client: pg.Client) =>
           ? String((endErr as { code?: unknown }).code ?? "CLOSE_FAILED")
           : "CLOSE_FAILED";
       const cleanup = new Error(`observer close failed stage=owner-client.end code=${code} connected=${connected}`);
+      notePrivate(cleanup, endErr);
       if (primary && typeof primary === "object") {
-        (primary as { closeAccounts?: unknown[] }).closeAccounts = [
-          ...((primary as { closeAccounts?: unknown[] }).closeAccounts ?? []),
-          { stage: "owner-client.end", code, connected },
-        ];
+        try {
+          (primary as { closeAccounts?: unknown[] }).closeAccounts = [
+            ...((primary as { closeAccounts?: unknown[] }).closeAccounts ?? []),
+            { stage: "owner-client.end", code, connected },
+          ];
+        } catch {
+          notePrivate(primary, cleanup);
+        }
+        notePrivate(primary, endErr);
       } else if (!primary) {
         throw cleanup;
       }
@@ -405,6 +424,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       let acquired = 0;
       const sequence: string[] = [];
       let driverErr: unknown;
+      let aborted: unknown;
       const wrapping: PoolLike = {
         async connect() {
           requested += 1;
@@ -423,6 +443,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 sequence.push("function-a");
                 afterA.resolve();
                 await continueB.promise;
+                if (aborted) throw aborted;
                 return result;
               }
               try {
@@ -468,7 +489,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         await running;
       } catch (err) {
         helperErr = err;
+        aborted = err;
+        continueB.reject(err);
       }
+      expect(afterA.outcome()?.status).toBe("fulfilled");
       expect(helperErr).toBe(driverErr);
       expect((helperErr as { code?: string }).code).toBe("KRF02");
       expect(requested).toBe(1);
@@ -563,7 +587,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           if (side === "A") gatedA += 1;
           else gatedB += 1;
           const next = side === "A" ? gatedA : gatedB;
-          if (next === 2) await allowVictimRetry.promise;
+          if (next === 2) {
+            await allowVictimRetry.promise;
+            if (persistAbort) throw persistAbort;
+          }
           const client = await pool.connect();
           if (side === "A") acquiredA += 1;
           else acquiredB += 1;
@@ -592,13 +619,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                     if (side === "A") firstA.resolve();
                     else firstB.resolve();
                     await goSecond.promise;
+                    if (persistAbort) throw persistAbort;
                   }
                 }
                 if (sql.includes("pg_advisory_xact_lock") && recorded) {
                   seq.push(`lock2:${attempt}`);
                   if (attempt === 1) {
                     await victimRolledBack.promise;
+                    if (persistAbort) throw persistAbort;
                     await allowSurvivorCommit.promise;
+                    if (persistAbort) throw persistAbort;
                   }
                 }
                 return result;
@@ -639,7 +669,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     void runA.catch(() => undefined);
     void runB.catch(() => undefined);
     pending.push(runA, runB);
+    let persistAbort: unknown;
     const abort = (err: unknown) => {
+      persistAbort = err;
       firstA.reject(err);
       firstB.reject(err);
       goSecond.reject(err);
