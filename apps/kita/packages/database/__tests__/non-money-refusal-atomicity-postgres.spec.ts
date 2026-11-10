@@ -952,11 +952,12 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           let recorderAck = false;
           return {
             async query(sql: string, params?: readonly unknown[]) {
-              let forwardedAtCall: unknown[] = [];
+              let forwardedAtCall: unknown[] | undefined;
               try {
-                forwardedAtCall = Array.isArray(params) ? [...params] : [];
-              } catch {
-                forwardedAtCall = [];
+                if (Array.isArray(params)) forwardedAtCall = params.slice();
+              } catch (snapshotErr) {
+                notePrivate({ sql }, snapshotErr);
+                forwardedAtCall = undefined;
               }
               if (abortOccurred && !sql.startsWith("ROLLBACK")) throw persistAbort;
               if (sql.startsWith("BEGIN")) {
@@ -1002,6 +1003,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 const recorderParams = side === "A" ? [keyA, tagA] : [keyB, tagB];
                 if (
                   sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+                  forwardedAtCall !== undefined &&
                   forwardedAtCall.length === 2 &&
                   forwardedAtCall[0] === ownFirst[0] &&
                   forwardedAtCall[1] === ownFirst[1]
@@ -1011,6 +1013,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 }
                 if (
                   sql === "SELECT kita.record_non_money_refusal($1,$2) AS body" &&
+                  forwardedAtCall !== undefined &&
                   forwardedAtCall.length === 2 &&
                   forwardedAtCall[0] === recorderParams[0] &&
                   forwardedAtCall[1] === recorderParams[1] &&
@@ -1074,6 +1077,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                   firstLockAck &&
                   recorderAck &&
                   sql === "SELECT pg_advisory_xact_lock($1, $2)" &&
+                  forwardedAtCall !== undefined &&
                   forwardedAtCall.length === 2 &&
                   forwardedAtCall[0] === opposing[0] &&
                   forwardedAtCall[1] === opposing[1] &&
@@ -1188,6 +1192,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(victimEntry?.params).toEqual(opposingForVictim);
       expect(victimEntry?.pid).toBe(backends[victimSide!]?.pid);
       expect(victimEntry?.start).toBe(backends[victimSide!]?.start);
+      expect(codes).toHaveLength(1);
+      expect(codes[0]).toBe(victimEntry);
       expect(codes.filter((c) => c.code === "40P01")).toHaveLength(1);
       expect(codes.filter((c) => c.code === "40P01")[0]).toBe(victimEntry);
       await victimRolledBack.promise;
