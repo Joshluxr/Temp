@@ -49,8 +49,10 @@ export type RestrictedLogin = {
   readonly name: string;
   readonly url: string;
   readonly actorId: string;
-  readonly oid: string;
 };
+
+const LOGIN_OID = Symbol.for("kita.non-money-refusal.login-oid");
+const FIXTURE_INVOCATION = Symbol.for("kita.non-money-refusal.fixture-invocation");
 
 export type RefusalPgFixtures = {
   readonly ownerUrl: string;
@@ -686,25 +688,50 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         bindingRecord.outcome = "fulfilled";
       }
       grantRecord.outcome = "fulfilled";
-      return { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "", oid: loginOid };
+      const login: RestrictedLogin = { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
+      Object.defineProperty(login, LOGIN_OID, { value: loginOid, enumerable: false, configurable: false, writable: false });
+      return login;
       } catch (err) {
-        roleRecord.outcome = "rejected";
-        grantRecord.outcome = "rejected";
-        if (bindingRecord) bindingRecord.outcome = "rejected";
-        if (provisioned.rolesIssued > rolesIssuedBefore && provisioned.rolesAcknowledged === rolesAckBefore) {
+        if (roleRecord.outcome === "pending") {
+          if (roleRecord.issued && !roleRecord.acknowledged) {
+            roleRecord.uncertain = true;
+            provisioned.rolesUncertain += 1;
+          } else if (!roleRecord.issued) {
+            roleRecord.outcome = "rejected";
+          }
+        }
+        if (grantRecord.outcome === "pending") {
+          if (grantRecord.issued && !grantRecord.acknowledged) {
+            grantRecord.uncertain = true;
+            provisioned.grantsUncertain += 1;
+          } else if (grantRecord.prepared && !grantRecord.issued) {
+            grantRecord.outcome = "rejected";
+          }
+        }
+        if (bindingRecord && bindingRecord.outcome === "pending") {
+          if (bindingRecord.issued && !bindingRecord.acknowledged) {
+            bindingRecord.uncertain = true;
+            provisioned.bindingsUncertain += 1;
+          } else if (bindingRecord.prepared && !bindingRecord.issued) {
+            bindingRecord.outcome = "rejected";
+          }
+        }
+        if (provisioned.rolesIssued > rolesIssuedBefore && provisioned.rolesAcknowledged === rolesAckBefore && !roleRecord.uncertain) {
           provisioned.rolesUncertain += 1;
           roleRecord.uncertain = true;
         }
-        if (provisioned.grantsIssued > grantsIssuedBefore && provisioned.grantsAcknowledged === grantsAckBefore) {
+        if (provisioned.grantsIssued > grantsIssuedBefore && provisioned.grantsAcknowledged === grantsAckBefore && !grantRecord.uncertain) {
           provisioned.grantsUncertain += 1;
           grantRecord.uncertain = true;
         }
         if (
           provisioned.bindingsIssued > bindingsIssuedBefore &&
-          provisioned.bindingsAcknowledged === bindingsAckBefore
+          provisioned.bindingsAcknowledged === bindingsAckBefore &&
+          bindingRecord &&
+          !bindingRecord.uncertain
         ) {
           provisioned.bindingsUncertain += 1;
-          if (bindingRecord) bindingRecord.uncertain = true;
+          bindingRecord.uncertain = true;
         }
         throw err;
       }
@@ -829,7 +856,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         connectionTimeoutMs: 10_000,
       }),
     );
-    return {
+    const fixtures: RefusalPgFixtures = {
       ownerUrl,
       bookA: bookAId,
       bookC: bookCId,
@@ -840,6 +867,16 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       poolFor: (url: string) => registry.poolFor(url),
       close: () => registry.close(),
     };
+    const owner = invocationOf(fixtures);
+    for (const record of invocationOf(client).resources) owner.resources.push(record);
+    hideSecondary(fixtures, owner);
+    Object.defineProperty(fixtures, FIXTURE_INVOCATION, {
+      value: owner,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+    return fixtures;
   } catch (err) {
     const inventory = {
       ...provisioned,
