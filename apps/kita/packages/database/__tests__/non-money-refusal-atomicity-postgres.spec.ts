@@ -1057,7 +1057,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 };
                 codes.push(entry);
                 try {
-                  entry.params = forwardedAtCall;
+                  if (forwardedAtCall !== undefined) entry.params = forwardedAtCall;
                   const value = (original as { code?: unknown }).code;
                   if (typeof value === "string") entry.code = value;
                 } catch (snapshotErr) {
