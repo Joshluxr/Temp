@@ -397,7 +397,7 @@ async function observeIdentity(
     );
   } catch (err) {
     try {
-      proofOk();
+      if (!proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
     } catch (abortErr) {
       throw abortErr;
     }
@@ -942,7 +942,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     });
     const afterA = timedDeferred("afterA");
     const continueB = timedDeferred("continueB");
-    let wrappingActive = false;
+    let setupSessionOpen = true;
     let abortOccurred = false;
     let aborted: unknown;
     const observing: PoolLike = {
@@ -953,7 +953,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
             const result = await client.query(sql, params);
             if (sql.startsWith("BEGIN")) {
               await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => {
-                if (wrappingActive) throw new Error("HOLD: setup identity after wrapping");
+                if (!setupSessionOpen) throw new Error("HOLD: setup identity after setup session");
                 if (abortOccurred) throw aborted;
                 return true;
               });
@@ -970,6 +970,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     };
     try {
       await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyB, requestTag: tagB })).resolves.toEqual(STORED);
+      setupSessionOpen = false;
       const rowB = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
         fx.bookA,
@@ -984,7 +985,6 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       let driverErr: unknown;
       const wrapping: PoolLike = {
         async connect() {
-          wrappingActive = true;
           if (abortOccurred) throw aborted;
           requested += 1;
           const client = await pool.connect();
