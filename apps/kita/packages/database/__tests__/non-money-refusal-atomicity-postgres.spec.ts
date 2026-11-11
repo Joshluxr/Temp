@@ -942,7 +942,6 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     });
     const afterA = timedDeferred("afterA");
     const continueB = timedDeferred("continueB");
-    let setupSessionOpen = true;
     let abortOccurred = false;
     let aborted: unknown;
     const observing: PoolLike = {
@@ -950,14 +949,16 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         const client = await pool.connect();
         return {
           async query(sql: string, params?: readonly unknown[]) {
-            const result = await client.query(sql, params);
             if (sql.startsWith("BEGIN")) {
+              if (abortOccurred) throw aborted;
+              const result = await client.query(sql, params);
               await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => {
-                if (!setupSessionOpen) throw new Error("HOLD: setup identity after setup session");
                 if (abortOccurred) throw aborted;
                 return true;
               });
+              return result;
             }
+            const result = await client.query(sql, params);
             return result;
           },
           release(err?: unknown) {
@@ -970,7 +971,6 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     };
     try {
       await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyB, requestTag: tagB })).resolves.toEqual(STORED);
-      setupSessionOpen = false;
       const rowB = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB),
         fx.bookA,
