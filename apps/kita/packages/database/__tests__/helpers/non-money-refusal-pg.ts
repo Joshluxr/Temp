@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 
 import pg from "pg";
 
-import { createPool, type ManagedPool } from "../../src/pool.js";
+import { createPool, type ManagedPool, type PoolClientLike } from "../../src/pool.js";
 
 const PINNED_HOST = "127.0.0.1";
 const PINNED_PORT = "54339";
@@ -129,8 +129,9 @@ type CloseLedger = { current: LateOutcome; readonly work: Promise<unknown> };
 function watchUntilSettled(work: Promise<unknown>): CloseLedger {
   const ledger: CloseLedger = { current: { status: "pending" }, work };
   void work.then(
-    (value) => {
-      ledger.current = { status: "fulfilled", value };
+    () => {
+      // In particular, do not copy password-bearing SQL preparation results.
+      ledger.current = { status: "fulfilled" };
     },
     (reason: unknown) => {
       ledger.current = { status: "rejected", reason, reasonDefined: reason !== undefined };
@@ -176,10 +177,7 @@ async function bounded<T>(stage: string, work: Promise<T>, ms = 20_000): Promise
         hideSecondary(err, late);
         throw err;
       }
-      const boxed = new Error(`close-rejected:${stage}`);
-      hideSecondary(boxed, err);
-      hideSecondary(boxed, late);
-      throw boxed;
+      throw err;
     }
     if (timeoutErr && typeof timeoutErr === "object") {
       hideSecondary(timeoutErr, late);
@@ -200,75 +198,36 @@ type ResourceRecord = {
   observed: boolean;
   uncertain: boolean;
   outcome: "pending" | "fulfilled" | "rejected";
+  original?: unknown;
 };
 
-type SingleUseOperationPermission = {
-  consume(input: { readonly currentAbortPresent: boolean; readonly owner: object }): boolean;
-  owns(owner: object): boolean;
-  invalidate(owner: object): void;
+type Invocation = {
+  readonly ledgers: CloseLedger[];
+  readonly resources: ResourceRecord[];
+  readonly originals: unknown[];
+  finished: boolean;
+  retiring: boolean;
 };
 
-function produceValidatedOperationPermission(facts: {
-  readonly code: string | undefined;
-  readonly requested: number;
-  readonly acquired: number;
-  readonly sequence: readonly string[];
-  readonly keyAAbsent: boolean;
-  readonly rowBUnchanged: boolean;
-  readonly currentAbortPresent: boolean;
-}): SingleUseOperationPermission | undefined {
-  if (facts.currentAbortPresent) return undefined;
-  if (!facts.keyAAbsent || !facts.rowBUnchanged) return undefined;
-  if (facts.code !== "KRF02") return undefined;
-  if (facts.requested !== 1 || facts.acquired !== 1) return undefined;
-  if (
-    facts.sequence.length !== 4 ||
-    facts.sequence[0] !== "begin" ||
-    facts.sequence[1] !== "function-a" ||
-    facts.sequence[2] !== "rollback" ||
-    facts.sequence[3] !== "release"
-  ) {
-    return undefined;
-  }
-  let live = true;
-  let bound: object | undefined;
-  const terminal = new WeakSet<object>();
-  return {
-    consume(input: { readonly currentAbortPresent: boolean; readonly owner: object }): boolean {
-      if (input.currentAbortPresent) return false;
-      if (!live || bound !== undefined) return false;
-      live = false;
-      bound = input.owner;
-      return true;
-    },
-    owns(owner: object): boolean {
-      return bound === owner && !terminal.has(owner);
-    },
-    invalidate(owner: object): void {
-      terminal.add(owner);
-      if (bound === owner) bound = undefined;
-    },
-  };
+const invocationOwners = new WeakMap<object, Invocation>();
+// Primitive failures cannot carry a WeakMap key. Keep their invocation reachable
+// through all actual settlements, then retain its late originals for 60 seconds.
+const retainedInvocations = new Set<Invocation>();
+
+function retireInvocation(invocation: Invocation): void {
+  if (!invocation.finished || invocation.retiring) return;
+  invocation.retiring = true;
+  void Promise.allSettled(invocation.ledgers.map((ledger) => ledger.work)).then(() => {
+    const timer = setTimeout(() => retainedInvocations.delete(invocation), 60_000);
+    timer.unref();
+  });
 }
 
-const invocationOwners = new WeakMap<object, {
-  readonly ledgers: CloseLedger[];
-  readonly resources: ResourceRecord[];
-  operationPermission: SingleUseOperationPermission | undefined;
-}>();
-
-function invocationOf(owner: object): {
-  readonly ledgers: CloseLedger[];
-  readonly resources: ResourceRecord[];
-  operationPermission: SingleUseOperationPermission | undefined;
-} {
+function invocationOf(owner: object): Invocation {
   const existing = invocationOwners.get(owner);
   if (existing) return existing;
-  const created = {
-    ledgers: [] as CloseLedger[],
-    resources: [] as ResourceRecord[],
-    operationPermission: undefined as SingleUseOperationPermission | undefined,
-  };
+  const created: Invocation = { ledgers: [], resources: [], originals: [], finished: false, retiring: false };
+  retainedInvocations.add(created);
   invocationOwners.set(owner, created);
   hideSecondary(owner, created);
   return created;
@@ -315,34 +274,98 @@ export function ownerClient(ownerUrl: string): pg.Client {
   });
 }
 
-async function withOwnerClient<T>(ownerUrl: string, fn: (client: pg.Client) => Promise<T>): Promise<T> {
-  const client = ownerClient(ownerUrl);
-  invocationOf(client);
+function guardOwnerQueries(client: pg.Client, invocation: Invocation): () => void {
+  let closing = false;
+  const raw = client.query.bind(client) as (sql: string, params?: readonly unknown[]) => Promise<pg.QueryResult>;
+  const check = () => {
+    if (closing || invocation.finished) throw new Error("HOLD: owner client is closing");
+  };
+  client.query = (async (sql: string, params?: readonly unknown[]) => {
+    check();
+    const work = Promise.resolve().then(() => { check(); return raw(sql, params); });
+    invocation.ledgers.push(watchUntilSettled(work));
+    let result;
+    try { result = await bounded("owner-client.query", work, 20_000); } catch (original) {
+      invocation.originals.push(original);
+      closing = true;
+      throw original;
+    }
+    check();
+    return result;
+  }) as pg.Client["query"];
+  return () => { closing = true; };
+}
+
+async function withOwnerClient<T>(
+  ownerUrl: string,
+  fn: (client: pg.Client) => Promise<T>,
+  parent?: Invocation,
+): Promise<T> {
+  const owner: { client?: pg.Client; stopQueries?: () => void } = {};
+  const invocation = parent ?? invocationOf(owner);
   let connected = false;
   let failed = false;
+  let closing = false;
   let primary: unknown;
-  try {
+  const work = Promise.resolve().then(async () => {
+    if (closing) throw new Error("HOLD: owner construction follows closing");
+    const client = ownerClient(ownerUrl);
+    owner.client = client;
+    invocationOwners.set(client, invocation);
+    owner.stopQueries = guardOwnerQueries(client, invocation);
     await client.connect();
+    if (closing) throw new Error("HOLD: late owner connection");
     connected = true;
-    return await fn(client);
+    return fn(client);
+  });
+  invocation.ledgers.push(watchUntilSettled(work));
+  try {
+    return await bounded("owner-client.work", work, 20_000);
   } catch (err) {
     failed = true;
     primary = err;
+    invocation.originals.push(err);
     throw err;
   } finally {
-    const ended = await endOwnerClient(client, connected);
-    hideSecondary(client, ended.ledger);
-    if (ended.account) {
-      if (failed) {
-        retainCleanup(client, primary, [ended.account], ended.raw);
-      } else {
-        throw cleanupError([ended.account], ended.raw);
+    closing = true;
+    owner.stopQueries?.();
+    try {
+      const client = owner.client;
+      if (client) {
+        const ended = await endOwnerClient(client, connected);
+        hideSecondary(client, ended.ledger);
+        if (ended.account) {
+          invocation.originals.push(ended.raw);
+          if (failed) {
+            retainCleanup(client, primary, [ended.account], ended.raw);
+          } else {
+            throw cleanupError([ended.account], ended.raw);
+          }
+        }
+      }
+    } finally {
+      if (!parent) {
+        invocation.finished = true;
+        retireInvocation(invocation);
       }
     }
   }
 }
 
 export async function assertRefusalSecurityPreflight(): Promise<void> {
+  const invocation = invocationOf({});
+  try {
+    await securityPreflight(invocation);
+  } catch (original) {
+    invocation.originals.push(original);
+    throw original;
+  } finally {
+    invocation.finished = true;
+    retireInvocation(invocation);
+  }
+}
+
+async function securityPreflight(invocation: Invocation): Promise<void> {
   const ownerUrl = requireRefusalOwnerUrl();
   await withOwnerClient(ownerUrl, async (client) => {
     const preflight = await client.query<{
@@ -420,7 +443,7 @@ export async function assertRefusalSecurityPreflight(): Promise<void> {
       throw new Error("HOLD: installed 006 body hash mismatch");
     }
     if (row.temp_grant !== "0") throw new Error("HOLD: temporary definer membership is present");
-  });
+  }, invocation);
 }
 
 function quoteIdent(name: string): string {
@@ -475,12 +498,12 @@ export async function countReservedRows(
   });
 }
 
-function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
+function createRefusalPoolRegistry(build: (url: string) => ManagedPool, invocation: Invocation): {
   poolFor(url: string): ManagedPool;
   close(): Promise<void>;
 } {
   const registryOwner = { kind: "refusal-pool-registry" as const };
-  invocationOf(registryOwner);
+  invocationOwners.set(registryOwner, invocation);
   const pools = new Map<string, ManagedPool>();
   const originalCloses = new Map<string, { work: Promise<unknown>; ledger: CloseLedger }>();
   let closing = false;
@@ -492,7 +515,65 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
       }
       const existing = pools.get(url);
       if (existing) return existing;
-      const pool = build(url);
+      const raw = build(url);
+      let poolClosing = false;
+      let poolClose: Promise<void> | undefined;
+      const assertOpen = () => {
+        if (closing || poolClosing) throw new Error("HOLD: fixture closing; pool acquisition refused");
+      };
+      const acquire = async (): Promise<PoolClientLike> => {
+        assertOpen();
+        const checkout = Promise.resolve().then(() => { assertOpen(); return raw.connect(); });
+        invocation.ledgers.push(watchUntilSettled(checkout));
+        const client = await checkout;
+        let released = false;
+        const release = (error?: unknown) => {
+          if (released) return;
+          released = true;
+          try { client.release(error); } catch (original) {
+            invocation.originals.push(original);
+            throw original;
+          }
+        };
+        try { assertOpen(); } catch (primary) {
+          try { release(primary); } catch (secondary) { invocation.originals.push(secondary); }
+          throw primary;
+        }
+        return {
+          async query(sql, params) {
+            assertOpen();
+            if (released) throw new Error("HOLD: released fixture client");
+            let result;
+            try { result = await client.query(sql, params); } catch (original) {
+              invocation.originals.push(original);
+              throw original;
+            }
+            assertOpen();
+            if (released) throw new Error("HOLD: fixture client released while query was pending");
+            return result;
+          },
+          release,
+        };
+      };
+      const pool: ManagedPool = {
+        config: raw.config,
+        get isClosed() { return closing || poolClosing || raw.isClosed; },
+        acquire,
+        connect: acquire,
+        async query(sql, params) {
+          assertOpen();
+          const result = await raw.query(sql, params);
+          assertOpen();
+          return result;
+        },
+        close() {
+          poolClosing = true;
+          poolClose ??= Promise.resolve().then(() => raw.close());
+          void poolClose.catch((original) => { invocation.originals.push(original); });
+          return poolClose;
+        },
+        end() { return this.close(); },
+      };
       pools.set(url, pool);
       return pool;
     },
@@ -510,14 +591,14 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
                 try {
                   void Promise.resolve(pool.close()).then(resolve, reject);
                 } catch (sync) {
-                  reject({ status: "sync" as const, reason: sync });
+                  reject(sync);
                 }
               };
             });
             const ledger = watchUntilSettled(work);
             originalCloses.set(url, { work, ledger });
             startExternal();
-            invocationOf(registryOwner).ledgers.push(ledger);
+            invocation.ledgers.push(ledger);
             hideSecondary(registryOwner, ledger);
             void work.then(
               () => {
@@ -539,6 +620,11 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
           hideSecondary(error, ledgers.map((item) => item.ledger));
           throw error;
         })();
+        const retire = () => {
+          invocation.finished = true;
+          retireInvocation(invocation);
+        };
+        void closeReport.then(retire, retire);
       }
       try {
         await closeReport;
@@ -552,16 +638,6 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   const lifecycle = { kind: "refusal-fixture-lifecycle" as const };
   const lifecycleState = invocationOf(lifecycle);
-  hideSecondary(lifecycle, produceValidatedOperationPermission);
-  lifecycleState.operationPermission = produceValidatedOperationPermission({
-    code: undefined,
-    requested: 0,
-    acquired: 0,
-    sequence: [],
-    keyAAbsent: false,
-    rowBUnchanged: false,
-    currentAbortPresent: true,
-  });
   let client: pg.Client | undefined;
   const provisioned = {
     booksPrepared: 0,
@@ -592,16 +668,20 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   };
   let connected = false;
   let failed = false;
+  let stopQueries: (() => void) | undefined;
   let primary: unknown;
   try {
-    await assertRefusalSecurityPreflight();
+    await securityPreflight(lifecycleState);
     const ownerUrl = requireRefusalOwnerUrl();
     client = ownerClient(ownerUrl);
     const owned = client;
     hideSecondary(lifecycle, owned);
     hideSecondary(owned, lifecycleState);
-    invocationOf(owned);
-    await owned.connect();
+    invocationOwners.set(owned, lifecycleState);
+    stopQueries = guardOwnerQueries(owned, lifecycleState);
+    const connecting = Promise.resolve().then(() => owned.connect());
+    lifecycleState.ledgers.push(watchUntilSettled(connecting));
+    await bounded("fixture-owner.connect", connecting, 20_000);
     connected = true;
     const version = await owned.query<{ version: string }>("SELECT version()");
     if (!version.rows[0]?.version.includes("PostgreSQL 18.")) {
@@ -627,19 +707,22 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       try {
         provisioned.booksIssued += 1;
         record.issued = true;
-        const inserted = await owned.query<{ id: string }>(
+        const inserted = await owned.query<{ id: string; status: string }>(
           `INSERT INTO kita.books (legal_entity, functional_currency, status)
-           VALUES ($1, 'USD', 'disabled') RETURNING id`,
+           VALUES ($1, 'USD', 'disabled') RETURNING id, status`,
           [legalEntity],
         );
-        const id = inserted.rows[0]?.id;
-        if (!id) throw new Error("HOLD: book insert returned no id");
         provisioned.booksAcknowledged += 1;
         record.acknowledged = true;
+        const id = inserted.rows[0]?.id;
+        if (inserted.rows.length !== 1 || !id || inserted.rows[0]?.status !== "disabled") {
+          throw new Error("HOLD: book insert did not return one disabled book");
+        }
         provisioned.retainedBookIds.push(id);
         record.outcome = "fulfilled";
         return id;
       } catch (err) {
+        record.original = err;
         record.outcome = "rejected";
         if (provisioned.booksIssued > issuedBefore && provisioned.booksAcknowledged === acknowledgedBefore) {
           provisioned.booksUncertain += 1;
@@ -717,13 +800,26 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       provisioned.rolesAcknowledged += 1;
       roleRecord.acknowledged = true;
       provisioned.retainedLoginNames.push(name);
-      const oidRow = await owned.query<{ oid: string }>(
-        `SELECT oid::text AS oid FROM pg_catalog.pg_roles WHERE rolname = $1`,
+      const oidRow = await owned.query<{
+        oid: string; rolcanlogin: boolean; rolinherit: boolean;
+        rolsuper: boolean; rolcreatedb: boolean; rolcreaterole: boolean;
+        rolreplication: boolean; rolbypassrls: boolean; membership_count: string;
+      }>(
+        `SELECT r.oid::text AS oid, r.rolcanlogin, r.rolinherit, r.rolsuper,
+                r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls,
+                (SELECT count(*)::text FROM pg_auth_members m WHERE m.member = r.oid) AS membership_count
+           FROM pg_catalog.pg_roles r WHERE r.rolname = $1`,
         [name],
       );
       if (oidRow.rows.length !== 1) throw new Error("HOLD: login oid cardinality is not one");
-      const loginOid = oidRow.rows[0]?.oid;
-      if (!loginOid) throw new Error("HOLD: login oid missing after CREATE ROLE");
+      const role = oidRow.rows[0];
+      const loginOid = role?.oid;
+      if (!loginOid || !/^[1-9]\d*$/.test(loginOid)) throw new Error("HOLD: login oid missing after CREATE ROLE");
+      if (!role || role.rolcanlogin !== true || role.rolinherit !== true ||
+          role.rolsuper !== false || role.rolcreatedb !== false || role.rolcreaterole !== false ||
+          role.rolreplication !== false || role.rolbypassrls !== false || role.membership_count !== "0") {
+        throw new Error("HOLD: newly issued login has unexpected attributes or memberships");
+      }
       if (provisioned.retainedLoginOids.includes(loginOid)) {
         throw new Error("HOLD: login oid is not distinct");
       }
@@ -745,6 +841,26 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       provisioned.grantsAcknowledged += 1;
       grantRecord.acknowledged = true;
       grantRecord.outcome = "fulfilled";
+      const membership = await owned.query<{
+        member_oid: string; role: string; grantor: string;
+        admin_option: boolean; inherit_option: boolean; set_option: boolean;
+      }>(
+        `SELECT r.oid::text AS member_oid, g.rolname AS role, grantor.rolname AS grantor,
+                m.admin_option, m.inherit_option, m.set_option
+           FROM pg_auth_members m
+           JOIN pg_roles r ON r.oid = m.member
+           JOIN pg_roles g ON g.oid = m.roleid
+           JOIN pg_roles grantor ON grantor.oid = m.grantor
+          WHERE r.rolname = $1`, [name],
+      );
+      const grant = membership.rows[0];
+      if (membership.rows.length !== 1 || !grant || grant.member_oid !== loginOid ||
+          grant.role !== "kita_refusal_recorder" || grant.grantor !== "kita_test" ||
+          grant.admin_option !== false || grant.inherit_option !== true || grant.set_option !== false) {
+        throw new Error("HOLD: recorder membership not observed before principal insertion");
+      }
+      grantRecord.observed = true;
+      provisioned.grantsObserved += 1;
       if (actorId !== null && bookId !== null && bindingRecord) {
         provisioned.bindingsPrepared += 1;
         bindingRecord.prepared = true;
@@ -757,19 +873,21 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
            WHERE r.rolname = $3`,
           [bookId, actorId, name],
         );
+        provisioned.bindingsAcknowledged += 1;
+        bindingRecord.acknowledged = true;
         if (principalInsert.rowCount !== 1) {
           throw new Error("HOLD: principal insert did not acknowledge one row");
         }
-        provisioned.bindingsAcknowledged += 1;
-        bindingRecord.acknowledged = true;
         provisioned.retainedBindings.push({ loginName: name, loginOid, bookId, actorId });
         bindingRecord.outcome = "fulfilled";
       }
       const login: RestrictedLogin = { name, url: loginUrl(ownerUrl, name, secret), actorId: actorId ?? "" };
       Object.defineProperty(login, LOGIN_OID, { value: loginOid, enumerable: false, configurable: false, writable: false });
-      return login;
+      return Object.freeze(login);
       } catch (err) {
         if (roleRecord.outcome === "pending") {
+          roleRecord.outcome = "rejected";
+          roleRecord.original = err;
           if (roleRecord.issued && !roleRecord.acknowledged) {
             roleRecord.uncertain = true;
             provisioned.rolesUncertain += 1;
@@ -778,6 +896,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
           }
         }
         if (grantRecord.outcome === "pending") {
+          grantRecord.outcome = "rejected";
+          grantRecord.original = err;
           if (grantRecord.issued && !grantRecord.acknowledged) {
             grantRecord.uncertain = true;
             provisioned.grantsUncertain += 1;
@@ -786,6 +906,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
           }
         }
         if (bindingRecord && bindingRecord.outcome === "pending") {
+          bindingRecord.outcome = "rejected";
+          bindingRecord.original = err;
           if (bindingRecord.issued && !bindingRecord.acknowledged) {
             bindingRecord.uncertain = true;
             provisioned.bindingsUncertain += 1;
@@ -894,7 +1016,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
          JOIN pg_roles r ON r.oid = m.member
          JOIN pg_roles g ON g.oid = m.roleid
          JOIN pg_roles grantor ON grantor.oid = m.grantor
-        WHERE g.rolname = 'kita_refusal_recorder'`,
+        WHERE r.rolname = ANY($1::text[])`,
+      [expectedLogins.map((login) => login.name)],
     );
     for (const expected of expectedLogins) {
       const forLogin = observedGrants.rows.filter((row) => row.member === expected.name);
@@ -920,7 +1043,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     if (unexpectedMembers.length > 0) {
       throw new Error("HOLD: unexpected recorder membership row");
     }
-    provisioned.grantsObserved += expectedLogins.length;
+    provisioned.grantsObserved = expectedLogins.length;
     for (const record of lifecycleState.resources.filter((item) => item.kind === "grant")) {
       record.observed = true;
     }
@@ -931,7 +1054,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         poolMax: 4,
         statementTimeoutMs: 15_000,
         connectionTimeoutMs: 10_000,
-      }),
+      }), lifecycleState,
     );
     const fixtures: RefusalPgFixtures = {
       ownerUrl,
@@ -953,7 +1076,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
       configurable: false,
       writable: false,
     });
-    return fixtures;
+    return Object.freeze(fixtures);
   } catch (err) {
     const inventory = {
       ...provisioned,
@@ -965,6 +1088,7 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     };
     failed = true;
     primary = err;
+    lifecycleState.originals.push(err);
     hideSecondary(lifecycle, inventory);
     hideSecondary(lifecycleState, err);
     if (client) {
@@ -977,6 +1101,8 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     }
     throw err;
   } finally {
+    stopQueries?.();
+    try {
     if (!client) {
       /* construction never produced a client; lifecycle already owns the failure */
     } else {
@@ -992,8 +1118,17 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
         } else {
           const error = cleanupError([ended.account], ended.raw);
           hideSecondary(error, { ...provisioned });
+          lifecycleState.originals.push(ended.raw, error);
+          failed = true;
+          primary = error;
           throw error;
         }
+      }
+    }
+    } finally {
+      if (failed) {
+        lifecycleState.finished = true;
+        retireInvocation(lifecycleState);
       }
     }
   }
