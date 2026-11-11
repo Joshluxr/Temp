@@ -372,6 +372,7 @@ async function observeIdentity(
   expectedOid: string,
   proofOk?: () => boolean,
 ): Promise<{ pid: number; start: string; oid: string }> {
+  if (proofOk && !proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
   const ident = await client.query(
     `SELECT session_user AS session_user, current_user AS current_user,
             pg_backend_pid() AS pid,
