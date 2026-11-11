@@ -373,7 +373,9 @@ async function observeIdentity(
   proofOk: () => boolean,
 ): Promise<{ pid: number; start: string; oid: string }> {
   if (!proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
-  const ident = await client.query(
+  let ident;
+  try {
+    ident = await client.query(
     `SELECT session_user AS session_user, current_user AS current_user,
             pg_backend_pid() AS pid,
             current_setting('transaction_isolation') AS isolation,
@@ -392,7 +394,15 @@ async function observeIdentity(
             (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS rolbypassrls,
             (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'USAGE')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
-  );
+    );
+  } catch (err) {
+    try {
+      proofOk();
+    } catch (abortErr) {
+      throw abortErr;
+    }
+    throw err;
+  }
   if (!proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
   if (ident.rows.length !== 1) {
     throw new Error("HOLD: authenticated identity cardinality is not one");
@@ -932,6 +942,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     });
     const afterA = timedDeferred("afterA");
     const continueB = timedDeferred("continueB");
+    let wrappingActive = false;
+    let abortOccurred = false;
+    let aborted: unknown;
     const observing: PoolLike = {
       async connect() {
         const client = await pool.connect();
@@ -939,7 +952,11 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           async query(sql: string, params?: readonly unknown[]) {
             const result = await client.query(sql, params);
             if (sql.startsWith("BEGIN")) {
-              await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => true);
+              await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => {
+                if (wrappingActive) throw new Error("HOLD: setup identity after wrapping");
+                if (abortOccurred) throw aborted;
+                return true;
+              });
             }
             return result;
           },
@@ -965,10 +982,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       let acquired = 0;
       const sequence: string[] = [];
       let driverErr: unknown;
-      let aborted: unknown;
-      let abortOccurred = false;
       const wrapping: PoolLike = {
         async connect() {
+          wrappingActive = true;
           if (abortOccurred) throw aborted;
           requested += 1;
           const client = await pool.connect();
