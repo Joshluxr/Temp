@@ -202,12 +202,55 @@ type ResourceRecord = {
   outcome: "pending" | "fulfilled" | "rejected";
 };
 
-const invocationOwners = new WeakMap<object, { readonly ledgers: CloseLedger[]; readonly resources: ResourceRecord[] }>();
+type SingleUseOperationPermission = {
+  consume(): boolean;
+};
 
-function invocationOf(owner: object): { readonly ledgers: CloseLedger[]; readonly resources: ResourceRecord[] } {
+function produceValidatedOperationPermission(facts: {
+  readonly code: string | undefined;
+  readonly requested: number;
+  readonly acquired: number;
+  readonly sequence: readonly string[];
+}): SingleUseOperationPermission | undefined {
+  if (facts.code !== "KRF02") return undefined;
+  if (facts.requested !== 1 || facts.acquired !== 1) return undefined;
+  if (
+    facts.sequence.length !== 4 ||
+    facts.sequence[0] !== "begin" ||
+    facts.sequence[1] !== "function-a" ||
+    facts.sequence[2] !== "rollback" ||
+    facts.sequence[3] !== "release"
+  ) {
+    return undefined;
+  }
+  let live = true;
+  return {
+    consume(): boolean {
+      if (!live) return false;
+      live = false;
+      return true;
+    },
+  };
+}
+
+const invocationOwners = new WeakMap<object, {
+  readonly ledgers: CloseLedger[];
+  readonly resources: ResourceRecord[];
+  operationPermission: SingleUseOperationPermission | undefined;
+}>();
+
+function invocationOf(owner: object): {
+  readonly ledgers: CloseLedger[];
+  readonly resources: ResourceRecord[];
+  operationPermission: SingleUseOperationPermission | undefined;
+} {
   const existing = invocationOwners.get(owner);
   if (existing) return existing;
-  const created = { ledgers: [] as CloseLedger[], resources: [] as ResourceRecord[] };
+  const created = {
+    ledgers: [] as CloseLedger[],
+    resources: [] as ResourceRecord[],
+    operationPermission: undefined as SingleUseOperationPermission | undefined,
+  };
   invocationOwners.set(owner, created);
   hideSecondary(owner, created);
   return created;
@@ -491,6 +534,13 @@ function createRefusalPoolRegistry(build: (url: string) => ManagedPool): {
 export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
   const lifecycle = { kind: "refusal-fixture-lifecycle" as const };
   const lifecycleState = invocationOf(lifecycle);
+  hideSecondary(lifecycle, produceValidatedOperationPermission);
+  lifecycleState.operationPermission = produceValidatedOperationPermission({
+    code: undefined,
+    requested: 0,
+    acquired: 0,
+    sequence: [],
+  });
   let client: pg.Client | undefined;
   const provisioned = {
     booksPrepared: 0,
