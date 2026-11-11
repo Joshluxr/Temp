@@ -944,14 +944,17 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     const continueB = timedDeferred("continueB");
     let abortOccurred = false;
     let aborted: unknown;
+    let wrappingAcquired = 0;
     const observing: PoolLike = {
       async connect() {
         const client = await pool.connect();
         return {
           async query(sql: string, params?: readonly unknown[]) {
             if (sql.startsWith("BEGIN")) {
+              if (abortOccurred && wrappingAcquired === 0) throw aborted;
               const result = await client.query(sql, params);
               await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => {
+                if (abortOccurred && wrappingAcquired === 0) throw aborted;
                 return true;
               });
               return result;
@@ -987,6 +990,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
           requested += 1;
           const client = await pool.connect();
           acquired += 1;
+          wrappingAcquired = acquired;
           if (abortOccurred) {
             try {
               client.release();
