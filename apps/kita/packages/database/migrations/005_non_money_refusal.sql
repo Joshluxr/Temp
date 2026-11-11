@@ -123,10 +123,9 @@ BEGIN
     RAISE EXCEPTION 'invalid refusal-record request' USING ERRCODE = '22023';
   END IF;
 
-  SELECT a.oid, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls, r.rolinherit
+  SELECT r.oid, r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls, r.rolinherit
     INTO v_oid, v_super, v_createdb, v_createrole, v_replication, v_bypass, v_inherit
   FROM pg_catalog.pg_roles r
-  JOIN pg_catalog.pg_authid a ON a.rolname = r.rolname
   WHERE r.rolname = v_login;
 
   SELECT EXISTS (
