@@ -945,49 +945,61 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
     let abortOccurred = false;
     let aborted: unknown;
     let wrappingAcquired = 0;
-    let nextObservingPermission: "recovery" | "replay" | "conflict" | undefined;
-    let observingOperationPermitted = false;
-    const consumeObservingPermission = (kind: "recovery" | "replay" | "conflict"): boolean => {
-      if (nextObservingPermission !== kind) return false;
-      nextObservingPermission = undefined;
-      observingOperationPermitted = true;
-      return true;
+    type ObservingKind = "recovery" | "replay" | "conflict";
+    type ObservingClientOp = {
+      readonly kind: ObservingKind;
+      currentAbortPresent: boolean;
+      currentAbort: unknown;
+      terminal: boolean;
     };
-    const observingForwardOk = (): boolean => {
-      if (!abortOccurred) return true;
-      return observingOperationPermitted;
-    };
+    let nextObservingPermission: ObservingKind | undefined;
     const observing: PoolLike = {
       async connect() {
+        const op: ObservingClientOp = {
+          kind: nextObservingPermission ?? "recovery",
+          currentAbortPresent: false,
+          currentAbort: undefined,
+          terminal: false,
+        };
         if (abortOccurred) {
-          if (nextObservingPermission === "recovery") {
-            if (!consumeObservingPermission("recovery")) throw aborted;
-          } else if (nextObservingPermission === "replay") {
-            if (!consumeObservingPermission("replay")) throw aborted;
-          } else if (nextObservingPermission === "conflict") {
-            if (!consumeObservingPermission("conflict")) throw aborted;
-          } else {
-            throw aborted;
-          }
+          if (nextObservingPermission === undefined) throw aborted;
+          if (op.currentAbortPresent) throw op.currentAbort;
+          nextObservingPermission = undefined;
         }
         const client = await pool.connect();
+        if (op.currentAbortPresent) {
+          op.terminal = true;
+          try {
+            client.release();
+          } catch (releaseErr) {
+            notePrivate(op, releaseErr);
+          }
+          throw op.currentAbort;
+        }
         return {
           async query(sql: string, params?: readonly unknown[]) {
+            if (op.terminal || op.currentAbortPresent) throw op.currentAbortPresent ? op.currentAbort : aborted;
             if (sql.startsWith("BEGIN")) {
-              if (!observingForwardOk()) throw aborted;
               const result = await client.query(sql, params);
+              if (op.currentAbortPresent) throw op.currentAbort;
               await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => {
-                if (!observingForwardOk()) throw aborted;
+                if (op.currentAbortPresent) throw op.currentAbort;
                 return true;
               });
               return result;
             }
             const result = await client.query(sql, params);
+            if (op.currentAbortPresent) throw op.currentAbort;
             return result;
           },
           release(err?: unknown) {
-            client.release(err);
-            observingOperationPermitted = false;
+            op.terminal = true;
+            try {
+              client.release(err);
+            } catch (releaseErr) {
+              notePrivate(op, releaseErr);
+              throw releaseErr;
+            }
           },
         } satisfies PoolClientLike;
       },
@@ -1111,6 +1123,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       expect(wrappingAcquired).toBe(acquired);
       expect(sequence).toEqual(["begin", "function-a", "rollback", "release"]);
       expect((helperErr as { code?: string }).code).toBe("KRF02");
+      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
+      expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
       if (
         requested === 1 &&
         acquired === 1 &&
@@ -1123,10 +1137,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
       ) {
         nextObservingPermission = "recovery";
       }
-      await expect(countReservedRows(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA)).resolves.toBe(0);
-      expect(await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyB)).toEqual(rowB);
       await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
-      nextObservingPermission = "replay";
       const rowA = expectRow(
         await fetchReservedRow(fx.ownerUrl, fx.bookA, fx.loginA.actorId, keyA),
         fx.bookA,
@@ -1134,6 +1145,7 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         keyA,
         tagA,
       );
+      nextObservingPermission = "replay";
       await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyA, requestTag: tagA })).resolves.toEqual(STORED);
       nextObservingPermission = "conflict";
       await expect(recordNonMoneyRefusal(observing, { idempotencyKey: keyA, requestTag: "atom-a-other" })).resolves.toEqual(

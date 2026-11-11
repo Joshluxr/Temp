@@ -203,7 +203,9 @@ type ResourceRecord = {
 };
 
 type SingleUseOperationPermission = {
-  consume(): boolean;
+  consume(input: { readonly currentAbortPresent: boolean; readonly owner: object }): boolean;
+  owns(owner: object): boolean;
+  invalidate(owner: object): void;
 };
 
 function produceValidatedOperationPermission(facts: {
@@ -211,7 +213,12 @@ function produceValidatedOperationPermission(facts: {
   readonly requested: number;
   readonly acquired: number;
   readonly sequence: readonly string[];
+  readonly keyAAbsent: boolean;
+  readonly rowBUnchanged: boolean;
+  readonly currentAbortPresent: boolean;
 }): SingleUseOperationPermission | undefined {
+  if (facts.currentAbortPresent) return undefined;
+  if (!facts.keyAAbsent || !facts.rowBUnchanged) return undefined;
   if (facts.code !== "KRF02") return undefined;
   if (facts.requested !== 1 || facts.acquired !== 1) return undefined;
   if (
@@ -224,11 +231,22 @@ function produceValidatedOperationPermission(facts: {
     return undefined;
   }
   let live = true;
+  let bound: object | undefined;
+  const terminal = new WeakSet<object>();
   return {
-    consume(): boolean {
-      if (!live) return false;
+    consume(input: { readonly currentAbortPresent: boolean; readonly owner: object }): boolean {
+      if (input.currentAbortPresent) return false;
+      if (!live || bound !== undefined) return false;
       live = false;
+      bound = input.owner;
       return true;
+    },
+    owns(owner: object): boolean {
+      return bound === owner && !terminal.has(owner);
+    },
+    invalidate(owner: object): void {
+      terminal.add(owner);
+      if (bound === owner) bound = undefined;
     },
   };
 }
@@ -540,6 +558,9 @@ export async function provisionRefusalFixtures(): Promise<RefusalPgFixtures> {
     requested: 0,
     acquired: 0,
     sequence: [],
+    keyAAbsent: false,
+    rowBUnchanged: false,
+    currentAbortPresent: true,
   });
   let client: pg.Client | undefined;
   const provisioned = {
