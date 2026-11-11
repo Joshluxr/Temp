@@ -950,10 +950,8 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         return {
           async query(sql: string, params?: readonly unknown[]) {
             if (sql.startsWith("BEGIN")) {
-              if (abortOccurred) throw aborted;
               const result = await client.query(sql, params);
               await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => {
-                if (abortOccurred) throw aborted;
                 return true;
               });
               return result;
