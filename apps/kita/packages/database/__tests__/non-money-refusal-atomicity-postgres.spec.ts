@@ -370,9 +370,9 @@ async function observeIdentity(
   client: PoolClientLike,
   expectedLogin: string,
   expectedOid: string,
-  proofOk?: () => boolean,
+  proofOk: () => boolean,
 ): Promise<{ pid: number; start: string; oid: string }> {
-  if (proofOk && !proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
+  if (!proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
   const ident = await client.query(
     `SELECT session_user AS session_user, current_user AS current_user,
             pg_backend_pid() AS pid,
@@ -393,7 +393,7 @@ async function observeIdentity(
             (SELECT pg_has_role(current_user, 'kita_refusal_recorder', 'USAGE')) AS recorder_member,
             (SELECT backend_start::text FROM pg_stat_activity WHERE pid = pg_backend_pid()) AS start`,
   );
-  if (proofOk && !proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
+  if (!proofOk()) throw new Error("HOLD: identity observed after ambiguous ledger");
   if (ident.rows.length !== 1) {
     throw new Error("HOLD: authenticated identity cardinality is not one");
   }
@@ -938,7 +938,9 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
         return {
           async query(sql: string, params?: readonly unknown[]) {
             const result = await client.query(sql, params);
-            if (sql.startsWith("BEGIN")) await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA));
+            if (sql.startsWith("BEGIN")) {
+              await observeIdentity(client, fixtures.loginA.name, expectedLoginOid(fixtures.loginA), () => true);
+            }
             return result;
           },
           release(err?: unknown) {
@@ -990,7 +992,10 @@ describe.skipIf(!selected)("non-money refusal atomicity PostgreSQL evidence", ()
                 const result = await client.query(sql, params);
                 sequence.push("begin");
                 if (abortOccurred) throw aborted;
-                await observeIdentity(client, fx!.loginA.name, expectedLoginOid(fx!.loginA));
+                await observeIdentity(client, fx!.loginA.name, expectedLoginOid(fx!.loginA), () => {
+                  if (abortOccurred) throw aborted;
+                  return true;
+                });
                 if (abortOccurred) throw aborted;
                 return result;
               }
